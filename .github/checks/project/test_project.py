@@ -2,6 +2,7 @@
 import contextlib
 import io
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
@@ -62,6 +63,16 @@ class DocumentationTests(unittest.TestCase):
         run("git", "init", "-b", "master", cwd=self.root)
         run("git", "config", "user.name", "Fixture", cwd=self.root)
         run("git", "config", "user.email", "fixture@example.invalid", cwd=self.root)
+        # Fixed fixture metadata keeps these tests valid after real version bumps.
+        current = project.package(self.root)["version"]
+        for name in ("Cargo.toml", "Cargo.lock"):
+            path = self.root / name
+            path.write_text(re.sub(r'(?m)^version = "' + re.escape(current) + r'"$',
+                                   'version = "0.1.1"', path.read_text()))
+        (self.root / "CHANGELOG.md").write_text(
+            "# Changelog\n\n## [Unreleased]\n\n### Added\n- Synthetic change.\n\n"
+            "## [0.1.1] - 2026-01-01\n\n### Fixed\n- Synthetic baseline.\n")
+        project.sync(root=self.root)
 
     def tearDown(self):
         self.directory.cleanup()
@@ -73,7 +84,8 @@ class DocumentationTests(unittest.TestCase):
     def test_generated_sections_detect_drift_and_sync_is_idempotent(self):
         self.quiet(project.check, root=self.root)
         path = self.root / "README.md"
-        path.write_text(path.read_text().replace("Rust 1.99", "Rust 0.0"))
+        rust = project.package(self.root)["rust-version"]
+        path.write_text(path.read_text().replace(f"Rust {rust}", "Rust invalid"))
         with self.assertRaises(ValueError):
             project.sync(True, self.root)
         project.sync(root=self.root)
