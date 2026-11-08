@@ -2,7 +2,11 @@
 
 ## Reporting
 
-Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/lansbe/pixstride/security/advisories/new). Do not put secrets, private images, internal URLs, or exploit details in public issues. Only the latest release receives fixes; no response-time SLA is offered.
+Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/lansbe/pixstride/security/advisories/new). Do not put secrets, private images, internal URLs, or exploit details in public issues.
+
+<!-- generated:support:start -->
+Only the latest stable release receives fixes (currently `0.1.1`). Alpha, beta and release-candidate builds are for testing; no response-time SLA is offered.
+<!-- generated:support:end -->
 
 ## Deployment boundary
 
@@ -19,7 +23,7 @@ Terminate inbound TLS and apply rate, connection and request limits at a reverse
 - Images are bounded to 50 million pixels; individual aligned buffers to 512 MiB. Local reads use a pinned directory descriptor, reject symlinks/non-regular files, and detect ordinary concurrent changes. Local sources are disabled unless configured.
 - Unsupported formats, features and color profiles fail explicitly. Source URLs and signing secrets are not logged by the service. Responses use `no-store`, `nosniff` and `no-referrer`.
 
-## Source and processing limits in 0.1.1
+## Source and processing limits
 
 These limits can reject otherwise valid inputs, even when the general size and pixel limits are met:
 
@@ -29,9 +33,9 @@ These limits can reject otherwise valid inputs, even when the general size and p
 
 ## Release workflow
 
-The release workflow is configured to stage each platform image by digest, scan and smoke-test that exact platform manifest, then assemble an index from the tested digests. It checks the index and associated SBOM and provenance attestation descriptors before moving the version and commit-SHA tags to the verified index. Promotions are serialized; `latest` moves only when the release commit is the current `master` revision. It also checks that the tagged commit is an ancestor of `master` and matches the Cargo version; ancestry alone does not establish code review. The attestation checks do not verify a signature or independently establish the builder's trustworthiness.
+The release workflow is configured to stage each platform image by digest, scan and smoke-test that exact platform manifest, then assemble an index from the tested digests. It checks the index and associated SBOM and provenance attestation descriptors before moving the version and commit-SHA tags to the verified index. Promotions are serialized and cannot move a channel backwards according to published SemVer releases. Prereleases only update their own `alpha`, `beta` or `rc` channel, never `latest`. The tag must match Cargo and the dated changelog, and belong to `master` for stable releases or `develop` for prereleases. Existing version tags and GitHub releases are never replaced. The attestation checks do not verify a signature or independently establish the builder's trustworthiness.
 
-Platform images are pushed by digest before validation and may be publicly pullable if the package is public. They are not release-approved until the checks and promotion succeed. The workflow definition alone does not prove that any particular release completed those checks.
+Platform images are pushed by digest before validation and may be publicly pullable if the package is public. They are not release-approved until the checks and promotion succeed. GitHub release notes are published from the reviewed changelog only after container validation succeeds. The workflow definition alone does not prove that any particular release completed those checks.
 
 ## Residual limits
 
