@@ -65,3 +65,9 @@ docker build -t pixstride .
 ```
 
 Early release: custom codecs and cryptography have not received an independent security audit. [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT](LICENSE)
+
+## Support
+
+<a href="https://buymeacoffee.com/lansbe">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="40">
+</a>
