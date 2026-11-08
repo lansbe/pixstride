@@ -1,0 +1,34 @@
+# Public source allowlist. Unlisted local artifacts stay private.
+*
+!/.gitignore
+!/.dockerignore
+!/.editorconfig
+!/Cargo.toml
+!/Cargo.lock
+!/Dockerfile
+!/README.md
+!/LICENSE
+!/SECURITY.md
+!/CONTRIBUTING.md
+!/src/
+!/src/**/
+!/src/**/*.rs
+!/.github/
+!/.github/workflows/
+!/.github/workflows/container.yml
+!/.github/dependabot.yml
+
+# Never version build output, credentials, media, or editor files.
+**/.DS_Store
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/*.p12
+**/*.pfx
+**/*.log
+**/*.profraw
+**/*.profdata
+**/target/
+**/.idea/
+**/.vscode/

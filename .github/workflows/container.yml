@@ -1,0 +1,86 @@
+name: Container
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: container-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Build
+        run: docker build --pull -t pixstride:check .
+      - name: Check module size and container dependencies
+        run: |
+          python3 -c "from pathlib import Path; oversized=[str(p) for p in Path('src').rglob('*.rs') if len(p.read_text().splitlines())>500]; assert not oversized, oversized"
+          docker save pixstride:check -o "$RUNNER_TEMP/pixstride.tar"
+          docker run --rm --cap-drop=ALL --security-opt=no-new-privileges --memory=1g --pids-limit=64 -v "$RUNNER_TEMP/pixstride.tar:/image.tar:ro" aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb image --input /image.tar --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 --no-progress
+      - name: Verify locked-down startup and a synthetic image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/images"
+          printf '%s' '<svg width="64" height="48"><rect width="64" height="48" fill="#247ac0"/></svg>' > "$RUNNER_TEMP/images/sample.svg"
+          docker run -d --name pixstride-check --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=512m --pids-limit=64 --cpus=2 -p 127.0.0.1:8080:8080 -v "$RUNNER_TEMP/images:/images:ro" -e PIXSTRIDE_ALLOW_UNSAFE=1 -e PIXSTRIDE_LOCAL_ROOT=/images pixstride:check
+          trap 'docker rm -f pixstride-check' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8080/health; then break; fi
+            sleep 1
+          done
+          curl --fail --silent --show-error 'http://127.0.0.1:8080/unsafe/rs:fit:32:24/plain/local:///sample.svg@png' -o "$RUNNER_TEMP/output.png"
+          python3 - "$RUNNER_TEMP/output.png" <<'PY'
+          import struct,sys
+          data=open(sys.argv[1],'rb').read()
+          assert data[:8]==b'\x89PNG\r\n\x1a\n'
+          assert struct.unpack('>II',data[16:24])==(32,24)
+          PY
+          test "$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8080/unsafe/plain/http://127.0.0.1/image.png@png')" = 502
+          if docker run --rm --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=128m --pids-limit=32 pixstride:check; then exit 1; fi
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: validate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Validate release version
+        id: release
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+        run: |
+          version=$(sed -n 's/^version = "\([0-9][0-9.]*\)"$/\1/p' Cargo.toml)
+          test "$RELEASE_REF" = "v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ghcr.io/lansbe/pixstride:${{ steps.release.outputs.version }},ghcr.io/lansbe/pixstride:latest,ghcr.io/lansbe/pixstride:sha-${{ github.sha }}
+          provenance: mode=max
+          sbom: true
