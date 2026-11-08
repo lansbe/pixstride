@@ -5,3 +5,10 @@
 !src/
 !src/**/
 !src/**/*.rs
+!/.github/
+!/.github/checks/
+!/.github/checks/abi/
+!/.github/checks/abi/abi_check.c
+!/.github/checks/abi/abi_harness.rs
+!/.github/checks/abi/abi_probe_tests.rs
+!/.github/checks/abi/run-abi-check.sh

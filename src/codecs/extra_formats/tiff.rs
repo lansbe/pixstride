@@ -140,6 +140,28 @@ fn verify_ifd_chain(data: &[u8], endian: Endian, mut offset: usize) -> Result<()
     Ok(())
 }
 
+fn validate_strips(
+    data: &[u8],
+    endian: Endian,
+    offsets: Field,
+    counts: Field,
+    strip_count: usize,
+    limit: usize,
+) -> Result<(), Error> {
+    let mut total = 0usize;
+    for strip in 0..strip_count {
+        let offset = offsets.value(data, endian, strip)?;
+        let length = counts.value(data, endian, strip)?;
+        section(data, offset, length)?;
+        // Overlapping strips can repeatedly decode the same input bytes.
+        total = total
+            .checked_add(length)
+            .filter(|&sum| sum <= limit)
+            .ok_or("TIFF compressed strip data exceeds limit")?;
+    }
+    Ok(())
+}
+
 pub(super) fn decode(data: &[u8]) -> Result<Image, Error> {
     let endian = if data.starts_with(b"II\x2a\0") {
         Endian::Little
@@ -273,11 +295,7 @@ pub(super) fn decode(data: &[u8]) -> Result<Image, Error> {
     if !matches!(compression, 1 | 5 | 8 | 32946 | 32773) {
         return Err("unsupported TIFF compression");
     }
-    for strip in 0..strip_count {
-        let offset = offsets.value(data, endian, strip)?;
-        let length = counts.value(data, endian, strip)?;
-        section(data, offset, length)?;
-    }
+    validate_strips(data, endian, offsets, counts, strip_count, MAX_FILE)?;
     let mut image = make_image(width, height)?;
     for strip in 0..strip_count {
         let offset = offsets.value(data, endian, strip)?;
@@ -336,4 +354,43 @@ pub(super) fn decode(data: &[u8]) -> Result<Image, Error> {
         }
     }
     Ok(image)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn strip_budget_counts_overlapping_ranges_before_decoding() {
+        // Two strips point to the same four bytes; each occurrence costs work.
+        let mut data = [8, 0, 8, 0, 4, 0, 4, 0, 1, 2, 3, 4];
+        let offsets = Field {
+            kind: 3,
+            count: 2,
+            data_offset: 0,
+        };
+        let counts = Field {
+            kind: 3,
+            count: 2,
+            data_offset: 4,
+        };
+        assert_eq!(
+            validate_strips(&data, Endian::Little, offsets, counts, 2, 8),
+            Ok(())
+        );
+        assert_eq!(
+            validate_strips(&data, Endian::Little, offsets, counts, 2, 7),
+            Err("TIFF compressed strip data exceeds limit")
+        );
+        let big_endian = [0, 8, 0, 8, 0, 4, 0, 4, 1, 2, 3, 4];
+        assert_eq!(
+            validate_strips(&big_endian, Endian::Big, offsets, counts, 2, 8),
+            Ok(())
+        );
+        data[2] = 10;
+        assert_eq!(
+            validate_strips(&data, Endian::Little, offsets, counts, 2, 8),
+            Err("truncated image data")
+        );
+    }
 }

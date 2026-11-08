@@ -1,5 +1,8 @@
 //! PNG decoding, checksums, scanline reconstruction and bounded row streaming.
 
+#[cfg(test)]
+mod security_regressions;
+
 use crate::{Buffer, Error, Image, MAX_FILE, MAX_PIXELS};
 const SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 const MAX_DIMENSION: usize = 100_000;

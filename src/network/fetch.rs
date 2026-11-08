@@ -100,3 +100,7 @@ pub(super) fn public(ip: Ipv4Addr) -> bool {
         || (a == 198 && (b == 18 || b == 19))
         || ip.is_documentation())
 }
+
+#[cfg(test)]
+#[path = "fetch_regressions.rs"]
+mod security_regressions;

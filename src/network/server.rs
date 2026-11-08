@@ -118,10 +118,12 @@ fn handle(
 ) {
     let _ = socket.set_nodelay(true);
     let _ = socket.set_write_timeout(Some(Duration::from_secs(15)));
-    let route = match protocol::request_with(socket, port, |target| match target {
-        "/health" => Route::Health,
-        "/favicon.ico" => Route::Favicon,
-        _ => Route::Image(request::parse(target, config)),
+    let route = match protocol::request_with(socket, port, config.requires_local_host(), |target| {
+        match target {
+            "/health" => Route::Health,
+            "/favicon.ico" => Route::Favicon,
+            _ => Route::Image(request::parse(target, config)),
+        }
     }) {
         Ok(r) => r,
         Err(_) => {
@@ -209,6 +211,10 @@ fn handle(
         }
     }
 }
+
+#[cfg(test)]
+#[path = "http_tests.rs"]
+mod http_tests;
 
 pub fn serve(ip: std::net::IpAddr, port: u16, path: Option<&std::path::Path>) -> Result<(), Error> {
     let root = Arc::new(

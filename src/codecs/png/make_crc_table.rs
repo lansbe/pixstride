@@ -226,13 +226,22 @@ impl Huffman {
         Err("DEFLATE: invalid Huffman code")
     }
 }
-pub(crate) fn fixed_trees() -> Result<(Huffman, Huffman), Error> {
-    let mut lengths = [0u8; 288];
-    lengths[..144].fill(8);
-    lengths[144..256].fill(9);
-    lengths[256..280].fill(7);
-    lengths[280..].fill(8);
-    Ok((Huffman::build(&lengths)?, Huffman::build(&[5; 32])?))
+pub(crate) fn fixed_trees() -> Result<&'static (Huffman, Huffman), Error> {
+    // The fixed alphabet belongs to the format, not to an image or block.
+    // Initialize it once without retaining any source or decoded image bytes.
+    static FIXED: std::sync::OnceLock<Result<(Huffman, Huffman), Error>> =
+        std::sync::OnceLock::new();
+    FIXED
+        .get_or_init(|| {
+            let mut lengths = [0u8; 288];
+            lengths[..144].fill(8);
+            lengths[144..256].fill(9);
+            lengths[256..280].fill(7);
+            lengths[280..].fill(8);
+            Ok((Huffman::build(&lengths)?, Huffman::build(&[5; 32])?))
+        })
+        .as_ref()
+        .map_err(|error| *error)
 }
 pub(crate) fn dynamic_trees<B: DeflateBits>(bits: &mut B) -> Result<(Huffman, Huffman), Error> {
     let nlit = bits.read(5)? as usize + 257;

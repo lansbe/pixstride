@@ -7,11 +7,14 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  IMAGE: ghcr.io/lansbe/pixstride
 concurrency:
   group: container-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 jobs:
   validate:
+    if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     strategy:
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
@@ -35,7 +38,7 @@ jobs:
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/images"
           printf '%s' '<svg width="64" height="48"><rect width="64" height="48" fill="#247ac0"/></svg>' > "$RUNNER_TEMP/images/sample.svg"
-          docker run -d --name pixstride-check --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=512m --pids-limit=64 --cpus=2 -p 127.0.0.1:8080:8080 -v "$RUNNER_TEMP/images:/images:ro" -e PIXSTRIDE_ALLOW_UNSAFE=1 -e PIXSTRIDE_LOCAL_ROOT=/images pixstride:check
+          docker run -d --name pixstride-check --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=512m --pids-limit=64 --cpus=2 -p 127.0.0.1:8080:8080 -v "$RUNNER_TEMP/images:/images:ro" -e PIXSTRIDE_ALLOW_UNSAFE=1 -e PIXSTRIDE_LOCAL_ROOT=/images -e PIXSTRIDE_ALLOWED_HOSTS=127.0.0.1 pixstride:check
           trap 'docker rm -f pixstride-check' EXIT
           for attempt in {1..30}; do
             if curl --fail --silent http://127.0.0.1:8080/health; then break; fi
@@ -50,10 +53,19 @@ jobs:
           PY
           test "$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8080/unsafe/plain/http://127.0.0.1/image.png@png')" = 502
           if docker run --rm --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=128m --pids-limit=32 pixstride:check; then exit 1; fi
-  publish:
+  # Untagged candidates are pushed by digest before validation. In a public
+  # package they are publicly pullable. Release tags move only after all checks.
+  build-and-verify:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    needs: validate
-    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     permissions:
       contents: read
@@ -61,27 +73,205 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 0
           persist-credentials: false
-      - name: Validate release version
-        id: release
+      - name: Check release source and version
+        shell: bash
         env:
           RELEASE_REF: ${{ github.ref_name }}
+          RELEASE_SHA: ${{ github.sha }}
         run: |
-          version=$(sed -n 's/^version = "\([0-9][0-9.]*\)"$/\1/p' Cargo.toml)
+          set -euo pipefail
+          [[ "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/master
+          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
           test "$RELEASE_REF" = "v$version"
-          echo "version=$version" >> "$GITHUB_OUTPUT"
-      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
+          python3 -c "from pathlib import Path; oversized=[str(p) for p in Path('src').rglob('*.rs') if len(p.read_text().splitlines())>500]; assert not oversized, oversized"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.38.1
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+      - name: Build and stage one architecture by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
-          push: true
-          platforms: linux/amd64,linux/arm64
-          tags: ghcr.io/lansbe/pixstride:${{ steps.release.outputs.version }},ghcr.io/lansbe/pixstride:latest,ghcr.io/lansbe/pixstride:sha-${{ github.sha }}
+          platforms: linux/${{ matrix.arch }}
+          outputs: type=image,name=ghcr.io/lansbe/pixstride,push-by-digest=true,name-canonical=true,push=true,oci-mediatypes=true
           provenance: mode=max
           sbom: true
+      - name: Resolve immutable platform and attestation manifests
+        id: manifests
+        shell: bash
+        env:
+          INDEX_DIGEST: ${{ steps.build.outputs.digest }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          [[ "$INDEX_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          docker buildx imagetools inspect --raw "$IMAGE@$INDEX_DIGEST" > "$RUNNER_TEMP/index.json"
+          manifest=$(jq -er --arg arch "$ARCH" '
+            [.manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest]
+            | if length == 1 then .[0] else error("expected exactly one platform manifest") end
+          ' "$RUNNER_TEMP/index.json")
+          [[ "$manifest" =~ ^sha256:[0-9a-f]{64}$ ]]
+          jq -e --arg manifest "$manifest" '
+            [.manifests[] | select(.annotations["vnd.docker.reference.type"] == "attestation-manifest"
+              and .annotations["vnd.docker.reference.digest"] == $manifest) | .digest]
+            | if length > 0 then . else error("missing platform attestations") end
+          ' "$RUNNER_TEMP/index.json" > "$RUNNER_TEMP/attestations.json"
+          i=0
+          while IFS= read -r attestation; do
+            [[ "$attestation" =~ ^sha256:[0-9a-f]{64}$ ]]
+            docker buildx imagetools inspect --raw "$IMAGE@$attestation" > "$RUNNER_TEMP/attestation-$i.json"
+            jq -e --arg manifest "$manifest" '.subject == null or .subject.digest == $manifest' \
+              "$RUNNER_TEMP/attestation-$i.json" > /dev/null
+            i=$((i + 1))
+          done < <(jq -r '.[]' "$RUNNER_TEMP/attestations.json")
+          jq -es '
+            [.[].layers[]?.annotations["in-toto.io/predicate-type"]] as $p
+            | (any($p[]; . == "https://spdx.dev/Document"))
+              and (any($p[]; . == "https://slsa.dev/provenance/v0.2" or . == "https://slsa.dev/provenance/v1"))
+          ' "$RUNNER_TEMP"/attestation-*.json > /dev/null
+          jq -n --arg arch "$ARCH" --arg index "$INDEX_DIGEST" --arg manifest "$manifest" \
+            --slurpfile attestations "$RUNNER_TEMP/attestations.json" \
+            '{arch:$arch,index:$index,manifest:$manifest,attestations:$attestations[0]}' > "$RUNNER_TEMP/validated.json"
+          printf 'manifest=%s\n' "$manifest" >> "$GITHUB_OUTPUT"
+      - name: Pull and scan the exact platform manifest
+        shell: bash
+        env:
+          MANIFEST: ${{ steps.manifests.outputs.manifest }}
+        run: |
+          set -euo pipefail
+          docker pull "$IMAGE@$MANIFEST"
+          docker image tag "$IMAGE@$MANIFEST" pixstride:check
+          docker save pixstride:check -o "$RUNNER_TEMP/pixstride.tar"
+          chmod 0444 "$RUNNER_TEMP/pixstride.tar"
+          docker run --rm --cap-drop=ALL --security-opt=no-new-privileges --memory=1g --pids-limit=64 \
+            -v "$RUNNER_TEMP/pixstride.tar:/image.tar:ro" \
+            aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb \
+            image --input /image.tar --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 --no-progress
+      - name: Exercise the exact platform image
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/images"
+          printf '%s' '<svg width="64" height="48"><rect width="64" height="48" fill="#247ac0"/></svg>' > "$RUNNER_TEMP/images/sample.svg"
+          docker run -d --name pixstride-check --network=none --read-only --cap-drop=ALL \
+            --security-opt=no-new-privileges --memory=512m --pids-limit=64 --cpus=2 \
+            -v "$RUNNER_TEMP/images:/images:ro" -e PIXSTRIDE_ALLOW_UNSAFE=1 \
+            -e PIXSTRIDE_LOCAL_ROOT=/images -e PIXSTRIDE_ALLOWED_HOSTS=127.0.0.1 pixstride:check
+          trap 'docker rm -f pixstride-check >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for attempt in {1..30}; do
+            if docker exec pixstride-check pixstride healthcheck; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" = 1
+          docker exec pixstride-check /bin/busybox wget -q -O - \
+            'http://127.0.0.1:8080/unsafe/rs:fit:32:24/plain/local:///sample.svg@png' > "$RUNNER_TEMP/output.png"
+          python3 - "$RUNNER_TEMP/output.png" <<'PY'
+          import struct, sys
+          data = open(sys.argv[1], 'rb').read()
+          assert data[:8] == b'\x89PNG\r\n\x1a\n'
+          assert struct.unpack('>II', data[16:24]) == (32, 24)
+          PY
+          response=$(docker exec pixstride-check /bin/busybox sh -c "printf 'GET /unsafe/plain/http://127.0.0.1/image.png@png HTTP/1.1\\r\\nHost: localhost:8080\\r\\n\\r\\n' | nc -w 2 127.0.0.1 8080")
+          [[ "$response" == 'HTTP/1.1 502 '* ]]
+          if docker run --rm --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=128m --pids-limit=32 pixstride:check; then exit 1; fi
+      - name: Retain the validated immutable references
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: validated-${{ matrix.arch }}
+          path: ${{ runner.temp }}/validated.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build-and-verify
+    concurrency:
+      group: pixstride-release-promotion
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      packages: write
+    steps:
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          version: v0.38.1
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: validated-amd64
+          path: ${{ runner.temp }}/validated-amd64
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: validated-arm64
+          path: ${{ runner.temp }}/validated-arm64
+      - name: Assemble, verify and promote validated manifests
+        shell: bash
+        env:
+          RELEASE_REF: ${{ github.ref_name }}
+          RELEASE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          amd="$RUNNER_TEMP/validated-amd64/validated.json"
+          arm="$RUNNER_TEMP/validated-arm64/validated.json"
+          for arch in amd64 arm64; do
+            file="$RUNNER_TEMP/validated-$arch/validated.json"
+            jq -e --arg arch "$arch" '
+              .arch == $arch and (.index | test("^sha256:[0-9a-f]{64}$"))
+              and (.manifest | test("^sha256:[0-9a-f]{64}$"))
+              and (.attestations | length > 0 and all(.[]; test("^sha256:[0-9a-f]{64}$")))
+            ' "$file" > /dev/null
+          done
+          amd_index=$(jq -r '.index' "$amd")
+          arm_index=$(jq -r '.index' "$arm")
+          candidate="$IMAGE:candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker buildx imagetools create --metadata-file "$RUNNER_TEMP/merged-meta.json" \
+            -t "$candidate" "$IMAGE@$amd_index" "$IMAGE@$arm_index"
+          merged=$(jq -er '."containerimage.descriptor".digest' "$RUNNER_TEMP/merged-meta.json")
+          [[ "$merged" =~ ^sha256:[0-9a-f]{64}$ ]]
+          docker buildx imagetools inspect --raw "$IMAGE@$merged" > "$RUNNER_TEMP/merged.json"
+          jq -e --slurpfile a "$amd" --slurpfile b "$arm" '
+            . as $merged | [$a[0], $b[0]] as $expected
+            | [$merged.manifests[] | select(.annotations["vnd.docker.reference.type"] != "attestation-manifest")] as $images
+            | ($images | length == 2)
+              and (($merged.manifests | length) == (2 + ([$expected[].attestations | length] | add)))
+              and all($expected[]; . as $e |
+                any($images[]; .digest == $e.manifest and .platform.os == "linux" and .platform.architecture == $e.arch)
+                and all($e.attestations[]; . as $att |
+                  any($merged.manifests[]; .digest == $att
+                    and .annotations["vnd.docker.reference.type"] == "attestation-manifest"
+                    and .annotations["vnd.docker.reference.digest"] == $e.manifest)))
+          ' "$RUNNER_TEMP/merged.json" > /dev/null
+          # Only the current master revision may update the moving latest tag.
+          # Serialize promotions so an older release cannot overtake a newer one.
+          version="${RELEASE_REF#v}"
+          tags=("$version" "sha-$RELEASE_SHA")
+          master=$(git ls-remote https://github.com/lansbe/pixstride.git refs/heads/master | cut -f1)
+          [[ "$master" =~ ^[0-9a-f]{40}$ ]]
+          if test "$master" = "$RELEASE_SHA"; then tags+=(latest); fi
+          args=()
+          for tag in "${tags[@]}"; do args+=(-t "$IMAGE:$tag"); done
+          docker buildx imagetools create --metadata-file "$RUNNER_TEMP/published-meta.json" \
+            "${args[@]}" "$IMAGE@$merged"
+          published=$(jq -er '."containerimage.descriptor".digest' "$RUNNER_TEMP/published-meta.json")
+          test "$published" = "$merged"
+          for tag in "${tags[@]}"; do
+            actual="sha256:$(docker buildx imagetools inspect --raw "$IMAGE:$tag" | sha256sum | cut -d' ' -f1)"
+            test "$actual" = "$merged"
+          done
+          printf 'Published verified index: %s@%s\n' "$IMAGE" "$merged"

@@ -20,12 +20,17 @@ impl Config {
         })
     }
 
-    /// The caller must bind the resulting service to loopback only.
+    /// The caller must restrict network access to trusted local clients.
+    /// Loopback-only port publishing does not isolate container network peers.
     /// Requests must explicitly use the `/unsafe/` signature segment.
     pub fn unsafe_local() -> Self {
         Self {
             auth: Auth::UnsafeLocal,
         }
+    }
+
+    pub(crate) fn requires_local_host(&self) -> bool {
+        matches!(&self.auth, Auth::UnsafeLocal)
     }
 
     /// No configured key and salt selects explicit `/unsafe/` local requests.

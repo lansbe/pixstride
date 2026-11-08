@@ -11,7 +11,7 @@ docker run --rm --name pixstride -p 127.0.0.1:8080:8080 \
   --read-only --cap-drop=ALL --security-opt=no-new-privileges \
   --memory=512m --pids-limit=64 --cpus=2 \
   -e PIXSTRIDE_ALLOW_UNSAFE=1 -e PIXSTRIDE_ALLOWED_HOSTS=upload.wikimedia.org \
-  ghcr.io/lansbe/pixstride:0.1.0
+  ghcr.io/lansbe/pixstride:0.1.1
 ```
 
 Open this generic example to resize a public sample image:
@@ -19,6 +19,8 @@ Open this generic example to resize a public sample image:
 ```text
 http://localhost:8080/unsafe/rs:fit:128:128/plain/https://upload.wikimedia.org/wikipedia/commons/a/a9/Example.jpg@png
 ```
+
+In unsigned mode, every request, including `/health`, must use `localhost`, `127.0.0.1` or `[::1]` in the `Host` header with the service port (`PIXSTRIDE_PORT`, default 8080). The port may be omitted only when the service port is 80. A Host check does not authenticate clients: loopback port publishing alone does not isolate other containers on the same network.
 
 `/health` is the health endpoint. Every image request reads its source again. Local files require an explicit read-only mount and `PIXSTRIDE_LOCAL_ROOT`; only flat regular filenames are accepted.
 
@@ -39,9 +41,11 @@ Replace the example host with your own allowed image host. Optional settings: `P
 - Resize, crop, gravity, quarter-turn rotation, flip, padding, background, blur, sharpen, pixelation, trimming, local watermarks, EXIF orientation and supported RGB ICC conversion.
 - Uses a subset of imgproxy URL syntax, for example `rs:fit:320:240`, `g:ce`, `q:80`. Unsupported options fail explicitly. This is **not a complete drop-in replacement for imgproxy**. Lossy WebP input, AVIF, HEIC, JPEG XL, animation and general SVG rendering are unsupported.
 
+Version 0.1.1 adds or tightens work limits for DEFLATE, JPEG, TIFF, SVG and filtered resizing. Some valid inputs can be rejected by these limits; see [SECURITY.md](SECURITY.md).
+
 ## Benchmarks
 
-Historical engine baseline before the Linux port and deployment hardening: native macOS, Apple M5, imgproxy 4.0.21 / libvips 8.18.7, November 2026. Values below are **Rust / imgproxy**. These are not measurements of the published container.
+Historical engine baseline before the Linux port and deployment hardening: native macOS, Apple M5, imgproxy 4.0.21 / libvips 8.18.7, November 2026. Values below are **Rust / imgproxy**. These do not measure the 0.1.1 container.
 
 | Scenario | CPU ms/request | HTTP p50 ms | Peak RSS MiB |
 |---|---:|---:|---:|
@@ -64,4 +68,4 @@ cargo build --release --locked --offline
 docker build -t pixstride .
 ```
 
-Early release: custom codecs and cryptography have not received an independent security audit. [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT](LICENSE)
+Early release: security review and testing do not prove the custom codecs and cryptography safe. [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT](LICENSE)

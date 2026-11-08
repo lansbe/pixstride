@@ -7,6 +7,7 @@ impl StreamFiltered {
         height: usize,
         filter: Filter,
     ) -> Result<Option<Self>, Error> {
+        check_filtered_work(source_width, source_height, width, height)?;
         // Vertical coefficients are also polyphase for the exact x2/x4
         // cases. Keep the original non-cached path as an allocation and
         // geometry fallback. This remains private to this request.

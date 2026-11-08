@@ -277,6 +277,7 @@ pub(crate) fn parse_jpeg(
     let mut quant_present = [false; 4];
     let mut dc = [Huffman::EMPTY; 4];
     let mut ac = [Huffman::EMPTY; 4];
+    let mut huffman_remaining = MAX_HUFFMAN_TABLE_DEFINITIONS;
     let mut components = [Component::EMPTY; 3];
     let mut frame = None;
     let mut restart_interval = 0usize;
@@ -303,7 +304,7 @@ pub(crate) fn parse_jpeg(
         pos = end;
         match marker {
             0xdb => parse_dqt(payload, &mut quant, &mut quant_present)?,
-            0xc4 => parse_dht(payload, &mut dc, &mut ac)?,
+            0xc4 => parse_dht(payload, &mut dc, &mut ac, &mut huffman_remaining)?,
             0xc0 => {
                 if frame.is_some() {
                     return Err("JPEG: multiple frames unsupported");

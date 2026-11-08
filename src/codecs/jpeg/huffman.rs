@@ -1,4 +1,7 @@
 use super::*;
+// A DHT segment can redefine the same table repeatedly, including between
+// progressive scans. Bound the expensive prefix-table construction per image.
+pub(crate) const MAX_HUFFMAN_TABLE_DEFINITIONS: usize = 4096;
 impl Huffman {
     pub(crate) const EMPTY: Self = Self {
         counts: [0; 16],
@@ -246,6 +249,7 @@ pub(crate) fn parse_dht(
     bytes: &[u8],
     dc: &mut [Huffman; 4],
     ac: &mut [Huffman; 4],
+    remaining: &mut usize,
 ) -> Result<(), Error> {
     let mut pos = 0usize;
     while pos < bytes.len() {
@@ -259,6 +263,9 @@ pub(crate) fn parse_dht(
         if class > 1 || id >= 4 {
             return Err("JPEG: unsupported Huffman table");
         }
+        *remaining = remaining
+            .checked_sub(1)
+            .ok_or("JPEG: Huffman table budget exceeded")?;
         let mut table = Huffman::EMPTY;
         let mut space = 1i32;
         for i in 0..16 {

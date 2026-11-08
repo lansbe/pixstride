@@ -162,3 +162,5 @@ mod decode_scan;
 pub(crate) use decode_scan::*;
 mod parsed_jpeg;
 pub(crate) use parsed_jpeg::*;
+#[cfg(test)]
+mod tests;

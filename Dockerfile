@@ -3,8 +3,13 @@ RUN apk add --no-cache curl-dev && rustup component add rustfmt clippy
 WORKDIR /build
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
+COPY .github/checks/abi/ .github/checks/abi/
 ENV RUSTFLAGS="--remap-path-prefix=/build=/src -C target-feature=-crt-static"
-RUN cargo fmt --check && cargo clippy --locked --offline -- -D warnings && cargo build --release --locked --offline
+RUN --network=none sh .github/checks/abi/run-abi-check.sh . \
+    && cargo fmt --check \
+    && cargo clippy --locked --offline -- -D warnings \
+    && cargo test --locked --offline \
+    && cargo build --release --locked --offline
 
 FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 RUN apk upgrade --no-cache && apk add --no-cache libcurl libgcc ca-certificates

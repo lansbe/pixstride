@@ -5,6 +5,9 @@
 //! renamed or replaced. Sources are read into one bounded private buffer.
 
 use crate::Buffer;
+#[cfg(test)]
+#[path = "local_tests.rs"]
+mod tests;
 use std::os::{
     fd::{AsRawFd, FromRawFd},
     unix::fs::{FileExt, MetadataExt, OpenOptionsExt},
@@ -124,12 +127,20 @@ fn same_identity(before: &Metadata, after: &Metadata) -> bool {
 // The hook is a zero-cost no-op in the normal call. Tests use it to create a
 // deterministic mutation exactly after the initial metadata snapshot.
 pub(crate) fn read_checked<F: FnOnce()>(file: File, after_snapshot: F) -> Result<Buffer, String> {
+    read_checked_limit(file, MAX_SOURCE, after_snapshot)
+}
+
+pub(crate) fn read_checked_limit<F: FnOnce()>(
+    file: File,
+    limit: u64,
+    after_snapshot: F,
+) -> Result<Buffer, String> {
     let before = file.metadata().map_err(|_| "cannot inspect source file")?;
     if !before.file_type().is_file() {
         return Err("source is not a regular file".into());
     }
-    if before.len() > MAX_SOURCE {
-        return Err("source exceeds 64 MiB".into());
+    if before.len() > limit.min(MAX_SOURCE) {
+        return Err("source exceeds read limit".into());
     }
     let len = usize::try_from(before.len()).map_err(|_| "source exceeds address space")?;
     after_snapshot();

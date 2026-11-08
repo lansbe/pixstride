@@ -132,6 +132,8 @@ pub(crate) struct StreamFiltered {
     accumulate: bool,
     started: usize,
 }
+mod budget;
+use budget::check_filtered_work;
 mod typed_mut;
 pub(crate) use typed_mut::*;
 mod all_opaque_neon;

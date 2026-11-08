@@ -308,6 +308,7 @@ pub(crate) fn filtered_into(
     filter: Filter,
     mut output: FilterOutput<'_>,
 ) -> Result<(), Error> {
+    check_filtered_work(source_width, source_height, width, height)?;
     let opaque = match &source {
         FilterSource::Rgba(src) => all_opaque(src),
         FilterSource::OpaqueRgbRows { .. } => true,
@@ -399,6 +400,7 @@ pub(crate) fn filtered(
     height: usize,
     filter: Filter,
 ) -> Result<Image, Error> {
+    check_filtered_work(image.width, image.height, width, height)?;
     let mut pixels = Buffer::new(width * height * CHANNELS)?;
     filtered_into(
         FilterSource::Rgba(image.pixels.as_slice()),

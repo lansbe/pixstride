@@ -12,6 +12,7 @@ use std::{
 pub fn request_with<T>(
     stream: &mut TcpStream,
     port: u16,
+    local_host_only: bool,
     consume: impl FnOnce(&str) -> T,
 ) -> Result<T> {
     let deadline = Instant::now() + Duration::from_secs(5);
@@ -37,7 +38,7 @@ pub fn request_with<T>(
         }
         if bytes.is_empty() {
             if let Some(end) = chunk[..n].windows(4).position(|w| w == b"\r\n\r\n") {
-                return parse_header(&chunk[..end], port).map(consume);
+                return parse_header(&chunk[..end], port, local_host_only).map(consume);
             }
         }
         if n > 16384usize.saturating_sub(bytes.len()) {
@@ -48,7 +49,7 @@ pub fn request_with<T>(
             .map_err(|_| "Header allocation failed".to_string())?;
         bytes.extend_from_slice(&chunk[..n]);
         if let Some(at) = bytes[scan_from..].windows(4).position(|w| w == b"\r\n\r\n") {
-            return parse_header(&bytes[..scan_from + at], port).map(consume);
+            return parse_header(&bytes[..scan_from + at], port, local_host_only).map(consume);
         }
         // Keep the last three bytes so delimiters fragmented across reads are
         // detected without rescanning the earlier, already inspected prefix.
@@ -56,7 +57,32 @@ pub fn request_with<T>(
     }
 }
 
-fn parse_header(bytes: &[u8], port: u16) -> Result<&str> {
+fn local_host_matches(value: &str, port: u16) -> bool {
+    let host_end = if value.starts_with('[') {
+        match value.find(']') {
+            Some(index) => index + 1,
+            None => return false,
+        }
+    } else {
+        value.find(':').unwrap_or(value.len())
+    };
+    let (host, suffix) = value.split_at(host_end);
+    if !host.eq_ignore_ascii_case("localhost") && host != "127.0.0.1" && host != "[::1]" {
+        return false;
+    }
+    if suffix.is_empty() {
+        return port == 80;
+    }
+    let Some(port_text) = suffix.strip_prefix(':') else {
+        return false;
+    };
+    !port_text.is_empty()
+        && port_text.bytes().all(|b| b.is_ascii_digit())
+        && port != 0
+        && port_text.parse::<u16>() == Ok(port)
+}
+
+fn parse_header(bytes: &[u8], port: u16, local_host_only: bool) -> Result<&str> {
     let text = std::str::from_utf8(bytes).map_err(|_| "Invalid header encoding")?;
     let mut lines = text.split("\r\n");
     let mut first = lines.next().unwrap().split(' ');
@@ -67,7 +93,6 @@ fn parse_header(bytes: &[u8], port: u16) -> Result<&str> {
     if first.next() != Some("HTTP/1.1") || first.next().is_some() {
         return Err("HTTP/1.1 required".into());
     }
-    let _ = port;
     if !path.starts_with('/') || path.starts_with("//") || path.bytes().any(|b| b <= 32 || b >= 127)
     {
         return Err("invalid request target".into());
@@ -75,7 +100,7 @@ fn parse_header(bytes: &[u8], port: u16) -> Result<&str> {
     let mut host = false;
     for line in lines {
         let (name, value) = line.split_once(':').ok_or("Invalid header")?;
-        let value = value.trim();
+        let value = value.trim_matches([' ', '\t']);
         if name.is_empty()
             || !name
                 .bytes()
@@ -91,6 +116,7 @@ fn parse_header(bytes: &[u8], port: u16) -> Result<&str> {
                 || !value
                     .bytes()
                     .all(|b| b.is_ascii_alphanumeric() || b".-:[]".contains(&b))
+                || (local_host_only && !local_host_matches(value, port))
             {
                 return Err("invalid host".into());
             }
@@ -236,12 +262,26 @@ pub fn response(
     extra: fmt::Arguments<'_>,
     body: &[u8],
 ) -> io::Result<()> {
+    // The overload path sets a shorter timeout before writing its 503 reply.
+    // Avoid querying socket options on the normal response path.
+    let response_timeout = Duration::from_secs(15);
+    let timeout = if status == 503 {
+        s.write_timeout()?
+            .unwrap_or(response_timeout)
+            .min(response_timeout)
+    } else {
+        response_timeout
+    };
     let mut writer = DeadlineWriter {
         socket: s,
-        deadline: Instant::now() + Duration::from_secs(15),
+        deadline: Instant::now() + timeout,
     };
     response_to(&mut writer, status, mime, extra, body)
 }
+
+#[cfg(test)]
+#[path = "protocol_tests.rs"]
+mod protocol_tests;
 
 pub fn text(s: &mut TcpStream, status: u16, body: &str) -> io::Result<()> {
     response(

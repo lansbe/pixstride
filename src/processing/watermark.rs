@@ -134,7 +134,7 @@ fn load(config: &Config) -> Result<Image, Error> {
     if file.len() > MAX_WATERMARK_BYTES {
         return Err("watermark file exceeds limit");
     }
-    let bytes = file.read_all()?;
+    let bytes = file.read_limited(MAX_WATERMARK_BYTES)?;
     let orientation = metadata::orientation(bytes.as_slice())?;
     let profile = metadata::extract_icc(bytes.as_slice())?;
     let mut image = pipeline::decode(bytes.as_slice())?;

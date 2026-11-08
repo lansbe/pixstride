@@ -250,3 +250,7 @@ pub fn sign_imgproxy(path: &str, key: &[u8], salt: &[u8]) -> String {
     }
     result
 }
+
+#[cfg(test)]
+#[path = "signature_regressions.rs"]
+mod security_regressions;

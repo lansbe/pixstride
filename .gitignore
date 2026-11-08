@@ -17,6 +17,11 @@
 !/.github/workflows/
 !/.github/workflows/container.yml
 !/.github/dependabot.yml
+!/.github/checks/
+!/.github/checks/abi/
+!/.github/checks/abi/*.rs
+!/.github/checks/abi/*.c
+!/.github/checks/abi/*.sh
 
 # Never version build output, credentials, media, or editor files.
 **/.DS_Store

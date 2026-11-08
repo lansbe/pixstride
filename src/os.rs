@@ -30,10 +30,14 @@ impl InputFile {
         self.len
     }
     pub fn read_all(&self) -> Result<Buffer, Error> {
-        crate::local::read_checked(
+        self.read_limited(crate::MAX_FILE)
+    }
+    pub fn read_limited(&self, limit: usize) -> Result<Buffer, Error> {
+        crate::local::read_checked_limit(
             self.file
                 .try_clone()
                 .map_err(|_| "cannot clone source handle")?,
+            limit as u64,
             || {},
         )
         .map_err(|_| "cannot read source safely")

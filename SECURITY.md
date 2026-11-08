@@ -6,7 +6,7 @@ Report vulnerabilities privately through [GitHub Security Advisories](https://gi
 
 ## Deployment boundary
 
-Use signed URLs and an exact source-host allowlist. Generate independent secrets with a cryptographic random generator; the key requires at least 32 bytes and the salt 16 bytes, encoded as hexadecimal. Prefer mounted secret files (`PIXSTRIDE_KEY_FILE`, `PIXSTRIDE_SALT_FILE`) over command-line values. Unsigned requests require an explicit opt-in and are intended for a loopback-only trial. Signed URLs are bearer capabilities and can be replayed; they do not provide expiry or per-user authorization.
+Use signed URLs and an exact source-host allowlist. Generate independent secrets with a cryptographic random generator; the key requires at least 32 bytes and the salt 16 bytes, encoded as hexadecimal. Prefer mounted secret files (`PIXSTRIDE_KEY_FILE`, `PIXSTRIDE_SALT_FILE`) over command-line values. Unsigned requests require an explicit opt-in and are intended for an isolated local trial. In unsigned mode, every request, including health checks, requires a `Host` of `localhost`, `127.0.0.1` or `[::1]` and the configured service port; the port can be omitted only for port 80. If a host port is remapped, the header must still use the internal service port. This check does not authenticate clients. Loopback port publishing alone does not isolate container-network peers; restrict access to trusted local clients. Signed URLs are bearer capabilities and can be replayed; they do not provide expiry or per-user authorization.
 
 Terminate inbound TLS and apply rate, connection and request limits at a reverse proxy. Restrict outbound traffic with a network policy as well as the application's allowlist. Do not mount credentials or unrelated directories into the container. Do not log full request URLs at the proxy. Keep container limits enabled: read-only root filesystem, no Linux capabilities, no new privileges, bounded memory/CPU/processes, and a dedicated non-root user. For managed deployments, configure restart policy and a finite shutdown grace period.
 
@@ -18,6 +18,20 @@ Terminate inbound TLS and apply rate, connection and request limits at a reverse
 - Four admitted requests, one image-processing operation at a time, bounded overload handling, 16 KiB request headers, a five-second header deadline and a fifteen-second total response-write deadline. GET only, no request bodies, one request per connection.
 - Images are bounded to 50 million pixels; individual aligned buffers to 512 MiB. Local reads use a pinned directory descriptor, reject symlinks/non-regular files, and detect ordinary concurrent changes. Local sources are disabled unless configured.
 - Unsupported formats, features and color profiles fail explicitly. Source URLs and signing secrets are not logged by the service. Responses use `no-store`, `nosniff` and `no-referrer`.
+
+## Source and processing limits in 0.1.1
+
+These limits can reject otherwise valid inputs, even when the general size and pixel limits are met:
+
+- Each DEFLATE stream is limited to 16,384 blocks, including streams used for PNG, TIFF and ICC data. JPEG parsing is limited to 4,096 Huffman table definitions; progressive JPEG decoding is limited to 512 scans and 8,388,608 total block visits across scans, including interleaved padding.
+- TIFF strip lengths are limited to 64 MiB in total, counting overlapping ranges each time. SVG raster work has a 200,000,000-unit budget that includes full-area mask passes. A configured watermark file is limited to 16 MiB when read.
+- Filtered resizing limits `source_height * output_width` to 16,000,000 pixels and `source_pixels + 2 * (source_height * output_width) + output_pixels` to 100,000,000. This is an admission estimate, not an exact operation count or a CPU deadline.
+
+## Release workflow
+
+The release workflow is configured to stage each platform image by digest, scan and smoke-test that exact platform manifest, then assemble an index from the tested digests. It checks the index and associated SBOM and provenance attestation descriptors before moving the version and commit-SHA tags to the verified index. Promotions are serialized; `latest` moves only when the release commit is the current `master` revision. It also checks that the tagged commit is an ancestor of `master` and matches the Cargo version; ancestry alone does not establish code review. The attestation checks do not verify a signature or independently establish the builder's trustworthiness.
+
+Platform images are pushed by digest before validation and may be publicly pullable if the package is public. They are not release-approved until the checks and promotion succeed. The workflow definition alone does not prove that any particular release completed those checks.
 
 ## Residual limits
 

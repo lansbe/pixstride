@@ -194,7 +194,7 @@ impl Client {
         };
         // reset preserves connection/DNS/TLS-session caches, but clears borrowed callbacks.
         unsafe { curl_easy_reset(self.0) };
-        let _reset = Reset(self.0);
+        let reset = Reset(self.0);
         self.long(99, 1)?;
         self.long(155, remaining.as_millis().clamp(1, 15000) as c_long)?;
         self.long(156, 5000)?;
@@ -226,8 +226,9 @@ impl Client {
                     as unsafe extern "C" fn(*mut c_char, usize, usize, *mut c_void) -> usize,
             )
         })?;
-        check(unsafe { curl_easy_setopt(self.0, 10001, &mut sink as *mut Sink) })?;
-        check(unsafe { curl_easy_setopt(self.0, 10029, &mut sink as *mut Sink) })?;
+        let userdata = std::ptr::addr_of_mut!(sink).cast::<c_void>();
+        check(unsafe { curl_easy_setopt(self.0, 10001, userdata) })?;
+        check(unsafe { curl_easy_setopt(self.0, 10029, userdata) })?;
         check(unsafe {
             curl_easy_setopt(
                 self.0,
@@ -260,6 +261,8 @@ impl Client {
                 }
             }
         }
+        // Clear callback pointers while the complete Sink is still in scope.
+        drop(reset);
         Ok(Transfer {
             body: sink.body,
             location,
@@ -367,3 +370,7 @@ impl Pool {
         lease.client.as_mut().unwrap().fetch(url, max)
     }
 }
+
+#[cfg(test)]
+#[path = "transport_regressions.rs"]
+mod security_regressions;

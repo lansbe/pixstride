@@ -36,10 +36,14 @@ pub(crate) fn draw(raster: &mut Raster, paths: &[Path], state: &State) -> Result
         .width()
         .checked_mul(bounds.height())
         .ok_or("SVG: dimensions overflow")?;
-    // Bound both the temporary mask and total work before allocation.
+    // Bound the temporary mask and charge every full-area pass before allocation,
+    // even when no fill edge or stroke segment produces any coverage.
     if area > (MAX_WORK / 16) as usize {
         return Err("SVG: work limit");
     }
+    let passes =
+        1 + usize::from(state.style.fill.is_some()) * 2 + usize::from(state.style.stroke.is_some());
+    raster.consume((area as u64).saturating_mul(passes as u64))?;
     let mut mask = zero_mask(area)?;
     if let Some(fill) = state.style.fill {
         fill_paths(
@@ -340,4 +344,71 @@ pub(crate) fn decode(data: &[u8]) -> Result<Image, Error> {
         return Err("SVG: incomplete document");
     }
     Ok(raster.ok_or("SVG: missing root")?.image)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_fill_path() -> (Vec<Path>, State) {
+        let path = Path {
+            points: vec![Point::new(0., 0.), Point::new(4., 4.)],
+            closed: false,
+        };
+        let state = State {
+            matrix: Matrix::identity(),
+            style: Style::default(),
+        };
+        (vec![path], state)
+    }
+
+    #[test]
+    fn empty_fill_charges_all_mask_passes_before_allocation() {
+        let (paths, state) = empty_fill_path();
+        let mut raster = Raster::new(4, 4).unwrap();
+        // 16 pixels each for allocation/initialization, blend, and clear.
+        raster.work = MAX_WORK - 48;
+        draw(&mut raster, &paths, &state).unwrap();
+        assert_eq!(raster.work, MAX_WORK);
+        assert!(raster.image.pixels.as_slice().iter().all(|&v| v == 0));
+
+        let mut raster = Raster::new(4, 4).unwrap();
+        raster.work = MAX_WORK - 47;
+        assert_eq!(draw(&mut raster, &paths, &state), Err("SVG: work limit"));
+        assert!(raster.image.pixels.as_slice().iter().all(|&v| v == 0));
+    }
+
+    #[test]
+    fn empty_stroke_charges_its_mask_and_blend() {
+        let (paths, mut state) = empty_fill_path();
+        state.style.stroke = state.style.fill;
+        state.style.fill = None;
+        state.style.width = 0.;
+        let mut raster = Raster::new(4, 4).unwrap();
+        raster.work = MAX_WORK - 32;
+        draw(&mut raster, &paths, &state).unwrap();
+        assert_eq!(raster.work, MAX_WORK);
+        assert!(raster.image.pixels.as_slice().iter().all(|&v| v == 0));
+    }
+
+    #[test]
+    fn combined_empty_fill_and_stroke_charge_every_pass() {
+        let (paths, mut state) = empty_fill_path();
+        state.style.stroke = state.style.fill;
+        state.style.width = 0.;
+        let mut raster = Raster::new(4, 4).unwrap();
+        raster.work = MAX_WORK - 64;
+        draw(&mut raster, &paths, &state).unwrap();
+        assert_eq!(raster.work, MAX_WORK);
+        assert!(raster.image.pixels.as_slice().iter().all(|&v| v == 0));
+    }
+
+    #[test]
+    fn fill_and_transparency_are_preserved() {
+        let image = decode(
+            br##"<svg width="2" height="1"><rect width="1" height="1" fill="#ff0000"/></svg>"##,
+        )
+        .unwrap();
+        assert_eq!(image.pixels.as_slice(), &[255, 0, 0, 255, 0, 0, 0, 0]);
+    }
 }

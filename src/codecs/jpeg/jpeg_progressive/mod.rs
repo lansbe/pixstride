@@ -4,11 +4,13 @@
 //! tables and the final EOI have been checked. No external image codec is used.
 use super::{
     inverse_dct, parse_dht, read_marker, read_u16, sample_plane, store_rgb, Component, Entropy,
-    Huffman, ZIGZAG,
+    Huffman, MAX_HUFFMAN_TABLE_DEFINITIONS, ZIGZAG,
 };
 use crate::{Buffer, Error, Image, MAX_FILE, MAX_PIXELS};
 const MAX_COMPONENTS: usize = 4;
 const MAX_SCANS: usize = 512;
+// Includes every block in each scan, including interleaved MCU padding.
+const MAX_BLOCK_VISITS: usize = 8 * 1024 * 1024;
 #[derive(Clone, Copy)]
 pub(crate) struct Layout {
     block_offset: usize,
@@ -52,3 +54,5 @@ mod parse_quantization;
 pub(crate) use parse_quantization::*;
 mod decode_block;
 pub(crate) use decode_block::*;
+#[cfg(test)]
+mod tests;

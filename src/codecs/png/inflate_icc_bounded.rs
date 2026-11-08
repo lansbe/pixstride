@@ -53,7 +53,14 @@ pub(crate) fn inflate_payload<B: DeflateBits, T: InflateOutput>(
     output: &mut T,
 ) -> Result<(), Error> {
     let mut used = 0usize;
+    let mut blocks = 0usize;
     loop {
+        // Decoded byte limits do not bound empty blocks or dynamic-tree work.
+        // This applies equally to buffered, streamed, ICC and TIFF inflation.
+        blocks += 1;
+        if blocks > 16_384 {
+            return Err("DEFLATE: block work limit");
+        }
         let final_block = bits.read(1)? != 0;
         match bits.read(2)? {
             0 => {
@@ -73,10 +80,12 @@ pub(crate) fn inflate_payload<B: DeflateBits, T: InflateOutput>(
                 used += n;
             }
             block @ (1 | 2) => {
+                let dynamic;
                 let (literal, distance) = if block == 1 {
                     fixed_trees()?
                 } else {
-                    dynamic_trees(bits)?
+                    dynamic = dynamic_trees(bits)?;
+                    &dynamic
                 };
                 loop {
                     let symbol = literal.decode(bits)?;

@@ -110,6 +110,31 @@ pub(crate) fn decode_block(
     }
     Ok(())
 }
+pub(super) fn scan_geometry(frame: &Frame, scan: &Scan) -> Result<(usize, usize, usize), Error> {
+    let (cols, rows, blocks_per_mcu) = if scan.count == 1 {
+        let layout = frame.layout[scan.order[0]];
+        (layout.blocks_w, layout.blocks_h, 1)
+    } else {
+        let mut blocks = 0usize;
+        for &ci in &scan.order[..scan.count] {
+            let component = frame.components[ci];
+            blocks = component
+                .h
+                .checked_mul(component.v)
+                .and_then(|count| blocks.checked_add(count))
+                .ok_or("JPEG progressive: scan work exceeds limit")?;
+        }
+        (frame.mcu_cols, frame.mcu_rows, blocks)
+    };
+    let total = cols
+        .checked_mul(rows)
+        .ok_or("JPEG progressive: scan work exceeds limit")?;
+    let visits = total
+        .checked_mul(blocks_per_mcu)
+        .ok_or("JPEG progressive: scan work exceeds limit")?;
+    Ok((cols, total, visits))
+}
+
 pub(crate) fn decode_scan(
     data: &[u8],
     position: usize,
@@ -120,7 +145,12 @@ pub(crate) fn decode_scan(
     dc: &[Huffman; 4],
     ac: &[Huffman; 4],
     restart_interval: usize,
+    remaining_visits: &mut usize,
 ) -> Result<usize, Error> {
+    let (cols, total, visits) = scan_geometry(frame, scan)?;
+    *remaining_visits = remaining_visits
+        .checked_sub(visits)
+        .ok_or("JPEG progressive: scan work exceeds limit")?;
     for i in 0..scan.count {
         let ci = scan.order[i];
         let table = frame.components[ci].quant;
@@ -135,15 +165,6 @@ pub(crate) fn decode_scan(
             frame.has_quant[ci] = true;
         }
     }
-    let (cols, rows) = if scan.count == 1 {
-        let l = frame.layout[scan.order[0]];
-        (l.blocks_w, l.blocks_h)
-    } else {
-        (frame.mcu_cols, frame.mcu_rows)
-    };
-    let total = cols
-        .checked_mul(rows)
-        .ok_or("JPEG progressive: too many MCUs")?;
     let mut bits = Entropy::new(data, position);
     let mut predictors = [0i32; MAX_COMPONENTS];
     let mut eob_run = 0usize;
@@ -211,6 +232,14 @@ pub(crate) fn decode_scan(
 /// Grayscale, YCbCr, Adobe RGB and Adobe CMYK/YCCK are supported. Arithmetic,
 /// 12-bit, unknown CMYK transformations and hierarchical JPEG are rejected.
 pub(crate) fn decode(data: &[u8]) -> Result<Image, Error> {
+    decode_with_limits(data, MAX_BLOCK_VISITS, MAX_HUFFMAN_TABLE_DEFINITIONS)
+}
+
+pub(super) fn decode_with_limits(
+    data: &[u8],
+    mut remaining_visits: usize,
+    mut huffman_remaining: usize,
+) -> Result<Image, Error> {
     if data.len() > MAX_FILE || data.get(..2) != Some(&[0xff, 0xd8]) {
         return Err("JPEG progressive: invalid signature or size");
     }
@@ -245,7 +274,7 @@ pub(crate) fn decode(data: &[u8]) -> Result<Image, Error> {
         pos = end;
         match marker {
             0xdb => parse_quantization(payload, &mut quant, &mut quant_present)?,
-            0xc4 => parse_dht(payload, &mut dc, &mut ac)?,
+            0xc4 => parse_dht(payload, &mut dc, &mut ac, &mut huffman_remaining)?,
             0xc2 => {
                 if frame.is_some() {
                     return Err("JPEG progressive: multiple frames unsupported");
@@ -280,6 +309,7 @@ pub(crate) fn decode(data: &[u8]) -> Result<Image, Error> {
                     &dc,
                     &ac,
                     restart_interval,
+                    &mut remaining_visits,
                 )?;
             }
             0xe0..=0xef | 0xfe => {}
