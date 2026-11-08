@@ -69,3 +69,9 @@ docker build -t pixstride .
 ```
 
 Early release: security review and testing do not prove the custom codecs and cryptography safe. [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [MIT](LICENSE)
+
+## Support
+
+<a href="https://buymeacoffee.com/lansbe">
+  <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me a Coffee" height="40">
+</a>
