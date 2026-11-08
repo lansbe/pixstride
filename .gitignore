@@ -10,6 +10,12 @@
 !/LICENSE
 !/SECURITY.md
 !/CONTRIBUTING.md
+!/CHANGELOG.md
+!/scripts/
+!/scripts/*.py
+!/.github/PULL_REQUEST_TEMPLATE.md
+!/.github/checks/project/
+!/.github/checks/project/*.py
 !/src/
 !/src/**/
 !/src/**/*.rs

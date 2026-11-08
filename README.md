@@ -6,6 +6,7 @@ A small image transformation server written in Rust. No image libraries, externa
 
 Local trial with an explicitly allowed public image host:
 
+<!-- generated:run:start -->
 ```sh
 docker run --rm --name pixstride -p 127.0.0.1:8080:8080 \
   --read-only --cap-drop=ALL --security-opt=no-new-privileges \
@@ -13,6 +14,7 @@ docker run --rm --name pixstride -p 127.0.0.1:8080:8080 \
   -e PIXSTRIDE_ALLOW_UNSAFE=1 -e PIXSTRIDE_ALLOWED_HOSTS=upload.wikimedia.org \
   ghcr.io/lansbe/pixstride:0.1.1
 ```
+<!-- generated:run:end -->
 
 Open this generic example to resize a public sample image:
 
@@ -32,7 +34,11 @@ Generate a signed path using the running container's configured secrets:
 docker exec pixstride pixstride sign '/rs:fit:320:240/plain/https://images.example.org/sample.jpg@png'
 ```
 
-Replace the example host with your own allowed image host. Optional settings: `PIXSTRIDE_BIND` (native default `127.0.0.1`, container `0.0.0.0`), `PIXSTRIDE_PORT` (8080), `PIXSTRIDE_LOCAL_ROOT`, `PIXSTRIDE_WATERMARK_PATH`, and `PIXSTRIDE_WATERMARK_OPACITY` (0-1).
+Replace the example host with your own allowed image host.
+
+<!-- generated:configuration:start -->
+Configuration names: `PIXSTRIDE_ALLOWED_HOSTS`, `PIXSTRIDE_ALLOW_UNSAFE`, `PIXSTRIDE_BIND`, `PIXSTRIDE_KEY`, `PIXSTRIDE_KEY_FILE`, `PIXSTRIDE_LOCAL_ROOT`, `PIXSTRIDE_PORT`, `PIXSTRIDE_SALT`, `PIXSTRIDE_SALT_FILE`, `PIXSTRIDE_WATERMARK_OPACITY`, `PIXSTRIDE_WATERMARK_PATH`. See [SECURITY.md](SECURITY.md) for deployment requirements.
+<!-- generated:configuration:end -->
 
 ## Scope
 
@@ -45,7 +51,7 @@ Version 0.1.1 adds or tightens work limits for DEFLATE, JPEG, TIFF, SVG and filt
 
 ## Benchmarks
 
-Historical engine baseline before the Linux port and deployment hardening: native macOS, Apple M5, imgproxy 4.0.21 / libvips 8.18.7, November 2026. Values below are **Rust / imgproxy**. These do not measure the 0.1.1 container.
+Historical engine baseline before the Linux port and deployment hardening: native macOS, Apple M5, imgproxy 4.0.21 / libvips 8.18.7, November 2026. Values below are **Rust / imgproxy**. These do not measure the published container.
 
 | Scenario | CPU ms/request | HTTP p50 ms | Peak RSS MiB |
 |---|---:|---:|---:|
@@ -57,9 +63,15 @@ Across 20 scenarios: lower CPU in 17, lower HTTP median in 16, lower peak RSS in
 
 Only 3/20 outputs were pixel-identical across engines. Filters, JPEG chroma sampling and WebP modes differ, so these results do **not** establish an equal-quality speed advantage. The private benchmark corpus and harness are not distributed. No universal latency or memory guarantee is claimed.
 
+## Versions
+
+`master` is the stable line; `develop` integrates upcoming work. Docker `latest` follows stable releases; `alpha`, `beta` and `rc` are separate testing channels, available after their first successful tagged release. Pin a version or digest for deployment. See the [changelog](CHANGELOG.md) and [release workflow](CONTRIBUTING.md#releases).
+
 ## Build
 
-Linux and macOS, ARM64 or x86-64; Rust 1.99 and libcurl development files:
+<!-- generated:build:start -->
+Linux and macOS, ARM64 or x86-64; Rust 1.99 and libcurl development files.
+<!-- generated:build:end -->
 
 ```sh
 cargo build --release --locked --offline

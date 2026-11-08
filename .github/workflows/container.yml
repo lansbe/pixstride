@@ -1,9 +1,10 @@
 name: Container
 on:
   push:
-    branches: [master]
+    branches: [master, develop]
     tags: ['v*']
   pull_request:
+    types: [opened, synchronize, reopened, edited, ready_for_review]
   workflow_dispatch:
 permissions:
   contents: read
@@ -13,7 +14,34 @@ concurrency:
   group: container-${{ github.ref }}
   cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 jobs:
+  documentation:
+    name: Documentation
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check release tooling and documentation
+        env:
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s .github/checks/project -v
+          args=()
+          if test -n "$PR_BASE"; then args+=(--base "$PR_BASE"); fi
+          python3 scripts/project.py check "${args[@]}"
+          python3 - <<'PY'
+          import os, re
+          title = os.environ.get('PR_TITLE', '')
+          if os.environ.get('PR_BASE'):
+              assert re.fullmatch(r'(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-zA-Z0-9_./-]+\))?!?: \S[^\r\n]*', title), 'Use a Conventional Commit PR title'
+          PY
+          git diff --check
   validate:
+    needs: documentation
     if: github.event_name != 'push' || !startsWith(github.ref, 'refs/tags/')
     strategy:
       matrix:
@@ -56,6 +84,7 @@ jobs:
   # Untagged candidates are pushed by digest before validation. In a public
   # package they are publicly pullable. Release tags move only after all checks.
   build-and-verify:
+    needs: documentation
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     strategy:
       fail-fast: false
@@ -82,11 +111,8 @@ jobs:
           RELEASE_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
-          git merge-base --is-ancestor "$RELEASE_SHA" refs/remotes/origin/master
-          version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["package"]["version"])')
-          test "$RELEASE_REF" = "v$version"
+          python3 scripts/project.py check --release-tag "$RELEASE_REF"
           python3 -c "from pathlib import Path; oversized=[str(p) for p in Path('src').rglob('*.rs') if len(p.read_text().splitlines())>500]; assert not oversized, oversized"
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
@@ -202,7 +228,12 @@ jobs:
     timeout-minutes: 15
     permissions:
       packages: write
+      contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
         with:
           version: v0.38.1
@@ -224,9 +255,37 @@ jobs:
         env:
           RELEASE_REF: ${{ github.ref_name }}
           RELEASE_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          [[ "$RELEASE_REF" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+          python3 scripts/project.py check --release-tag "$RELEASE_REF"
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases" --jq '.[].tag_name' > "$RUNNER_TEMP/published-tags.txt"
+          python3 scripts/project.py plan "$RELEASE_REF" "$RUNNER_TEMP/published-tags.txt" > "$RUNNER_TEMP/plan.json"
+          version=$(jq -r '.version' "$RUNNER_TEMP/plan.json")
+          channel=$(jq -r '.channel' "$RUNNER_TEMP/plan.json")
+          # A missing tag is acceptable; authentication and network failures are not.
+          inspect_tag() {
+            if docker buildx imagetools inspect --raw "$IMAGE:$1" > "$RUNNER_TEMP/existing.json" 2> "$RUNNER_TEMP/inspect.err"; then
+              return 0
+            fi
+            if grep -Fxq "ERROR: $IMAGE:$1: not found" "$RUNNER_TEMP/inspect.err"; then return 1; fi
+            cat "$RUNNER_TEMP/inspect.err" >&2
+            exit 1
+          }
+          if inspect_tag "$channel"; then
+            current=$(jq -r '.annotations["org.opencontainers.image.version"] // empty' "$RUNNER_TEMP/existing.json")
+            if test -z "$current"; then
+              # Bootstrap from the legacy stable index, only if its bytes match 0.1.1.
+              test "$channel" = latest
+              cp "$RUNNER_TEMP/existing.json" "$RUNNER_TEMP/legacy.json"
+              inspect_tag 0.1.1
+              cmp "$RUNNER_TEMP/legacy.json" "$RUNNER_TEMP/existing.json"
+              current=0.1.1
+            fi
+            python3 scripts/project.py plan "$RELEASE_REF" "$RUNNER_TEMP/published-tags.txt" \
+              --channel-version "$current" > "$RUNNER_TEMP/plan.json"
+          fi
           amd="$RUNNER_TEMP/validated-amd64/validated.json"
           arm="$RUNNER_TEMP/validated-arm64/validated.json"
           for arch in amd64 arm64; do
@@ -241,6 +300,8 @@ jobs:
           arm_index=$(jq -r '.index' "$arm")
           candidate="$IMAGE:candidate-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
           docker buildx imagetools create --metadata-file "$RUNNER_TEMP/merged-meta.json" \
+            --annotation "index:org.opencontainers.image.version=$version" \
+            --annotation "index:org.opencontainers.image.revision=$RELEASE_SHA" \
             -t "$candidate" "$IMAGE@$amd_index" "$IMAGE@$arm_index"
           merged=$(jq -er '."containerimage.descriptor".digest' "$RUNNER_TEMP/merged-meta.json")
           [[ "$merged" =~ ^sha256:[0-9a-f]{64}$ ]]
@@ -257,13 +318,15 @@ jobs:
                     and .annotations["vnd.docker.reference.type"] == "attestation-manifest"
                     and .annotations["vnd.docker.reference.digest"] == $e.manifest)))
           ' "$RUNNER_TEMP/merged.json" > /dev/null
-          # Only the current master revision may update the moving latest tag.
-          # Serialize promotions so an older release cannot overtake a newer one.
-          version="${RELEASE_REF#v}"
+          # Never overwrite immutable version/SHA tags with different bytes.
           tags=("$version" "sha-$RELEASE_SHA")
-          master=$(git ls-remote https://github.com/lansbe/pixstride.git refs/heads/master | cut -f1)
-          [[ "$master" =~ ^[0-9a-f]{40}$ ]]
-          if test "$master" = "$RELEASE_SHA"; then tags+=(latest); fi
+          for tag in "${tags[@]}"; do
+            if inspect_tag "$tag"; then
+              actual="sha256:$(sha256sum "$RUNNER_TEMP/existing.json" | cut -d' ' -f1)"
+              test "$actual" = "$merged"
+            fi
+          done
+          if test "$(jq -r '.move_channel' "$RUNNER_TEMP/plan.json")" = true; then tags+=("$channel"); fi
           args=()
           for tag in "${tags[@]}"; do args+=(-t "$IMAGE:$tag"); done
           docker buildx imagetools create --metadata-file "$RUNNER_TEMP/published-meta.json" \
@@ -275,3 +338,14 @@ jobs:
             test "$actual" = "$merged"
           done
           printf 'Published verified index: %s@%s\n' "$IMAGE" "$merged"
+          python3 scripts/project.py notes "$version" > "$RUNNER_TEMP/release-notes.md"
+          printf '\nVerified container: `%s@%s`\n' "$IMAGE" "$merged" >> "$RUNNER_TEMP/release-notes.md"
+          release_args=(--verify-tag --title "Pixstride $version" --notes-file "$RUNNER_TEMP/release-notes.md")
+          if test "$(jq -r '.prerelease' "$RUNNER_TEMP/plan.json")" = true; then
+            release_args+=(--prerelease --latest=false)
+          elif test "$(jq -r '.move_channel' "$RUNNER_TEMP/plan.json")" = true; then
+            release_args+=(--latest)
+          else
+            release_args+=(--latest=false)
+          fi
+          gh release create "$RELEASE_REF" "${release_args[@]}"
