@@ -22,6 +22,10 @@ mod geometry;
 mod metadata;
 #[cfg(feature = "native-codecs")]
 mod palette;
+#[cfg(feature = "native-codecs")]
+mod scale;
+#[cfg(feature = "native-codecs")]
+mod svg;
 
 pub fn sniff(data: &[u8]) -> Option<OutputFormat> {
     if data.starts_with(b"\x89PNG\r\n\x1a\n") {
@@ -117,7 +121,6 @@ pub fn process(
         "FONTCONFIG_PATH",
         "FONTCONFIG_FILE",
         "PIXSTRIDE_PROCESS_TIMEOUT",
-        "PIXSTRIDE_PNG_QUANTIZE",
     ] {
         if let Some(value) = std::env::var_os(name) {
             command.env(name, value);

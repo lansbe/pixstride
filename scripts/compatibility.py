@@ -58,7 +58,7 @@ def start(binary, directory, prefix, log):
                    PIXSTRIDE_LOCAL_ROOT=str(directory), PIXSTRIDE_ENGINE='native',PIXSTRIDE_WATERMARK_PATH=str(directory/'watermark.png'))
     else:
         env.update(IMGPROXY_BIND=f'127.0.0.1:{port}', IMGPROXY_LOCAL_FILESYSTEM_ROOT=str(directory),
-                   IMGPROXY_ALLOWED_SOURCES='local://', IMGPROXY_LOG_LEVEL='error',IMGPROXY_WATERMARK_PATH=str(directory/'watermark.png'))
+                   IMGPROXY_ALLOWED_SOURCES='local://', IMGPROXY_LOG_LEVEL='error',IMGPROXY_ALLOW_SECURITY_OPTIONS='true',IMGPROXY_WATERMARK_PATH=str(directory/'watermark.png'))
     process = subprocess.Popen([str(binary)], env=env, stdout=log, stderr=log)
     try:
         deadline = time.monotonic() + 15

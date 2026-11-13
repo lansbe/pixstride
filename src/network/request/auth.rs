@@ -19,6 +19,12 @@ impl Config {
         Ok(Self {
             auth: Auth::Signed { pairs },
             presets: Default::default(),
+            defaults: Vec::new(),
+            encoding: Default::default(),
+            preferred: Vec::new(),
+            native_defaults: false,
+            signature_size: 32,
+            trusted: Vec::new(),
         })
     }
 
@@ -27,6 +33,12 @@ impl Config {
         Self {
             auth: Auth::UnsafeLocal,
             presets: Default::default(),
+            defaults: Vec::new(),
+            encoding: Default::default(),
+            preferred: Vec::new(),
+            native_defaults: false,
+            signature_size: 32,
+            trusted: Vec::new(),
         }
     }
 
@@ -35,6 +47,12 @@ impl Config {
         let probe = Self {
             auth: Auth::UnsafeLocal,
             presets: self.presets.clone(),
+            defaults: self.defaults.clone(),
+            encoding: self.encoding.clone(),
+            preferred: self.preferred.clone(),
+            native_defaults: self.native_defaults,
+            signature_size: 32,
+            trusted: Vec::new(),
         };
         for name in self.presets.names() {
             super::parse(
@@ -65,14 +83,20 @@ impl Config {
             (None, None) if std::env::var("PIXSTRIDE_ALLOW_UNSAFE").as_deref() == Ok("1") => Self::unsafe_local(),
             _ => return Err("configure PIXSTRIDE_KEY and PIXSTRIDE_SALT; unsigned mode requires explicit PIXSTRIDE_ALLOW_UNSAFE=1"),
         };
-        config.with_presets(&crate::config::secret("PIXSTRIDE_PRESETS")?.unwrap_or_default())
+        config
+            .with_environment()?
+            .with_signature_environment()?
+            .with_presets(&crate::config::secret("PIXSTRIDE_PRESETS")?.unwrap_or_default())
     }
 
     pub(crate) fn verify(&self, value: &str, path: &str) -> Result<(), Error> {
+        if self.trusted.iter().any(|s| s == value) {
+            return Ok(());
+        }
         let valid = match &self.auth {
             Auth::UnsafeLocal => value == "unsafe",
             Auth::Signed { pairs } => pairs.iter().fold(false, |valid, (key, salt)| {
-                signature::verify_imgproxy(value, path, key, salt) | valid
+                signature::verify_imgproxy_size(value, path, key, salt, self.signature_size) | valid
             }),
         };
         if valid {
@@ -84,6 +108,30 @@ impl Config {
 }
 
 impl Config {
+    fn with_signature_environment(mut self) -> Result<Self, Error> {
+        if let Ok(value) = std::env::var("PIXSTRIDE_SIGNATURE_SIZE") {
+            self.signature_size = value.parse().map_err(|_| "invalid signature size")?;
+            if !(1..=32).contains(&self.signature_size) {
+                return Err("signature size must be 1..32");
+            }
+        }
+        if let Some(value) = crate::config::secret("PIXSTRIDE_TRUSTED_SIGNATURES")? {
+            self.trusted = value.split(',').map(|s| s.trim().to_owned()).collect();
+            if self.trusted.len() > 16
+                || self.trusted.iter().any(|s| {
+                    s.is_empty()
+                        || s.len() > 128
+                        || !s
+                            .bytes()
+                            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+                })
+            {
+                return Err("invalid trusted signatures");
+            }
+        }
+        Ok(self)
+    }
+
     pub fn sign(&self, path: &str) -> Result<String, Error> {
         if !path.starts_with('/') || path.len() > MAX_TARGET || path.contains(['\r', '\n']) {
             return Err("invalid signing path");
@@ -94,7 +142,7 @@ impl Config {
         let (key, salt) = &pairs[0];
         Ok(format!(
             "/{}/{}",
-            signature::sign_imgproxy(path, key, salt),
+            signature::sign_imgproxy_size(path, key, salt, self.signature_size),
             path.trim_start_matches('/')
         ))
     }

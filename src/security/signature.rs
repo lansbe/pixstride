@@ -186,21 +186,32 @@ pub fn decode_base64url(input: &str, allow_padding: bool) -> Result<Vec<u8>, &'s
 }
 
 #[inline(never)]
-fn constant_time_eq_32(expected: &[u8; 32], decoded: &[u8]) -> bool {
-    debug_assert_eq!(decoded.len(), 32);
+fn constant_time_eq(expected: &[u8], decoded: &[u8]) -> bool {
+    debug_assert_eq!(decoded.len(), expected.len());
     let mut diff = 0u8;
-    for i in 0..32 {
+    for i in 0..expected.len() {
         diff |= std::hint::black_box(expected[i]) ^ std::hint::black_box(decoded[i]);
     }
     std::hint::black_box(diff) == 0
 }
 
 /// Verify the OSS default: HMAC-SHA-256(key, salt || '/' || normalized path).
+#[cfg(test)]
 pub fn verify_imgproxy(signature: &str, normalized_path: &str, key: &[u8], salt: &[u8]) -> bool {
+    verify_imgproxy_size(signature, normalized_path, key, salt, 32)
+}
+
+pub fn verify_imgproxy_size(
+    signature: &str,
+    normalized_path: &str,
+    key: &[u8],
+    salt: &[u8],
+    size: usize,
+) -> bool {
     let Ok(decoded) = decode_base64url(signature, false) else {
         return false;
     };
-    if decoded.len() != 32 {
+    if !(1..=32).contains(&size) || decoded.len() != size {
         return false;
     }
     let slash: &[u8] = if normalized_path.starts_with('/') {
@@ -209,7 +220,7 @@ pub fn verify_imgproxy(signature: &str, normalized_path: &str, key: &[u8], salt:
         b"/"
     };
     let expected = hmac_sha256(key, &[salt, slash, normalized_path.as_bytes()]);
-    constant_time_eq_32(&expected, &decoded)
+    constant_time_eq(&expected[..size], &decoded)
 }
 
 /// Decode a bounded hex-encoded key or salt without exposing its contents.
@@ -236,11 +247,16 @@ pub fn decode_hex(input: &str) -> Result<Vec<u8>, &'static str> {
 }
 
 /// Sign exactly the slash-prefixed processing path, using unpadded base64url.
+#[cfg(test)]
 pub fn sign_imgproxy(path: &str, key: &[u8], salt: &[u8]) -> String {
+    sign_imgproxy_size(path, key, salt, 32)
+}
+
+pub fn sign_imgproxy_size(path: &str, key: &[u8], salt: &[u8], size: usize) -> String {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
     let digest = hmac_sha256(key, &[salt, path.as_bytes()]);
     let mut result = String::with_capacity(43);
-    for chunk in digest.chunks(3) {
+    for chunk in digest[..size.min(32)].chunks(3) {
         let value = ((chunk[0] as u32) << 16)
             | ((chunk.get(1).copied().unwrap_or(0) as u32) << 8)
             | chunk.get(2).copied().unwrap_or(0) as u32;

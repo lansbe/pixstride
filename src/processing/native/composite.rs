@@ -14,6 +14,7 @@ pub(super) fn watermark(
     mut image: VipsImage,
     data: &[u8],
     r: &Request,
+    dpr: f64,
 ) -> Result<VipsImage, Error> {
     let Some(spec) = r.watermark.as_ref().filter(|s| s.opacity > 0.0) else {
         return Ok(image);
@@ -42,9 +43,6 @@ pub(super) fn watermark(
     let pixel_type = image
         .get_format()
         .map_err(|_| "invalid watermark pixel type")?;
-    if !r.strip_color_profile && image.get_typeof("icc-profile-data").unwrap_or(0) != 0 {
-        return Err("watermark composition requires conversion of the source ICC profile");
-    }
     mark = mark.autorot().map_err(|_| "watermark orientation failed")?;
     if mark.get_typeof("icc-profile-data").unwrap_or(0) != 0 {
         mark = mark
@@ -85,7 +83,7 @@ pub(super) fn watermark(
         (if n.abs() < 1.0 {
             n * f64::from(dim)
         } else {
-            n * r.extra.dpr
+            n * dpr
         })
         .round_ties_even() as i32
     };
@@ -149,6 +147,8 @@ pub(super) fn watermark(
     if !image.hasalpha() {
         image = image.addalpha().map_err(|_| "native alpha failed")?;
     }
+    // Retained RGB ICC profiles describe the original numeric samples. Match
+    // OSS by compositing in that RGB interpretation and carrying the base profile.
     image
         .composite2_with_opts(
             &mark,

@@ -55,7 +55,7 @@ jobs:
           persist-credentials: false
       - name: Install native dependencies and locked Rust toolchain
         run: |
-          brew install vips pkgconf
+          brew install vips pkgconf go
           rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy
           rustup override set 1.99.0
           cargo fetch --locked

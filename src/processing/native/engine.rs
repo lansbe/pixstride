@@ -23,70 +23,10 @@ pub(super) fn checked(width: i32, height: i32) -> Result<(), Error> {
     }
 }
 
-fn validate_svg(data: &[u8]) -> Result<(), Error> {
-    if data.len() > 10 * 1024 * 1024 {
-        return Err("SVG exceeds native limit");
-    }
-    let text = std::str::from_utf8(data).map_err(|_| "invalid SVG encoding")?;
-    let doc = roxmltree::Document::parse(text).map_err(|_| "invalid static SVG")?;
-    if doc.root_element().tag_name().name() != "svg" {
-        return Err("SVG root required");
-    }
-    let mut count = 0;
-    for node in doc.descendants() {
-        count += 1;
-        if count > 100_000 || node.ancestors().take(65).count() > 64 {
-            return Err("SVG structure exceeds limit");
-        }
-        if node.is_element()
-            && matches!(
-                node.tag_name().name(),
-                "script" | "foreignObject" | "animate" | "animateTransform" | "set"
-            )
-        {
-            return Err("active SVG content unsupported");
-        }
-        for a in node.attributes() {
-            let name = a.name().to_ascii_lowercase();
-            if name.starts_with("on") || name == "base" {
-                return Err("active SVG attribute unsupported");
-            }
-            if matches!(name.as_str(), "href" | "src") && !a.value().starts_with('#') {
-                return Err("external SVG references unsupported");
-            }
-            let value = a
-                .value()
-                .to_ascii_lowercase()
-                .replace(char::is_whitespace, "");
-            if value.contains("@import")
-                || value.contains('\\')
-                || value
-                    .match_indices("url(")
-                    .any(|(i, _)| !value[i + 4..].starts_with('#'))
-            {
-                return Err("external SVG style unsupported");
-            }
-        }
-        if node.is_element() && node.tag_name().name() == "style" {
-            let css = node
-                .descendants()
-                .filter(|n| n.is_text())
-                .filter_map(|n| n.text())
-                .collect::<String>()
-                .to_ascii_lowercase()
-                .replace(char::is_whitespace, "");
-            if css.contains("@") || css.contains('\\') || css.contains("url(") {
-                return Err("external SVG stylesheet unsupported");
-            }
-        }
-    }
-    Ok(())
-}
-
 pub(super) fn load(data: &[u8], frames: usize, thumbnail: bool) -> Result<VipsImage, Error> {
     let format = sniff(data);
     if format == Some(OutputFormat::Svg) {
-        validate_svg(data)?;
+        super::svg::validate(data)?;
     }
     if matches!(format, Some(OutputFormat::Bmp | OutputFormat::Ico)) || data.starts_with(b"P6") {
         let img = crate::pipeline::decode(data)?;
@@ -244,14 +184,40 @@ pub(super) fn process(
         return Err("native source pixel budget exceeded");
     }
     let source_format = sniff(data).unwrap_or(OutputFormat::Png);
-    let mut format = r.format.unwrap_or(if source_format == OutputFormat::Svg {
-        OutputFormat::Jpeg
+    let preferred = if r.extra.preferred.is_empty() {
+        &[OutputFormat::Jpeg, OutputFormat::Png, OutputFormat::Gif][..]
     } else {
-        source_format
+        &r.extra.preferred
+    };
+    let transparent = r.options.background.is_none()
+        && (head.hasalpha()
+            || r.extra.extend
+            || r.extra.extend_aspect
+            || r.options.padding != Default::default());
+    let mut format = r.format.unwrap_or_else(|| {
+        if source_format == OutputFormat::Svg && !r.extra.encoding.rasterize_svg {
+            return OutputFormat::Svg;
+        }
+        if preferred.contains(&source_format) {
+            return source_format;
+        }
+        preferred
+            .iter()
+            .copied()
+            .find(|f| {
+                (!transparent || *f != OutputFormat::Jpeg)
+                    && (count == 1
+                        || matches!(
+                            f,
+                            OutputFormat::Gif | OutputFormat::Webp | OutputFormat::Tiff
+                        ))
+            })
+            .unwrap_or(preferred[0])
     });
     if format == OutputFormat::Svg
         || r.extra.raw
-        || (r.extra.skip.contains(&source_format) && format == source_format)
+        || (r.extra.skip.contains(&source_format)
+            && (r.format.is_none() || format == source_format))
     {
         if format == OutputFormat::Svg && source_format != OutputFormat::Svg {
             return Err("SVG output requires an SVG source");
@@ -287,10 +253,10 @@ pub(super) fn process(
             )
             .map_err(|_| "native frame extraction failed")?;
         let frame = prepare(frame, r)?;
-        let frame = geometry::apply(frame, r)?;
+        let (frame, dpr) = geometry::apply(frame, r, source_format == OutputFormat::Svg)?;
         let frame = effects(frame, r)?;
-        let frame = geometry::decorate(frame, r)?;
-        let mut frame = super::composite::watermark(frame, mark, r)?;
+        let frame = geometry::decorate(frame, r, dpr)?;
+        let mut frame = super::composite::watermark(frame, mark, r, dpr)?;
         let limit = match format {
             OutputFormat::Ico => 256,
             OutputFormat::Webp => 16383,

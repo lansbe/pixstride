@@ -109,6 +109,7 @@ pub fn run() -> Result<(), Error> {
             let file = crate::os::InputFile::open(args[2].as_bytes())?;
             let mut bytes = file.read_all()?;
             let config = request::Config::unsafe_local()
+                .with_environment()?
                 .with_presets(&secret("PIXSTRIDE_PRESETS")?.unwrap_or_default())?;
             let request = request::parse(&args[4], &config)?;
             let out = pipeline::process(

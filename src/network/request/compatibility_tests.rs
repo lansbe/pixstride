@@ -91,3 +91,21 @@ fn expiration_and_filenames_are_validated_before_source_access() {
     assert!(r.extra.attachment);
     assert_eq!(r.extra.filename.as_deref(), Some("photo one"));
 }
+
+#[test]
+fn truncated_rotated_signatures_and_explicit_trust_do_not_change_path_binding() {
+    let path = "/rs:fit:3:2/plain/local:///test.png@png";
+    for size in [1, 16, 17, 31, 32] {
+        let mut config = Config::signed(vec![1; 32], vec![2; 16]).unwrap();
+        config.signature_size = size;
+        let signed = config.sign(path).unwrap();
+        assert!(parse(&signed, &config).is_ok());
+        assert!(parse(&signed.replace("fit:3:2", "fit:4:2"), &config).is_err());
+        if size != 32 {
+            assert!(parse(&signed, &Config::signed(vec![1; 32], vec![2; 16]).unwrap()).is_err());
+        }
+        config.trusted.push("configured-trust".into());
+        assert!(parse(&format!("/configured-trust{path}"), &config).is_ok());
+        assert!(parse(&format!("/other{path}"), &config).is_err());
+    }
+}

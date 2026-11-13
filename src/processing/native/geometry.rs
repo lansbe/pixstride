@@ -115,7 +115,11 @@ fn crop(
         .map_err(|_| "native crop failed")
 }
 
-pub(super) fn apply(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
+pub(super) fn apply(
+    mut image: VipsImage,
+    r: &Request,
+    vector: bool,
+) -> Result<(VipsImage, f64), Error> {
     let o = &r.options;
     let e = &r.extra;
     image = match o.rotation {
@@ -163,57 +167,36 @@ pub(super) fn apply(mut image: VipsImage, r: &Request) -> Result<VipsImage, Erro
             e.crop_smart,
         )?;
     }
-    let p = plan::resize_plan(
-        image.get_width() as usize,
-        image.get_height() as usize,
-        o.width,
-        o.height,
-        o.mode,
-        o.enlarge,
-    )?;
-    let sw = f64::from(image.get_width());
-    let sh = f64::from(image.get_height());
-    let (mut w, mut h) = if o.mode == plan::ResizeMode::Force {
-        (
-            if o.width == 0 { sw } else { o.width as f64 },
-            if o.height == 0 { sh } else { o.height as f64 },
-        )
+    let p = super::scale::Plan::new(image.get_width(), image.get_height(), r, vector)?;
+    let dpr = p.dpr;
+    if e.encoding.linear && p.scale != [1.0; 2] {
+        let space = image
+            .get_interpretation()
+            .map_err(|_| "invalid resize colour space")?;
+        let pixel_type = image
+            .get_format()
+            .map_err(|_| "invalid resize pixel type")?;
+        image = image
+            .colourspace(libvips::enums::Interpretation::Scrgb)
+            .map_err(|_| "linear colour conversion failed")?;
+        image = resize_scale(&image, p.scale[0], p.scale[1], false)?;
+        image = image
+            .colourspace(space)
+            .and_then(|i| i.cast(pixel_type))
+            .map_err(|_| "linear resize colour restoration failed")?;
     } else {
-        let factor = match (o.width, o.height) {
-            (0, 0) => 1.0,
-            (0, h) => h as f64 / sh,
-            (w, 0) => w as f64 / sw,
-            (w, h) => {
-                if p.fill {
-                    (w as f64 / sw).max(h as f64 / sh)
-                } else {
-                    (w as f64 / sw).min(h as f64 / sh)
-                }
-            }
-        };
-        (sw * factor, sh * factor)
-    };
-    let min_scale = (e.min[0] as f64 / w).max(e.min[1] as f64 / h).max(1.0);
-    w *= min_scale * e.zoom[0] * e.dpr;
-    h *= min_scale * e.zoom[1] * e.dpr;
-    if !o.enlarge {
-        let scale = (f64::from(image.get_width()) / w)
-            .min(f64::from(image.get_height()) / h)
-            .min(1.0);
-        w *= scale;
-        h *= scale;
+        image = resize_scale(&image, p.scale[0], p.scale[1], false)?;
     }
-    image = resize_scale(&image, w / sw, h / sh, false)?;
-    if p.fill || e.min != [0; 2] {
-        let mut tw = if o.width == 0 {
+    {
+        let mut tw = if p.target[0] == 0 {
             image.get_width()
         } else {
-            size(o.width as f64 * e.dpr * e.zoom[0])?
+            p.target[0]
         };
-        let mut th = if o.height == 0 {
+        let mut th = if p.target[1] == 0 {
             image.get_height()
         } else {
-            size(o.height as f64 * e.dpr * e.zoom[1])?
+            p.target[1]
         };
         if e.fill_down {
             let scale = (f64::from(image.get_width()) / f64::from(tw))
@@ -227,28 +210,23 @@ pub(super) fn apply(mut image: VipsImage, r: &Request) -> Result<VipsImage, Erro
             tw,
             th,
             o.gravity,
-            e.offsets.map(|n| if n.abs() < 1.0 { n } else { n * e.dpr }),
+            e.offsets.map(|n| if n.abs() < 1.0 { n } else { n * dpr }),
             e.smart,
         )?;
     }
-    if e.extend || e.extend_aspect {
+    for aspect in [false, true] {
+        if !(if aspect { e.extend_aspect } else { e.extend }) {
+            continue;
+        }
         let mut w = image.get_width();
         let mut h = image.get_height();
-        let tw = if o.width == 0 {
-            w
-        } else {
-            size(o.width as f64 * e.dpr)?
-        };
-        let th = if o.height == 0 {
-            h
-        } else {
-            size(o.height as f64 * e.dpr)?
-        };
-        if e.extend {
+        let tw = if o.width == 0 { w } else { p.target[0].max(1) };
+        let th = if o.height == 0 { h } else { p.target[1].max(1) };
+        if !aspect {
             w = w.max(tw);
             h = h.max(th);
         }
-        if e.extend_aspect && o.width > 0 && o.height > 0 {
+        if aspect && o.width > 0 && o.height > 0 {
             let ratio = f64::from(tw) / f64::from(th);
             if f64::from(w) / f64::from(h) < ratio {
                 w = size(f64::from(h) * ratio)?;
@@ -257,26 +235,35 @@ pub(super) fn apply(mut image: VipsImage, r: &Request) -> Result<VipsImage, Erro
             }
         }
         checked(w, h)?;
-        let (ax, ay) = plan::alignments(e.extend_gravity)?;
+        let (ax, ay) = plan::alignments(if aspect {
+            e.aspect_gravity
+        } else {
+            e.extend_gravity
+        })?;
+        let offsets = if aspect {
+            e.aspect_offsets
+        } else {
+            e.extend_offsets
+        };
         let off = |n: f64, dim: i32| {
             if n.abs() < 1.0 {
                 n * f64::from(dim)
             } else {
-                n * e.dpr
+                n * dpr
             }
         };
         let x = plan::watermark_position(
             w as usize,
             image.get_width() as usize,
             ax,
-            off(e.extend_offsets[0], w).round_ties_even() as i32,
+            off(offsets[0], w).round_ties_even() as i32,
         )
         .clamp(0, i128::from(w - image.get_width())) as i32;
         let y = plan::watermark_position(
             h as usize,
             image.get_height() as usize,
             ay,
-            off(e.extend_offsets[1], h).round_ties_even() as i32,
+            off(offsets[1], h).round_ties_even() as i32,
         )
         .clamp(0, i128::from(h - image.get_height())) as i32;
         if !image.hasalpha() {
@@ -302,12 +289,11 @@ pub(super) fn apply(mut image: VipsImage, r: &Request) -> Result<VipsImage, Erro
             false,
         )?;
     }
-    Ok(image)
+    Ok((image, dpr))
 }
 
-pub(super) fn decorate(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
+pub(super) fn decorate(mut image: VipsImage, r: &Request, d: f64) -> Result<VipsImage, Error> {
     let p = r.options.padding;
-    let d = r.extra.dpr;
     let sides = [p.top, p.right, p.bottom, p.left].map(|n| (n as f64 * d).round_ties_even() as i32);
     if sides.iter().any(|&n| n > 0) {
         let w = image

@@ -1,9 +1,11 @@
 //! OSS options shared by the HTTP facade and isolated native engine.
 use super::*;
 
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Options {
     pub native: bool,
+    pub encoding: defaults::Encoding,
+    pub preferred: Vec<OutputFormat>,
     pub base_opacity: f64,
     pub dpr: f64,
     pub zoom: [f64; 2],
@@ -12,6 +14,8 @@ pub struct Options {
     pub extend_aspect: bool,
     pub extend_gravity: Gravity,
     pub extend_offsets: [f64; 2],
+    pub aspect_gravity: Gravity,
+    pub aspect_offsets: [f64; 2],
     pub offsets: [f64; 2],
     pub smart: bool,
     pub fill_down: bool,
@@ -41,6 +45,8 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             native: false,
+            encoding: Default::default(),
+            preferred: Vec::new(),
             base_opacity: 1.0,
             dpr: 1.0,
             zoom: [1.0; 2],
@@ -49,6 +55,8 @@ impl Default for Options {
             extend_aspect: false,
             extend_gravity: Gravity::Center,
             extend_offsets: [0.0; 2],
+            aspect_gravity: Gravity::Center,
+            aspect_offsets: [0.0; 2],
             offsets: [0.0; 2],
             smart: false,
             fill_down: false,
@@ -163,11 +171,17 @@ pub(super) fn extend(args: &[&str], o: &mut Options, aspect: bool) -> Result<(),
     if args.len() > 1 {
         let mut offsets = [0.0; 2];
         let mut smart = false;
-        o.extend_gravity = gravity_options(&args[1..], &mut offsets, &mut smart)?;
+        let gravity = gravity_options(&args[1..], &mut offsets, &mut smart)?;
         if smart {
             return Err("smart extend gravity unsupported");
         }
-        o.extend_offsets = offsets;
+        if aspect {
+            o.aspect_gravity = gravity;
+            o.aspect_offsets = offsets;
+        } else {
+            o.extend_gravity = gravity;
+            o.extend_offsets = offsets;
+        }
     }
     o.native = true;
     Ok(())

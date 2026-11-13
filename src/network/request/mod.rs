@@ -58,6 +58,12 @@ pub(crate) enum Auth {
 pub struct Config {
     auth: Auth,
     presets: presets::Presets,
+    defaults: Vec<String>,
+    encoding: defaults::Encoding,
+    preferred: Vec<OutputFormat>,
+    native_defaults: bool,
+    signature_size: usize,
+    trusted: Vec<String>,
 }
 mod watermark_spec;
 pub(crate) use watermark_spec::*;
@@ -65,6 +71,7 @@ mod parse;
 pub(crate) use parse::*;
 
 mod auth;
+mod defaults;
 mod extended;
 mod presets;
 

@@ -17,7 +17,13 @@ fn chunk(out: &mut Vec<u8>, kind: &[u8; 4], bytes: &[u8]) -> Result<(), Error> {
     Ok(())
 }
 
-pub(super) fn encode(image: &VipsImage, original: &[u8], quality: u8) -> Result<Vec<u8>, Error> {
+pub(super) fn encode(
+    image: &VipsImage,
+    original: &[u8],
+    quality: u8,
+    colors: usize,
+    interlace: bool,
+) -> Result<Vec<u8>, Error> {
     let raster = super::encode::raster(image)?;
     let pixels = raster.pixels.as_slice();
     let speed = ((101 - i32::from(quality)) / 4).clamp(1, 30);
@@ -26,7 +32,7 @@ pub(super) fn encode(image: &VipsImage, original: &[u8], quality: u8) -> Result<
     for pixel in pixels.chunks_exact(4) {
         let color: [u8; 4] = pixel.try_into().unwrap();
         if !exact.contains_key(&color) {
-            if exact.len() == 256 {
+            if exact.len() == colors {
                 exact.clear();
                 break;
             }
@@ -35,7 +41,7 @@ pub(super) fn encode(image: &VipsImage, original: &[u8], quality: u8) -> Result<
         }
     }
     let quantizer = if exact.is_empty() {
-        Some(color_quant::NeuQuant::new(speed, 256, pixels))
+        Some(color_quant::NeuQuant::new(speed, colors, pixels))
     } else {
         None
     };
@@ -49,7 +55,7 @@ pub(super) fn encode(image: &VipsImage, original: &[u8], quality: u8) -> Result<
         alpha.push(color[3]);
     }
     let mut raw = Vec::new();
-    let length = (raster.width + 1)
+    let length = (raster.width + 7)
         .checked_mul(raster.height)
         .ok_or("palette PNG overflow")?;
     if length > MAX_FILE {
@@ -57,14 +63,34 @@ pub(super) fn encode(image: &VipsImage, original: &[u8], quality: u8) -> Result<
     }
     raw.try_reserve_exact(length)
         .map_err(|_| "palette PNG allocation failed")?;
-    for row in pixels.chunks_exact(raster.width * 4) {
-        raw.push(0);
-        for pixel in row.chunks_exact(4) {
-            raw.push(if let Some(q) = &quantizer {
-                q.index_of(pixel) as u8
-            } else {
-                exact[<&[u8; 4]>::try_from(pixel).unwrap()]
-            });
+    let passes: &[(usize, usize, usize, usize)] = if interlace {
+        &[
+            (0, 0, 8, 8),
+            (4, 0, 8, 8),
+            (0, 4, 4, 8),
+            (2, 0, 4, 4),
+            (0, 2, 2, 4),
+            (1, 0, 2, 2),
+            (0, 1, 1, 2),
+        ]
+    } else {
+        &[(0, 0, 1, 1)]
+    };
+    for &(x0, y0, dx, dy) in passes {
+        if x0 >= raster.width {
+            continue;
+        }
+        for y in (y0..raster.height).step_by(dy) {
+            raw.push(0);
+            for x in (x0..raster.width).step_by(dx) {
+                let at = (y * raster.width + x) * 4;
+                let pixel = &pixels[at..at + 4];
+                raw.push(if let Some(q) = &quantizer {
+                    q.index_of(pixel) as u8
+                } else {
+                    exact[<&[u8; 4]>::try_from(pixel).unwrap()]
+                });
+            }
         }
     }
     let compressed = crate::deflate_encode::compress(&raw)?;
@@ -74,6 +100,7 @@ pub(super) fn encode(image: &VipsImage, original: &[u8], quality: u8) -> Result<
     header[4..8].copy_from_slice(&(raster.height as u32).to_be_bytes());
     header[8] = 8;
     header[9] = 3;
+    header[12] = u8::from(interlace);
     chunk(&mut out, b"IHDR", &header)?;
     // Carry the already-filtered ancillary metadata from the native saver;
     // sample/colour-layout-specific chunks do not apply to indexed pixels.

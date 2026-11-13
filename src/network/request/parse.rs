@@ -25,7 +25,12 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
     }
     config.verify(sig, &normalized)?;
 
-    let mut extra = extended::Options::default();
+    let mut extra = extended::Options {
+        encoding: config.encoding.clone(),
+        preferred: config.preferred.clone(),
+        native: config.native_defaults,
+        ..Default::default()
+    };
     let mut options = TransformOptions::default();
     let mut fmt = None;
     let mut quality = None;
@@ -41,7 +46,12 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
         requested.push(raw.next().unwrap().to_owned());
     }
     let remaining = raw.collect::<Vec<_>>();
-    let expanded = config.presets.expand(&requested, true)?;
+    let expanded = config
+        .defaults
+        .iter()
+        .cloned()
+        .chain(config.presets.expand(&requested, true)?)
+        .collect::<Vec<_>>();
     let mut parts = expanded.iter().map(String::as_str).peekable();
     while parts.peek().is_some_and(|part| part.contains(':')) {
         let part = parts.next().expect("peeked option");

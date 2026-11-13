@@ -119,6 +119,11 @@ def check(args):
         converted=read_png(run(binary,root,source,options='scp:1'))
         assert not any(kind==b'iCCP' for kind,_ in converted[2])
         assert converted[1]!=kept[1], 'ICC conversion did not change gamma-encoded samples'
+        marked_profile = read_png(run(binary,root,source,options='scp:0/wm:0.5',env={'PIXSTRIDE_WATERMARK_PATH':str(logo)}))
+        icc = next(body for kind,body in marked_profile[2] if kind==b'iCCP')
+        assert zlib.decompress(icc.split(b'\0',1)[1][1:])==profile, 'ICC watermark changed output profile'
+        assert marked_profile[1] != kept[1], 'ICC watermark had no effect'
+        assert max(abs(a-b) for a,b in zip(marked_profile[1][:3],kept[1][:3])) <= 2, 'ICC round trip altered unmarked corner'
         passed.append('icc-retention-and-colour-conversion')
         source.write_bytes(png(64,32))
         palette = run(binary,root,source,options='q:75',env={'PIXSTRIDE_PNG_QUANTIZE':'1'})
@@ -130,11 +135,24 @@ def check(args):
         limit=(low+high)//2
         bounded=run(binary,root,source,options=f'q:80/mb:{limit}',output='jpg')
         assert 0<len(bounded)<=limit
+        progressive = run(binary,root,source,output='jpg',env={'PIXSTRIDE_JPEG_PROGRESSIVE':'true'})
+        assert b'\xff\xc2' in progressive, 'JPEG progressive configuration ignored'
+        interlaced = run(binary,root,source,env={'PIXSTRIDE_PNG_INTERLACED':'1'})
+        assert interlaced[28] == 1, 'PNG interlace configuration ignored'
+        limited_palette = run(binary,root,source,env={'PIXSTRIDE_PNG_QUANTIZE':'true','PIXSTRIDE_PNG_QUANTIZATION_COLORS':'16'})
+        at=8
+        while limited_palette[at+4:at+8] != b'PLTE':
+            at += 12 + int.from_bytes(limited_palette[at:at+4],'big')
+        assert int.from_bytes(limited_palette[at:at+4],'big') <= 48, 'PNG palette color limit ignored'
+        configured = run(binary,root,source,output='webp',env={'PIXSTRIDE_QUALITY':'20','PIXSTRIDE_WEBP_PRESET':'picture','PIXSTRIDE_WEBP_EFFORT':'2'})
+        assert configured.startswith(b'RIFF')
+        assert run(binary,root,source,options='q:80',output='jpg',env={'PIXSTRIDE_QUALITY':'20'}) == run(binary,root,source,options='q:80',output='jpg'), 'URL did not override configured quality'
+        passed.append('encoder-configuration-and-url-precedence')
         passed.append('png-quantization-and-bounded-quality-search')
         svg = root / 'fixture.svg'
         svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><defs><linearGradient id="g"><stop stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient></defs><rect width="32" height="24" fill="url(#g)"/></svg>')
         assert read_png(run(binary, root, svg))[0][:2] == (32, 24)
-        for content in ('<g transform="translate(4 4)"><path d="M0 0H16V12H0Z" fill="red"/></g>', '<defs><mask id="m"><rect width="16" height="24" fill="white"/></mask></defs><rect width="32" height="24" fill="blue" mask="url(#m)"/>', '<text x="2" y="20" font-family="sans-serif" font-size="18" fill="green">X</text>'):
+        for content in ('<g transform="translate(4 4)"><path d="M0 0H16V12H0Z" fill="red"/></g>', '<defs><mask id="m"><rect width="16" height="24" fill="white"/></mask></defs><rect width="32" height="24" fill="blue" mask="url(#m)"/>', '<defs><linearGradient id="g"><stop stop-color="red"/></linearGradient></defs><style>rect{fill:url("#g")}</style><rect width="32" height="24"/>', '<text x="2" y="20" font-family="sans-serif" font-size="18" fill="green">X</text>'):
             svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">'+content+'</svg>')
             raster=read_png(run(binary,root,svg))
             assert raster[0][:2]==(32,24) and any(raster[1]), 'Static SVG feature rendered empty'

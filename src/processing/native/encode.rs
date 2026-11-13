@@ -78,6 +78,7 @@ fn attempt(
         };
         return Ok(b.as_slice().to_vec());
     }
+    let encoding = &r.extra.encoding;
     let keep = 31;
     let mut options = VOption::new()
         .set("keep", keep)
@@ -107,8 +108,27 @@ fn attempt(
     ) {
         options = options.set("Q", i32::from(quality));
     }
+    if format == OutputFormat::Jpeg {
+        options = options.set("interlace", encoding.jpeg_progressive);
+    }
+    if format == OutputFormat::Jxl {
+        options = options
+            .set("effort", i32::from(encoding.jxl_effort))
+            .set("lossless", quality == 100);
+    }
     if format == OutputFormat::Webp {
-        options = options.set("lossless", quality == 100).set("effort", 4);
+        let preset = match encoding.webp_preset.as_str() {
+            "picture" => 1,
+            "photo" => 2,
+            "drawing" => 3,
+            "icon" => 4,
+            "text" => 5,
+            _ => 0,
+        };
+        options = options
+            .set("lossless", quality == 100)
+            .set("effort", i32::from(encoding.webp_effort))
+            .set("preset", preset);
     }
     if format == OutputFormat::Avif {
         options = options
@@ -116,7 +136,7 @@ fn attempt(
                 "compression",
                 libvips::enums::ForeignHeifCompression::Av1 as i32,
             )
-            .set("effort", 1);
+            .set("effort", i32::from(encoding.avif_effort));
     }
     if format == OutputFormat::Heic {
         options = options.set(
@@ -125,15 +145,31 @@ fn attempt(
         );
     }
     if format == OutputFormat::Png {
-        let palette = std::env::var("PIXSTRIDE_PNG_QUANTIZE").as_deref() == Ok("1");
-        options = options.set("palette", palette).set(
-            "filter",
-            if palette {
-                libvips::enums::ForeignPngFilter::None as i32
-            } else {
-                libvips::enums::ForeignPngFilter::All as i32
-            },
-        );
+        let palette = encoding.png_quantize;
+        options = options
+            .set("palette", palette)
+            .set("interlace", encoding.png_interlaced)
+            .set(
+                "bitdepth",
+                if palette {
+                    match encoding.png_colors {
+                        2 => 1,
+                        3..=4 => 2,
+                        5..=16 => 4,
+                        _ => 8,
+                    }
+                } else {
+                    8
+                },
+            )
+            .set(
+                "filter",
+                if palette {
+                    libvips::enums::ForeignPngFilter::None as i32
+                } else {
+                    libvips::enums::ForeignPngFilter::All as i32
+                },
+            );
         if r.extra.preserve_hdr
             && image
                 .get_format()
@@ -143,16 +179,31 @@ fn attempt(
             options = options.set("bitdepth", 16);
         }
     }
-    let bytes = image
-        .write_to_buffer_with_opts(&format!(".{}", format.extension()), options)
-        .map_err(|_| "native encoder unavailable or rejected output")?;
-    if format == OutputFormat::Png && std::env::var("PIXSTRIDE_PNG_QUANTIZE").as_deref() == Ok("1")
+    let bytes = match image.write_to_buffer_with_opts(&format!(".{}", format.extension()), options)
     {
+        Ok(bytes) => bytes,
+        Err(_) if format == OutputFormat::Png && encoding.png_quantize && !r.extra.preserve_hdr => {
+            image
+                .write_to_buffer_with_opts(
+                    ".png",
+                    VOption::new().set("keep", keep).set("bitdepth", 8),
+                )
+                .map_err(|_| "native palette source export failed")?
+        }
+        Err(_) => return Err("native encoder unavailable or rejected output"),
+    };
+    if format == OutputFormat::Png && encoding.png_quantize {
         if r.extra.preserve_hdr {
             return Err("palette PNG cannot preserve high precision");
         }
         if bytes.get(25) != Some(&3) {
-            return super::palette::encode(image, &bytes, quality);
+            return super::palette::encode(
+                image,
+                &bytes,
+                quality,
+                usize::from(encoding.png_colors),
+                encoding.png_interlaced,
+            );
         }
     }
     Ok(bytes)
@@ -194,7 +245,12 @@ pub(super) fn save(
                 .map(|(_, q)| *q)
                 .filter(|q| *q > 0)
         })
-        .unwrap_or(80);
+        .unwrap_or(match format {
+            OutputFormat::Webp => 79,
+            OutputFormat::Avif => 63,
+            OutputFormat::Jxl => 77,
+            _ => 80,
+        });
     let mut bytes = attempt(image, r, format, quality, page_height)?;
     let limit = r.extra.max_bytes;
     if limit > 0 && bytes.len() > limit {

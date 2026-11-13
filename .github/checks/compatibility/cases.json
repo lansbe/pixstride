@@ -254,5 +254,103 @@
     "format": "png",
     "max_error": 8,
     "mean_error": 1
+  },
+  {
+    "name": "large-fit-dpr-half",
+    "options": "rs:fit:128:80/dpr:0.5",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "large-fit-dpr-half-extend",
+    "options": "rs:fit:128:80/dpr:0.5/ex:1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "small-fit-dpr-two",
+    "options": "rs:fit:32:20/dpr:2",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "large-force-dpr-half",
+    "options": "rs:force:128:40/dpr:0.5",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "force-width-only",
+    "options": "rs:force:32:0/dpr:0.5",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "min-enlarge-without-flag",
+    "options": "mw:128",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "min-plus-dpr",
+    "options": "rs:fit:16:16/mw:48/dpr:0.5",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "min-height-force",
+    "options": "rs:force:16:20/mh:48",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fit-zoom-offset",
+    "options": "rs:fit:24:20/z:1.5:2/g:soea:2:3",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fill-down-larger",
+    "options": "rs:fill-down:128:128/dpr:0.5",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "extend-with-zoom",
+    "options": "rs:fit:32:32/z:0.5/ex:1:noea",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "both-extension-gravities",
+    "options": "rs:fit:100:100/z:0.5:1/ex:1:noea/exar:1:sowe",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "max-dimension-padding",
+    "options": "rs:fill:32:32/pd:8/mrd:24",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "max-dimension-extend",
+    "options": "rs:fit:128:128/ex:1/mrd:48",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
   }
 ]
