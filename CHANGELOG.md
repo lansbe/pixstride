@@ -6,6 +6,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- Opt-in HTTP keep-alive and pipelining with a 32-request connection limit, fixed pending-input buffer, idle expiry and signal-aware shutdown; verify reuse, request framing and shutdown on all CI platforms.
+
 - Bounded URL rewriting/source patterns, preset-only policy, Client Hints, enforced formats, configurable HTTP routes, authenticated separate Prometheus listener and processed fallback images.
 - SVG sanitization with bounded embedded PNG/JPEG resources; HEIF response MIME matching OSS and JPEG XL animation input.
 - OTLP metrics/logs, optional W3C parent sampling and PEM TLS identity; direct Datadog/New Relic OTLP, four error-notice APIs and CloudWatch SigV4 with local protocol tests on all CI platforms.

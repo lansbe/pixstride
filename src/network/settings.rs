@@ -19,6 +19,7 @@ pub(crate) struct Settings {
     pub health_path: String,
     pub canonical: bool,
     pub etag_buster: String,
+    pub keep_alive: u64,
 }
 
 impl Settings {
@@ -67,6 +68,10 @@ impl Settings {
         let ttl = number("PIXSTRIDE_TTL")?;
         if ttl > 31_536_000 {
             return Err("HTTP TTL exceeds one year");
+        }
+        let keep_alive = number("PIXSTRIDE_KEEP_ALIVE_TIMEOUT")?;
+        if keep_alive > 60 {
+            return Err("keep alive timeout exceeds 60 seconds");
         }
         let modified_buster = number("PIXSTRIDE_LAST_MODIFIED_BUSTER")?;
         if modified_buster > 253_402_300_799 {
@@ -152,6 +157,7 @@ impl Settings {
             health_path,
             canonical: flag("PIXSTRIDE_SET_CANONICAL_HEADER")?,
             etag_buster,
+            keep_alive,
         })
     }
 }

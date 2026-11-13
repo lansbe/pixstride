@@ -28,6 +28,9 @@ pub fn initialize() -> Result<(), crate::Error> {
     }
     Ok(())
 }
+pub fn stopping() -> bool {
+    STOP.load(Ordering::Relaxed)
+}
 pub fn wait(listener: &impl AsRawFd) -> Result<bool, crate::Error> {
     while !STOP.load(Ordering::Relaxed) {
         let mut fd = PollFd {

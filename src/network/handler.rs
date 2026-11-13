@@ -69,6 +69,12 @@ pub(super) fn handle(
             return;
         }
     };
+    protocol::request_keep_alive(
+        !context
+            .connection
+            .split(',')
+            .any(|s| matches!(s.trim().to_ascii_lowercase().as_str(), "close" | "upgrade")),
+    );
     if context.preflight {
         match context.preflight_headers(settings.origin.as_deref()) {
             Ok(headers) => {

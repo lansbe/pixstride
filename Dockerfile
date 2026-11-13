@@ -17,7 +17,8 @@ RUN --network=none sh .github/checks/abi/run-abi-check.sh . \
     && cargo test --all-features --locked --offline \
     && cargo build --release --all-features --locked --offline \
     && python3 scripts/native_check.py --binary target/release/pixstride \
-    && python3 scripts/telemetry_check.py --binary target/release/pixstride
+    && python3 scripts/telemetry_check.py --binary target/release/pixstride \
+    && python3 scripts/server_check.py --binary target/release/pixstride
 
 FROM alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
 RUN apk upgrade --no-cache && apk add --no-cache libcurl libgcc ca-certificates vips vips-heif vips-jxl libheif-aom libheif-x265 font-dejavu

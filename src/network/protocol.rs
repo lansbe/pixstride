@@ -6,6 +6,23 @@ use std::{
     io::{self, IoSlice, Write},
     time::{Duration, Instant},
 };
+thread_local! {static CONNECTION:std::cell::Cell<(bool,bool)>=const{std::cell::Cell::new((false,false))};}
+pub(super) fn allow_keep_alive(allow: bool) {
+    CONNECTION.set((allow, false));
+}
+pub(super) fn request_keep_alive(requested: bool) {
+    CONNECTION.with(|c| c.set((c.get().0, c.get().0 && requested)));
+}
+pub(super) fn keeping_alive() -> bool {
+    CONNECTION.get().1
+}
+fn connection_header() -> &'static str {
+    if keeping_alive() {
+        "keep-alive"
+    } else {
+        "close"
+    }
+}
 // Invoke the consumer only after the complete header has passed validation.
 // Its borrowed target lives in the stack buffer or fragmented-header buffer;
 // the consumer's result must own anything it needs after this function returns.
@@ -180,11 +197,12 @@ fn formatted_header(
     extra: fmt::Arguments<'_>,
 ) -> Option<HeaderBuffer> {
     let reason = reason(status);
+    let connection = connection_header();
     let mut header = HeaderBuffer {
         bytes: [0; 1024],
         used: 0,
     };
-    let formatted = std::fmt::write(&mut header, format_args!("HTTP/1.1 {status} {reason}\r\nContent-Type: {mime}\r\nContent-Length: {len}\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{extra}\r\n"));
+    let formatted = std::fmt::write(&mut header, format_args!("HTTP/1.1 {status} {reason}\r\nContent-Type: {mime}\r\nContent-Length: {len}\r\nConnection: {connection}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{extra}\r\n"));
     if formatted.is_ok() {
         Some(header)
     } else {
@@ -199,8 +217,9 @@ fn long_header_to<W: Write>(
     extra: fmt::Arguments<'_>,
 ) -> io::Result<()> {
     let reason = reason(status);
+    let connection = connection_header();
     // Preserve the existing fallback for internal values exceeding 1024 bytes.
-    write!(s,"HTTP/1.1 {status} {reason}\r\nContent-Type: {mime}\r\nContent-Length: {len}\r\nConnection: close\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{extra}\r\n")
+    write!(s,"HTTP/1.1 {status} {reason}\r\nContent-Type: {mime}\r\nContent-Length: {len}\r\nConnection: {connection}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{extra}\r\n")
 }
 
 fn write_all_pair<W: Write>(s: &mut W, mut head: &[u8], mut body: &[u8]) -> io::Result<()> {
@@ -333,7 +352,8 @@ pub fn image_response(
     if !matches!(status, 304 | 204) {
         write!(writer, "Content-Length: {}\r\n", body.len())?;
     }
-    write!(writer,"Connection: close\r\nCache-Control: {}\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{}\r\n",cache,extra)?;
+    let connection = connection_header();
+    write!(writer,"Connection: {connection}\r\nCache-Control: {}\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{}\r\n",cache,extra)?;
     if !head {
         writer.write_all(body)?;
     }

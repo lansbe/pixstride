@@ -17,6 +17,7 @@ pub(crate) struct Context {
     pub requested_headers: String,
     pub hints: [String; 4],
     pub traceparent: String,
+    pub connection: String,
 }
 
 impl Context {
@@ -35,6 +36,7 @@ impl Context {
                 "dpr" => &mut result.hints[1],
                 "sec-ch-width" => &mut result.hints[2],
                 "width" => &mut result.hints[3],
+                "connection" => &mut result.connection,
                 "traceparent" => &mut result.traceparent,
                 "accept" => &mut result.accept,
                 "authorization" => &mut result.authorization,

@@ -23,3 +23,5 @@ pub(crate) mod socket;
 mod telemetry;
 
 mod metrics_listener;
+
+mod connection;

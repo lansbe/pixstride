@@ -128,6 +128,45 @@ def check(args):
                 assert all(value not in metrics for value in ('nested', 'sample.png', 'synthetic-secret', 'local://'))
                 assert process.poll() is None
                 passed.append('bounded-concurrent-soak-and-metric-privacy')
+            with server(binary,root,{'PIXSTRIDE_KEEP_ALIVE_TIMEOUT':'1'}) as (port,_,_):
+                connection=http.client.HTTPConnection('127.0.0.1',port,timeout=3)
+                connection.request('GET','/health')
+                response=connection.getresponse();assert response.read()==b'ok\n'
+                original_socket=connection.sock
+                assert response.getheader('Connection')=='keep-alive'
+                for index in range(31):
+                    connection.request('HEAD','/unsafe/plain/local:///nested/sample.png@png')
+                    response=connection.getresponse();assert response.status==200 and response.read()==b''
+                    if index<30: assert connection.sock is original_socket
+                assert response.getheader('Connection')=='close' and connection.sock is None
+                connection.close()
+                wire=socket.create_connection(('127.0.0.1',port),timeout=3)
+                wire.sendall((f'GET /health HTTP/1.1\r\nHost: localhost:{port}\r\n\r\nHEAD /unsafe/plain/local:///nested/sample.png@png HTTP/1.1\r\nHost: localhost:{port}\r\nConnection: close\r\n\r\n').encode())
+                stream=wire.makefile('rb')
+                for method in ('GET','HEAD'):
+                    assert stream.readline().startswith(b'HTTP/1.1 200 ')
+                    headers={}
+                    while (line:=stream.readline()) != b'\r\n':
+                        name,value=line.split(b':',1);headers[name.lower()]=value.strip()
+                    if method=='GET': assert stream.read(int(headers[b'content-length']))==b'ok\n'
+                assert stream.read()==b'';stream.close();wire.close()
+                wire=socket.create_connection(('127.0.0.1',port),timeout=3)
+                wire.sendall((f'GET /health HTTP/1.1\r\nHost: localhost:{port}\r\nContent-Length: 1\r\n\r\nxGET /health HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n').encode())
+                stream=wire.makefile('rb');rejected=stream.read();stream.close();wire.close()
+                assert rejected.startswith(b'HTTP/1.1 400 ') and b'HTTP/1.1 200' not in rejected
+                connection=http.client.HTTPConnection('127.0.0.1',port,timeout=3)
+                connection.request('GET','/health');assert connection.getresponse().read()==b'ok\n'
+                time.sleep(1.2);assert connection.sock.recv(1)==b'', 'Idle keep-alive sent an unsolicited response'
+                connection.close()
+            connection=None
+            try:
+                with server(binary,root,{'PIXSTRIDE_KEEP_ALIVE_TIMEOUT':'60'}) as (port,_,_):
+                    connection=http.client.HTTPConnection('127.0.0.1',port,timeout=3)
+                    connection.request('GET','/health');assert connection.getresponse().read()==b'ok\n'
+                assert connection.sock.recv(1)==b'', 'Shutdown did not close idle keep-alive'
+            finally:
+                if connection:connection.close()
+            passed.append('bounded-keep-alive-pipelining-framing-idle-and-shutdown')
             fallback = root / 'fallback.png'
             fallback.write_bytes(png(20,12))
             metrics_port = free_port()
