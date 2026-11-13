@@ -1,0 +1,328 @@
+//! One authenticated request: source admission, processing, HTTP validators and response.
+use crate::{fetch, local::LocalRoot, pipeline, protocol, request};
+use std::time::{Duration, Instant};
+
+const MAX_SOURCE: usize = 64 * 1024 * 1024;
+pub(crate) enum Source {
+    Local(crate::Buffer),
+    Remote(Vec<u8>),
+}
+impl Source {
+    fn bytes_mut(&mut self) -> &mut [u8] {
+        match self {
+            Self::Local(b) => b.as_mut_slice(),
+            Self::Remote(b) => b,
+        }
+    }
+}
+// A short-lived stack value avoids a per-request heap allocation.
+#[allow(clippy::large_enum_variant)]
+pub(crate) enum Route {
+    Health,
+    Favicon,
+    Metrics,
+    Image(std::result::Result<request::Request, request::Error>),
+}
+pub(super) fn handle(
+    socket: &mut dyn super::socket::Socket,
+    port: u16,
+    root: &Option<LocalRoot>,
+    config: &request::Config,
+    watermark: &crate::watermark::Config,
+    pool: &fetch::Pool,
+    engine: &super::engine::Engine,
+    settings: &super::settings::Settings,
+) {
+    let _metrics = super::metrics::begin();
+    let _ = socket.set_nodelay(true);
+    let _ = socket.set_write_timeout(Some(Duration::from_secs(15)));
+    let (route, context) = match protocol::request_with(
+        socket,
+        port,
+        config.requires_local_host(),
+        |target, context| {
+            let route = match target {
+                "/health" => Route::Health,
+                "/favicon.ico" => Route::Favicon,
+                "/metrics" => Route::Metrics,
+                _ => Route::Image(request::parse(target, config)),
+            };
+            (route, context)
+        },
+    ) {
+        Ok(result) => result,
+        Err(_) => {
+            let _ = protocol::text(socket, 400, "Invalid HTTP request");
+            return;
+        }
+    };
+    if context.preflight {
+        match context.preflight_headers(settings.origin.as_deref()) {
+            Ok(headers) => {
+                let _ = protocol::image_response(
+                    socket,
+                    204,
+                    "text/plain",
+                    &headers,
+                    b"",
+                    "no-store",
+                    true,
+                );
+            }
+            Err(error) => {
+                let _ = failure(socket, false, 403, error);
+            }
+        }
+        return;
+    }
+    if !context.authorize(settings.secret.as_deref()) {
+        let _ = protocol::image_response(
+            socket,
+            401,
+            "text/plain",
+            "WWW-Authenticate: Bearer\r\n",
+            b"Unauthorized",
+            "no-store",
+            context.head,
+        );
+        return;
+    }
+    let mut request = match route {
+        Route::Health => {
+            let _ = protocol::image_response(
+                socket,
+                200,
+                "text/plain",
+                "",
+                b"ok\n",
+                "no-store",
+                context.head,
+            );
+            return;
+        }
+        Route::Metrics => {
+            let _ = protocol::image_response(
+                socket,
+                200,
+                "text/plain; version=0.0.4",
+                "",
+                super::metrics::render().as_bytes(),
+                "no-store",
+                context.head,
+            );
+            return;
+        }
+        Route::Favicon => {
+            let _ = failure(socket, context.head, 204, "");
+            return;
+        }
+        Route::Image(Ok(r)) => r,
+        Route::Image(Err(e)) => {
+            let _ = failure(
+                socket,
+                context.head,
+                if e == "expired URL" { 404 } else { 400 },
+                e,
+            );
+            return;
+        }
+    };
+    let vary = context.negotiate(&mut request, &settings.auto_formats);
+    if request
+        .watermark
+        .as_ref()
+        .is_some_and(|spec| spec.opacity > 0.0)
+        && !watermark.is_configured()
+    {
+        let _ = failure(
+            socket,
+            context.head,
+            422,
+            "watermark image is not configured",
+        );
+        return;
+    }
+    let started = Instant::now();
+    let (mut source, transfers, upstream, new_connections, modified) =
+        if request.source.starts_with("local:///") {
+            match root
+                .as_ref()
+                .ok_or_else(|| "local sources are disabled".to_string())
+                .and_then(|root| root.read_with_modified(&request.source))
+            {
+                Ok((b, modified)) => (Source::Local(b), 0, 0, 0, modified),
+                Err(e) => {
+                    let _ = failure(socket, context.head, 422, &e);
+                    return;
+                }
+            }
+        } else {
+            let download = if ["s3://", "gs://", "gcs://", "abs://", "swift://"]
+                .iter()
+                .any(|p| request.source.starts_with(p))
+            {
+                super::cloud::fetch(
+                    &request.source,
+                    MAX_SOURCE.min(request.extra.max_source_bytes),
+                )
+                .map_err(str::to_owned)
+            } else {
+                pool.fetch(
+                    &request.source,
+                    MAX_SOURCE.min(request.extra.max_source_bytes),
+                )
+            };
+            match download {
+                Ok(d) => (
+                    Source::Remote(d.body),
+                    d.transfers,
+                    d.upstream_bytes,
+                    d.new_connections,
+                    d.last_modified
+                        .and_then(|s| httpdate::parse_http_date(&s).ok()),
+                ),
+                Err(_) => {
+                    let _ = failure(
+                        socket,
+                        context.head,
+                        502,
+                        "Unable to retrieve the complete public HTTP(S) source",
+                    );
+                    return;
+                }
+            }
+        };
+    if source.bytes_mut().len() > request.extra.max_source_bytes {
+        let _ = failure(
+            socket,
+            context.head,
+            422,
+            "source exceeds requested byte limit",
+        );
+        return;
+    }
+    let fetch_ms = started.elapsed().as_secs_f64() * 1000.0;
+    let queued = Instant::now();
+    let lock = match engine.acquire() {
+        Ok(l) => l,
+        Err(_) => {
+            let _ = failure(socket, context.head, 503, "Image worker unavailable");
+            return;
+        }
+    };
+    let queue_ms = queued.elapsed().as_secs_f64() * 1000.0;
+    let processing = Instant::now();
+    let output = pipeline::process(source.bytes_mut(), &request, watermark);
+    let process_ms = processing.elapsed().as_secs_f64() * 1000.0;
+    drop(lock);
+    drop(source);
+    match output {
+        Ok(out) => {
+            let mut extra=format!("Server-Timing: fetch;dur={fetch_ms:.3}, queue;dur={queue_ms:.3}, engine;dur={process_ms:.3}\r\nX-Image-Engine: pixstride\r\nX-Upstream-Transfers: {transfers}\r\nX-Upstream-Bytes: {upstream}\r\nX-Image-Width: {}\r\nX-Image-Height: {}\r\n",out.width,out.height);
+            if request.source.starts_with("local:///")
+                || request.source.starts_with("http://")
+                || request.source.starts_with("https://")
+            {
+                extra.push_str(&format!(
+                    "X-Upstream-New-Connections: {new_connections}\r\n"
+                ));
+            }
+            if vary {
+                extra.push_str("Vary: Accept\r\n");
+            }
+            if let Some(origin) = &settings.origin {
+                extra.push_str(&format!("Access-Control-Allow-Origin: {origin}\r\n"));
+            }
+            extra.push_str(&super::headers::disposition(&request, out.mime));
+            let mut status = 200;
+            if settings.etag {
+                let etag = super::headers::etag(out.body.as_slice());
+                extra.push_str(&format!("ETag: {etag}\r\n"));
+                if super::headers::matches_etag(&context.if_none_match, &etag) {
+                    status = 304;
+                }
+            }
+            if settings.last_modified {
+                if let Some(modified) = modified.filter(|t| {
+                    t.duration_since(std::time::UNIX_EPOCH)
+                        .is_ok_and(|d| d.as_secs() <= 253_402_300_799)
+                }) {
+                    let floor =
+                        std::time::UNIX_EPOCH + Duration::from_secs(settings.modified_buster);
+                    let modified = modified.max(floor);
+                    extra.push_str(&format!(
+                        "Last-Modified: {}\r\n",
+                        httpdate::fmt_http_date(modified)
+                    ));
+                    if context.if_none_match.is_empty()
+                        && httpdate::parse_http_date(&context.if_modified_since).is_ok_and(
+                            |since| {
+                                modified
+                                    .duration_since(std::time::UNIX_EPOCH)
+                                    .unwrap_or_default()
+                                    .as_secs()
+                                    <= since
+                                        .duration_since(std::time::UNIX_EPOCH)
+                                        .unwrap_or_default()
+                                        .as_secs()
+                            },
+                        )
+                    {
+                        status = 304;
+                    }
+                }
+            }
+            let mut ttl = settings.ttl;
+            if let Some(expiry) = request.extra.expires {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                ttl = ttl.min(expiry.saturating_sub(now));
+            }
+            let cache = if ttl == 0 {
+                "no-store".into()
+            } else {
+                format!("public, max-age={ttl}")
+            };
+            let body = if status == 304 {
+                &[][..]
+            } else {
+                out.body.as_slice()
+            };
+            let _ = protocol::image_response(
+                socket,
+                status,
+                out.mime,
+                &extra,
+                body,
+                &cache,
+                context.head,
+            );
+        }
+        Err(e) => {
+            let _ = failure(socket, context.head, 422, e);
+        }
+    }
+}
+
+fn failure(
+    socket: &mut dyn super::socket::Socket,
+    head: bool,
+    status: u16,
+    body: &str,
+) -> std::io::Result<()> {
+    protocol::image_response(
+        socket,
+        status,
+        "text/plain",
+        "",
+        body.as_bytes(),
+        "no-store",
+        head,
+    )
+}
+
+#[cfg(test)]
+#[path = "http_tests.rs"]
+mod http_tests;

@@ -6,13 +6,31 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- Optional isolated libvips engine with native WebP/AVIF/HEIC/JPEG XL, broader static SVG, 16-bit colour/alpha, selected copyright metadata and bounded GIF/WebP animation.
+- OSS URL presets, key rotation, expiration, DPR/zoom/minimum dimensions, extension, smart/fractional crops, watermark tiling/URL/Base64, per-format quality and bounded output-size search.
+- HEAD, Bearer authorization, opt-in modern format negotiation, ETag/Last-Modified/TTL, UTF-8 disposition, CORS, Prometheus and optional bounded OTLP/HTTP traces.
+- Optional S3/GCS/Azure/Swift readers with per-request credential loading and Keystone v3 token exchange, nested confined local paths, inbound IPv6/Unix sockets and native concurrency with explicit memory reservations.
+- Pinned imgproxy 4.0.21 compatibility matrix, synthetic differential/native/HTTP/mutation/soak checks and macOS ARM64/Intel CI alongside Linux containers.
 - A protected `develop` integration line, separate prerelease channels, automatic merged-branch deletion and a safe local cleanup command.
 - Generated Markdown sections, documentation consistency checks and release preparation that synchronizes Cargo versions and the changelog.
 - Automatic GitHub release notes from the reviewed changelog after both container architectures pass validation.
 
 ### Changed
 
+- External crates and image libraries are permitted; feature-specific dependencies, resource limits and migration differences are documented in `COMPATIBILITY.md`. Native and cloud capabilities are opt-in in Cargo; the container includes them.
+- Building now requires fetching locked Cargo dependencies before offline checks. Python tooling requires Python 3.11+.
 - Release version tags are immutable. Prereleases never update the stable Docker or GitHub `latest` release, and older releases cannot roll a channel backwards.
+
+### Fixed
+
+- Explicitly return accepted sockets to blocking mode on nonblocking listeners, preventing intermittent macOS HTTP 400 responses before request data arrives.
+- Read a complete bounded health status line instead of assuming the first TCP read contains it.
+- Use the platform C character type and GLib allocation cleanup in the locally patched libvips binding, including unsigned C char on Linux ARM64.
+
+### Security
+
+- Bound native child lifetime, pipes, frame totals and encoding attempts; remove secrets from child environments and reject external/active SVG resources.
+- Preserve host/public-address checks in cloud SDK transport, use conditional object reads and reject symlinks throughout nested local paths.
 
 ## [0.1.1] - 2026-11-08
 

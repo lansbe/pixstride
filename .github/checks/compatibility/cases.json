@@ -1,0 +1,258 @@
+[
+  {
+    "name": "identity",
+    "options": "",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "fit",
+    "options": "rs:fit:24:16",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fill",
+    "options": "rs:fill:24:24",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "force",
+    "options": "rs:force:24:12",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "rotate",
+    "options": "rot:90",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "flip",
+    "options": "fl:1:1",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "crop",
+    "options": "c:24:16:soea",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "padding",
+    "options": "pd:2:4:6:8/bg:ffffff",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "dpr",
+    "options": "rs:fit:12:8/dpr:2",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "zoom",
+    "options": "rs:fit:12:8/z:2",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "extend",
+    "options": "rs:fit:24:24/ex:1/bg:ffffff",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fill-down",
+    "options": "rs:fill-down:96:96",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "smart-crop",
+    "options": "rs:fill:24:24/g:sm",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fractional-crop",
+    "options": "c:0.5:0.5",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "blur",
+    "options": "bl:1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "sharpen",
+    "options": "sh:1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "lossy-webp",
+    "options": "rs:fit:24:16/q:75",
+    "format": "webp",
+    "max_error": 12,
+    "mean_error": 2
+  },
+  {
+    "name": "avif-small-fallback",
+    "options": "rs:fit:24:16/q:75",
+    "format": "avif",
+    "max_error": 12,
+    "mean_error": 2
+  },
+  {
+    "name": "avif",
+    "options": "rs:fit:48:32/q:75",
+    "format": "avif",
+    "max_error": 12,
+    "mean_error": 2
+  },
+  {
+    "name": "minimum-crop",
+    "options": "rs:fit:24:16/mw:32",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "minimum-height",
+    "options": "rs:fit:24:16/mh:24",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "offset-gravity",
+    "options": "rs:fill:24:24/g:soea:0.1:0.1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "extend-offset",
+    "options": "rs:fit:24:24/ex:1:no:0:2/bg:ffffff",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "crop-offset",
+    "options": "c:24:16:soea:0.1:0.1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "crop-rotation",
+    "options": "c:16:24:soea:0.1:0.1/rot:90",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fill-zoom",
+    "options": "rs:fill:12:8/z:2",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "extend-aspect",
+    "options": "rs:fit:24:24/exar:1/bg:ffffff",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "nonuniform-zoom",
+    "options": "rs:fit:12:8/z:2:1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "format-quality",
+    "options": "rs:fit:48:32/q:20/fq:webp:75",
+    "format": "webp",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "watermark",
+    "options": "wm:0.5:soea:2:2:0.2",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "watermark-repeat",
+    "options": "wm:0.5:re:4:4:0.1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "watermark-relative",
+    "options": "dpr:0.5/wm:1:noea:0.1:0.1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "alpha-identity",
+    "options": "",
+    "source": "alpha.png",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "alpha-resize",
+    "options": "rs:fit:16:12",
+    "source": "alpha.png",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "alpha-extend",
+    "options": "rs:fit:16:16/ex:1",
+    "source": "alpha.png",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "alpha-background",
+    "options": "bg:ffffff",
+    "source": "alpha.png",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  }
+]

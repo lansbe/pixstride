@@ -25,6 +25,7 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
     }
     config.verify(sig, &normalized)?;
 
+    let mut extra = extended::Options::default();
     let mut options = TransformOptions::default();
     let mut fmt = None;
     let mut quality = None;
@@ -34,22 +35,37 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
     let mut effects = Effects::default();
     let mut watermark: Option<WatermarkSpec> = None;
     let mut explicit_crop: Option<(usize, usize, Option<Gravity>)> = None;
-    let mut gravity_seen = false;
-    let mut parts = normalized.split('/').peekable();
+    let mut raw = normalized.split('/').peekable();
+    let mut requested = Vec::new();
+    while raw.peek().is_some_and(|part| part.contains(':')) {
+        requested.push(raw.next().unwrap().to_owned());
+    }
+    let remaining = raw.collect::<Vec<_>>();
+    let expanded = config.presets.expand(&requested, true)?;
+    let mut parts = expanded.iter().map(String::as_str).peekable();
     while parts.peek().is_some_and(|part| part.contains(':')) {
         let part = parts.next().expect("peeked option");
         let mut fields = part.split(':');
         let name = fields.next().unwrap_or("");
         let args: Vec<_> = fields.collect();
+        if extended::apply(name, &args, &mut extra)? {
+            continue;
+        }
         match name {
             "resize" | "rs" => {
-                if args.is_empty() || args.len() > 4 {
+                if args.is_empty() || args.len() > 8 {
                     return Err("unsupported resize arguments");
                 }
                 if !args[0].is_empty() {
+                    extra.fill_down = args[0] == "fill-down";
                     options.mode = match args[0] {
                         "fit" => ResizeMode::Fit,
                         "fill" => ResizeMode::Fill,
+                        "fill-down" => {
+                            extra.fill_down = true;
+                            extra.native = true;
+                            ResizeMode::Fill
+                        }
                         "force" => ResizeMode::Force,
                         "auto" => ResizeMode::Auto,
                         _ => return Err("unsupported resize type"),
@@ -64,9 +80,12 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
                 if let Some(value) = args.get(3).filter(|v| !v.is_empty()) {
                     options.enlarge = boolean(value)?;
                 }
+                if args.len() > 4 && !args[4].is_empty() {
+                    extended::extend(&args[4..], &mut extra, false)?;
+                }
             }
             "size" | "s" => {
-                if args.is_empty() || args.len() > 3 {
+                if args.is_empty() || args.len() > 7 {
                     return Err("unsupported size arguments");
                 }
                 if !args[0].is_empty() {
@@ -78,14 +97,23 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
                 if let Some(value) = args.get(2).filter(|v| !v.is_empty()) {
                     options.enlarge = boolean(value)?;
                 }
+                if args.len() > 3 && !args[3].is_empty() {
+                    extended::extend(&args[3..], &mut extra, false)?;
+                }
             }
             "resizing_type" | "rt" => {
                 if args.len() != 1 {
                     return Err("invalid resize type");
                 }
+                extra.fill_down = args[0] == "fill-down";
                 options.mode = match args[0] {
                     "fit" => ResizeMode::Fit,
                     "fill" => ResizeMode::Fill,
+                    "fill-down" => {
+                        extra.fill_down = true;
+                        extra.native = true;
+                        ResizeMode::Fill
+                    }
                     "force" => ResizeMode::Force,
                     "auto" => ResizeMode::Auto,
                     _ => return Err("unsupported resize type"),
@@ -110,28 +138,38 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
                 options.enlarge = boolean(args[0])?;
             }
             "gravity" | "g" => {
-                // imgproxy retains previous offsets in some repeated forms; the
-                // current geometry type cannot represent that retained state.
-                if gravity_seen {
-                    return Err("repeated gravity unsupported");
-                }
-                gravity_seen = true;
-                options.gravity = gravity(&args)?;
+                options.gravity =
+                    extended::gravity_options(&args, &mut extra.offsets, &mut extra.smart)?;
+                extra.native |= extra.smart || extra.offsets != [0.0; 2];
             }
             "crop" | "c" => {
                 if args.is_empty() || args.len() > 5 {
                     return Err("invalid crop");
                 }
                 // Fractional imgproxy crops cannot be represented by our pixel Crop yet.
-                let width = decimal(args[0])?;
+                let cw = extended::number(args[0], true)?;
+                let ch = if args.len() > 1 {
+                    extended::number(args[1], true)?
+                } else {
+                    extra.crop_size.map_or(0.0, |c| c[1])
+                };
+                extra.crop_size = Some([cw, ch]);
+                extra.native |= cw.fract() != 0.0 || ch.fract() != 0.0;
+                let width = cw as usize;
                 let (_, prior_height, prior_gravity) = explicit_crop.unwrap_or((0, 0, None));
                 let height = if args.len() > 1 {
-                    decimal(args[1])?
+                    ch as usize
                 } else {
                     prior_height
                 };
                 let g = if args.len() > 2 {
-                    Some(gravity(&args[2..])?)
+                    let g = extended::gravity_options(
+                        &args[2..],
+                        &mut extra.crop_offsets,
+                        &mut extra.crop_smart,
+                    )?;
+                    extra.native |= extra.crop_smart || extra.crop_offsets != [0.0; 2];
+                    Some(g)
                 } else {
                     prior_gravity
                 };
@@ -235,7 +273,9 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
                 let mark = watermark.get_or_insert_with(WatermarkSpec::default);
                 mark.opacity = opacity;
                 if let Some(value) = args.get(1).filter(|v| !v.is_empty()) {
-                    let g = gravity(&[value])?;
+                    extra.watermark_repeat = *value == "re";
+                    extra.native |= extra.watermark_repeat;
+                    let g = gravity(&[if extra.watermark_repeat { "ce" } else { value }])?;
                     if matches!(g, Gravity::Focus { .. }) {
                         return Err("unsupported watermark gravity");
                     }
@@ -289,9 +329,10 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
                         .map(|raw| color(&[raw]))
                         .transpose()?
                         .flatten();
-                    for value in args.get(2..).unwrap_or(&[]) {
+                    for (index, value) in args.get(2..).unwrap_or(&[]).iter().enumerate() {
                         if !value.is_empty() && boolean(value)? {
-                            return Err("equal-axis trim unsupported");
+                            extra.trim_equal[index] = true;
+                            extra.native = true;
                         }
                     }
                     effects.trim = Some(Trim {
@@ -337,23 +378,41 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
             _ => return Err("unsupported processing option"),
         }
     }
-    let remaining: Vec<_> = parts.collect();
     let (source, extension) = source_and_extension(&remaining)?;
     if let Some(extension) = extension {
         fmt = Some(extension);
     }
     if fmt == Some(OutputFormat::Webp) && quality.is_some_and(|q| q != 100) {
-        return Err("lossy WebP quality is unsupported");
+        extra.native = true;
     }
     if let Some((width, height, crop_gravity)) = explicit_crop {
+        if crop_gravity.is_none() {
+            extra.crop_offsets = extra.offsets;
+            extra.crop_smart = extra.smart;
+        }
         options.crop = Some(Crop {
             width,
             height,
             gravity: crop_gravity.unwrap_or(options.gravity),
         });
     }
+    extra.native |= !strip_metadata
+        || matches!(
+            fmt,
+            Some(OutputFormat::Avif | OutputFormat::Heic | OutputFormat::Jxl | OutputFormat::Svg)
+        );
+    if extra.expires.is_some_and(|expiry| {
+        expiry
+            < std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_secs()
+    }) {
+        return Err("expired URL");
+    }
     Ok(Request {
         source,
+        extra,
         options,
         format: fmt,
         quality,

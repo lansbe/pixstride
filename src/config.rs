@@ -9,6 +9,9 @@ use std::{
 
 pub fn run() -> Result<(), Error> {
     let args: Vec<String> = std::env::args().collect();
+    if args.get(1).is_some_and(|s| s == "native-worker") {
+        return crate::processing::native::worker();
+    }
     match args.get(1).map(String::as_str).unwrap_or("serve") {
         "serve" if args.len() <= 2 => {
             let port = std::env::var("PIXSTRIDE_PORT")
@@ -27,34 +30,87 @@ pub fn run() -> Result<(), Error> {
         }
         "healthcheck" => {
             let port = std::env::var("PIXSTRIDE_PORT").unwrap_or_else(|_| "8080".into());
-            let address = format!("127.0.0.1:{port}")
-                .parse()
-                .map_err(|_| "invalid health address")?;
-            let mut socket = TcpStream::connect_timeout(&address, Duration::from_secs(2))
-                .map_err(|_| "health connection failed")?;
+            let mut socket: Box<dyn crate::network::socket::Socket> = if let Some(path) =
+                std::env::var_os("PIXSTRIDE_UNIX_SOCKET")
+            {
+                Box::new(
+                    std::os::unix::net::UnixStream::connect(path)
+                        .map_err(|_| "health connection failed")?,
+                )
+            } else {
+                let bind = std::env::var("PIXSTRIDE_BIND").unwrap_or_else(|_| "127.0.0.1".into());
+                let mut ip = bind
+                    .parse::<std::net::IpAddr>()
+                    .map_err(|_| "invalid health address")?;
+                if ip.is_unspecified() {
+                    ip = if ip.is_ipv6() {
+                        std::net::Ipv6Addr::LOCALHOST.into()
+                    } else {
+                        std::net::Ipv4Addr::LOCALHOST.into()
+                    };
+                }
+                let address =
+                    std::net::SocketAddr::new(ip, port.parse().map_err(|_| "invalid health port")?);
+                Box::new(
+                    TcpStream::connect_timeout(&address, Duration::from_secs(2))
+                        .map_err(|_| "health connection failed")?,
+                )
+            };
             socket
                 .set_read_timeout(Some(Duration::from_secs(2)))
                 .map_err(|_| "health timeout failed")?;
             socket
                 .set_write_timeout(Some(Duration::from_secs(2)))
                 .map_err(|_| "health timeout failed")?;
+            let secret = secret("PIXSTRIDE_SECRET")?;
+            if secret
+                .as_ref()
+                .is_some_and(|s| s.bytes().any(|b| b < 32 || b == 127))
+            {
+                return Err("invalid health authorization");
+            }
+            let authorization = secret
+                .map(|s| format!("Authorization: Bearer {s}\r\n"))
+                .unwrap_or_default();
             write!(
                 socket,
-                "GET /health HTTP/1.1\r\nHost: localhost:{port}\r\n\r\n"
+                "GET /health HTTP/1.1\r\nHost: localhost:{port}\r\n{authorization}\r\n"
             )
             .map_err(|_| "health write failed")?;
             let mut bytes = [0; 128];
-            let n = socket.read(&mut bytes).map_err(|_| "health read failed")?;
-            if bytes[..n].starts_with(b"HTTP/1.1 200 ") {
+            let mut used = 0;
+            let deadline = std::time::Instant::now() + Duration::from_secs(2);
+            while used < bytes.len() && !bytes[..used].windows(2).any(|w| w == b"\r\n") {
+                let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                if remaining.is_zero() {
+                    return Err("health read deadline exceeded");
+                }
+                socket
+                    .set_read_timeout(Some(remaining))
+                    .map_err(|_| "health timeout failed")?;
+                let n = socket
+                    .read(&mut bytes[used..])
+                    .map_err(|_| "health read failed")?;
+                if n == 0 {
+                    break;
+                }
+                used += n;
+            }
+            if bytes[..used].starts_with(b"HTTP/1.1 200 ")
+                && bytes[..used].windows(2).any(|w| w == b"\r\n")
+            {
                 Ok(())
             } else {
                 Err("unhealthy")
             }
         }
         "process" if args.len() == 5 => {
+            crate::fetch::initialize()?;
             let file = crate::os::InputFile::open(args[2].as_bytes())?;
             let mut bytes = file.read_all()?;
-            let request = request::parse(&args[4], &request::Config::unsafe_local())?;
+            let config = request::Config::unsafe_local()
+                .with_presets(&secret("PIXSTRIDE_PRESETS")?.unwrap_or_default())?;
+            let request = request::parse(&args[4], &config)?;
             let out = pipeline::process(
                 bytes.as_mut_slice(),
                 &request,
@@ -63,23 +119,15 @@ pub fn run() -> Result<(), Error> {
             std::fs::write(&args[3], out.body.as_slice()).map_err(|_| "cannot write output")
         }
         "sign" if args.len() == 3 => {
-            let key = secret("PIXSTRIDE_KEY")?.ok_or("signing key required")?;
-            let salt = secret("PIXSTRIDE_SALT")?.ok_or("signing salt required")?;
-            let key = crate::signature::decode_hex(&key)?;
-            let salt = crate::signature::decode_hex(&salt)?;
-            request::Config::signed(key.clone(), salt.clone())?;
-            if !args[2].starts_with('/') || args[2].contains(['\r', '\n']) {
-                return Err("path must start with /");
-            }
-            println!(
-                "/{}/{}",
-                crate::signature::sign_imgproxy(&args[2], &key, &salt),
-                args[2].trim_start_matches('/')
-            );
+            println!("{}", request::Config::from_env()?.sign(&args[2])?);
             Ok(())
         }
         "--version" => {
             println!("pixstride {}", env!("CARGO_PKG_VERSION"));
+            Ok(())
+        }
+        "capabilities" if args.len() == 2 => {
+            println!("{}", crate::processing::native::capabilities::report()?);
             Ok(())
         }
         "--help" | "help" => {

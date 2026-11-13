@@ -23,7 +23,7 @@ pub(crate) struct Sha256 {
 }
 
 impl Sha256 {
-    fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self {
             state: [
                 0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab,
@@ -74,7 +74,7 @@ impl Sha256 {
         }
     }
 
-    fn update(&mut self, mut data: &[u8]) {
+    pub(crate) fn update(&mut self, mut data: &[u8]) {
         self.length = self.length.wrapping_add(data.len() as u64);
         if self.used != 0 {
             let n = (64 - self.used).min(data.len());
@@ -98,7 +98,7 @@ impl Sha256 {
         self.used = data.len();
     }
 
-    fn finish(mut self) -> [u8; 32] {
+    pub(crate) fn finish(mut self) -> [u8; 32] {
         let bits = self.length.wrapping_mul(8);
         self.block[self.used] = 0x80;
         self.used += 1;

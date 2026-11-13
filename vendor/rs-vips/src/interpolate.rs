@@ -1,0 +1,75 @@
+// (c) Copyright 2019-2025 OLX
+// (c) Copyright 2025 mrdkprj
+use crate::{
+    bindings,
+    error::Error,
+    utils::{new_c_string, result_cond},
+    Result,
+};
+use std::ffi::c_void;
+
+/// Base struct for the various interpolation functions
+#[derive(Debug, Clone)]
+pub struct VipsInterpolate {
+    pub(crate) ctx: *mut bindings::VipsInterpolate,
+}
+
+impl VipsInterpolate {
+    /// Look up an interpolator from a nickname and make one.
+    pub fn new_from_name(name: &str) -> Result<VipsInterpolate> {
+        unsafe {
+            let nickname = new_c_string(name)?;
+            let res = bindings::vips_interpolate_new(nickname.as_ptr());
+            result_cond(
+                !res.is_null(),
+                VipsInterpolate {
+                    ctx: res,
+                },
+                Error::InitializationError(
+                    "Cannot initialize interpolator with provided nickname".to_string(),
+                ),
+            )
+        }
+    }
+
+    /// A convenience function that returns a nearest-neighbour interpolator you don’t need to free.
+    pub fn new_from_neasest_static() -> VipsInterpolate {
+        unsafe {
+            VipsInterpolate {
+                ctx: bindings::vips_interpolate_nearest_static(),
+            }
+        }
+    }
+
+    /// A convenience function that returns a bilinear interpolator you don’t need to free.
+    pub fn new_from_bilinear_static() -> VipsInterpolate {
+        unsafe {
+            VipsInterpolate {
+                ctx: bindings::vips_interpolate_bilinear_static(),
+            }
+        }
+    }
+
+    /// Look up an interpolators desired window size.
+    pub fn get_window_size(&self) -> i32 {
+        unsafe { bindings::vips_interpolate_get_window_size(self.ctx) }
+    }
+
+    /// Look up an interpolators desired window offset.
+    pub fn get_windows_offset(&self) -> i32 {
+        unsafe { bindings::vips_interpolate_get_window_offset(self.ctx) }
+    }
+}
+
+impl Drop for VipsInterpolate {
+    fn drop(&mut self) {
+        unsafe {
+            if !self
+                .ctx
+                .is_null()
+            {
+                bindings::g_object_unref(self.ctx as *mut c_void);
+            }
+        }
+    }
+}

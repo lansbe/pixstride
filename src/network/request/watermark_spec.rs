@@ -10,53 +10,6 @@ impl Default for WatermarkSpec {
         }
     }
 }
-impl Config {
-    pub fn signed(key: Vec<u8>, salt: Vec<u8>) -> Result<Self, Error> {
-        if key.len() < 32 || salt.len() < 16 || key.len() > 4096 || salt.len() > 4096 {
-            return Err("invalid signing configuration");
-        }
-        Ok(Self {
-            auth: Auth::Signed { key, salt },
-        })
-    }
-
-    /// The caller must restrict network access to trusted local clients.
-    /// Loopback-only port publishing does not isolate container network peers.
-    /// Requests must explicitly use the `/unsafe/` signature segment.
-    pub fn unsafe_local() -> Self {
-        Self {
-            auth: Auth::UnsafeLocal,
-        }
-    }
-
-    pub(crate) fn requires_local_host(&self) -> bool {
-        matches!(&self.auth, Auth::UnsafeLocal)
-    }
-
-    /// No configured key and salt selects explicit `/unsafe/` local requests.
-    /// A partially configured or invalid pair is always an error, never a downgrade.
-    pub fn from_env() -> Result<Self, Error> {
-        let key = crate::config::secret("PIXSTRIDE_KEY")?;
-        let salt = crate::config::secret("PIXSTRIDE_SALT")?;
-        match (key,salt) {
-            (Some(key),Some(salt))=>Self::signed(signature::decode_hex(&key)?,signature::decode_hex(&salt)?),
-            (None,None) if std::env::var("PIXSTRIDE_ALLOW_UNSAFE").as_deref()==Ok("1")=>Ok(Self::unsafe_local()),
-            _=>Err("configure PIXSTRIDE_KEY and PIXSTRIDE_SALT; unsigned mode requires explicit PIXSTRIDE_ALLOW_UNSAFE=1"),
-        }
-    }
-
-    pub(crate) fn verify(&self, value: &str, normalized_path: &str) -> Result<(), Error> {
-        match &self.auth {
-            Auth::UnsafeLocal if value == "unsafe" => Ok(()),
-            Auth::Signed { key, salt }
-                if signature::verify_imgproxy(value, normalized_path, key, salt) =>
-            {
-                Ok(())
-            }
-            _ => Err("invalid signature"),
-        }
-    }
-}
 pub(crate) fn format(value: &str) -> Result<OutputFormat, Error> {
     match value {
         "png" => Ok(OutputFormat::Png),
@@ -66,6 +19,10 @@ pub(crate) fn format(value: &str) -> Result<OutputFormat, Error> {
         "tiff" | "tif" => Ok(OutputFormat::Tiff),
         "ico" => Ok(OutputFormat::Ico),
         "gif" => Ok(OutputFormat::Gif),
+        "avif" => Ok(OutputFormat::Avif),
+        "heic" => Ok(OutputFormat::Heic),
+        "jxl" => Ok(OutputFormat::Jxl),
+        "svg" => Ok(OutputFormat::Svg),
         _ => Err("unsupported output format"),
     }
 }
@@ -241,14 +198,28 @@ pub(crate) fn percent_decode(value: &str) -> Result<String, Error> {
 pub(crate) fn validate_source(source: &str) -> Result<(), Error> {
     if source.is_empty()
         || source.len() > MAX_SOURCE
-        || source.bytes().any(|b| b <= 32 || b >= 127 || b == b'\\')
+        || source.bytes().any(|b| b < 32 || b == 127 || b == b'\\')
     {
         return Err("invalid source URL");
     }
     if let Some(name) = source.strip_prefix("local:///") {
-        if name.is_empty() || name == "." || name == ".." || name.contains(['/', '?', '#']) {
+        if name.is_empty()
+            || name.split('/').count() > 64
+            || name.split('/').any(|s| matches!(s, "" | "." | ".."))
+            || name.contains(['?', '#'])
+        {
             return Err("invalid local source");
         }
+        return Ok(());
+    }
+    if source.bytes().any(|b| b <= 32 || b >= 127) {
+        return Err("invalid remote source URL");
+    }
+    if ["s3://", "gs://", "gcs://", "abs://", "swift://"]
+        .iter()
+        .any(|p| source.starts_with(p))
+    {
+        crate::network::cloud::split(source)?;
         return Ok(());
     }
     let rest = source

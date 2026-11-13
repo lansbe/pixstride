@@ -1,19 +1,19 @@
 //! Bounded local HTTP/1.1 parser and complete-response writer.
+use super::socket::Socket;
 use crate::Result;
 use std::{
     fmt,
-    io::{self, IoSlice, Read, Write},
-    net::TcpStream,
+    io::{self, IoSlice, Write},
     time::{Duration, Instant},
 };
 // Invoke the consumer only after the complete header has passed validation.
 // Its borrowed target lives in the stack buffer or fragmented-header buffer;
 // the consumer's result must own anything it needs after this function returns.
 pub fn request_with<T>(
-    stream: &mut TcpStream,
+    stream: &mut dyn Socket,
     port: u16,
     local_host_only: bool,
-    consume: impl FnOnce(&str) -> T,
+    consume: impl FnOnce(&str, super::headers::Context) -> T,
 ) -> Result<T> {
     let deadline = Instant::now() + Duration::from_secs(5);
     // A complete first read is parsed directly from the stack. Fragmented
@@ -38,7 +38,12 @@ pub fn request_with<T>(
         }
         if bytes.is_empty() {
             if let Some(end) = chunk[..n].windows(4).position(|w| w == b"\r\n\r\n") {
-                return parse_header(&chunk[..end], port, local_host_only).map(consume);
+                let target = parse_header(&chunk[..end], port, local_host_only)?;
+                let context = super::headers::Context::parse(
+                    std::str::from_utf8(&chunk[..end]).map_err(|_| "invalid header")?,
+                )
+                .map_err(str::to_owned)?;
+                return Ok(consume(target, context));
             }
         }
         if n > 16384usize.saturating_sub(bytes.len()) {
@@ -49,7 +54,13 @@ pub fn request_with<T>(
             .map_err(|_| "Header allocation failed".to_string())?;
         bytes.extend_from_slice(&chunk[..n]);
         if let Some(at) = bytes[scan_from..].windows(4).position(|w| w == b"\r\n\r\n") {
-            return parse_header(&bytes[..scan_from + at], port, local_host_only).map(consume);
+            let header = &bytes[..scan_from + at];
+            let target = parse_header(header, port, local_host_only)?;
+            let context = super::headers::Context::parse(
+                std::str::from_utf8(header).map_err(|_| "invalid header")?,
+            )
+            .map_err(str::to_owned)?;
+            return Ok(consume(target, context));
         }
         // Keep the last three bytes so delimiters fragmented across reads are
         // detected without rescanning the earlier, already inspected prefix.
@@ -86,8 +97,8 @@ fn parse_header(bytes: &[u8], port: u16, local_host_only: bool) -> Result<&str> 
     let text = std::str::from_utf8(bytes).map_err(|_| "Invalid header encoding")?;
     let mut lines = text.split("\r\n");
     let mut first = lines.next().unwrap().split(' ');
-    if first.next() != Some("GET") {
-        return Err("GET required".into());
+    if !matches!(first.next(), Some("GET" | "HEAD" | "OPTIONS")) {
+        return Err("GET, HEAD or CORS OPTIONS required".into());
     }
     let path = first.next().ok_or("Missing target")?;
     if first.next() != Some("HTTP/1.1") || first.next().is_some() {
@@ -150,6 +161,9 @@ impl std::fmt::Write for HeaderBuffer {
 fn reason(status: u16) -> &'static str {
     match status {
         200 => "OK",
+        304 => "Not Modified",
+        401 => "Unauthorized",
+        403 => "Forbidden",
         204 => "No Content",
         400 => "Bad Request",
         404 => "Not Found",
@@ -227,7 +241,7 @@ fn response_to<W: Write>(
     }
 }
 pub(crate) struct DeadlineWriter<'a> {
-    socket: &'a mut TcpStream,
+    socket: &'a mut dyn Socket,
     deadline: Instant,
 }
 impl DeadlineWriter<'_> {
@@ -256,12 +270,13 @@ impl Write for DeadlineWriter<'_> {
     }
 }
 pub fn response(
-    s: &mut TcpStream,
+    s: &mut dyn Socket,
     status: u16,
     mime: &str,
     extra: fmt::Arguments<'_>,
     body: &[u8],
 ) -> io::Result<()> {
+    super::metrics::status(status);
     // The overload path sets a shorter timeout before writing its 503 reply.
     // Avoid querying socket options on the normal response path.
     let response_timeout = Duration::from_secs(15);
@@ -283,7 +298,7 @@ pub fn response(
 #[path = "protocol_tests.rs"]
 mod protocol_tests;
 
-pub fn text(s: &mut TcpStream, status: u16, body: &str) -> io::Result<()> {
+pub fn text(s: &mut dyn Socket, status: u16, body: &str) -> io::Result<()> {
     response(
         s,
         status,
@@ -291,4 +306,36 @@ pub fn text(s: &mut TcpStream, status: u16, body: &str) -> io::Result<()> {
         format_args!(""),
         body.as_bytes(),
     )
+}
+
+/// Successful image responses may opt into HTTP validators and cache policy.
+pub fn image_response(
+    s: &mut dyn Socket,
+    status: u16,
+    mime: &str,
+    extra: &str,
+    body: &[u8],
+    cache: &str,
+    head: bool,
+) -> io::Result<()> {
+    super::metrics::status(status);
+    let mut writer = DeadlineWriter {
+        socket: s,
+        deadline: Instant::now() + Duration::from_secs(15),
+    };
+    write!(
+        writer,
+        "HTTP/1.1 {} {}\r\nContent-Type: {}\r\n",
+        status,
+        reason(status),
+        mime
+    )?;
+    if !matches!(status, 304 | 204) {
+        write!(writer, "Content-Length: {}\r\n", body.len())?;
+    }
+    write!(writer,"Connection: close\r\nCache-Control: {}\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{}\r\n",cache,extra)?;
+    if !head {
+        writer.write_all(body)?;
+    }
+    Ok(())
 }

@@ -161,10 +161,12 @@ pub struct Download {
     pub new_connections: u64,
     pub upstream_bytes: u64,
     pub transfers: u32,
+    pub last_modified: Option<String>,
 }
 pub(crate) struct Transfer {
     body: Vec<u8>,
     location: Option<String>,
+    last_modified: Option<String>,
     status: c_long,
     new_connections: u64,
     bytes: u64,
@@ -245,11 +247,21 @@ impl Client {
             return Err("Inconsistent transfer accounting".into());
         }
         let mut location = None;
+        let mut last_modified = None;
         for line in sink.headers.split(|b| *b == b'\n') {
             if line.starts_with(b"HTTP/") {
                 location = None;
+                last_modified = None;
             }
             if let Some(colon) = line.iter().position(|b| *b == b':') {
+                if line[..colon].eq_ignore_ascii_case(b"last-modified") {
+                    let value = std::str::from_utf8(&line[colon + 1..])
+                        .map_err(|_| "invalid upstream date")?
+                        .trim();
+                    if value.len() <= 64 && value.bytes().all(|b| (32..127).contains(&b)) {
+                        last_modified = Some(value.to_owned());
+                    }
+                }
                 if line[..colon].eq_ignore_ascii_case(b"location") {
                     let value = std::str::from_utf8(&line[colon + 1..])
                         .map_err(|_| "Invalid redirect")?
@@ -266,6 +278,7 @@ impl Client {
         Ok(Transfer {
             body: sink.body,
             location,
+            last_modified,
             status,
             new_connections: connects as u64,
             bytes: bytes as u64,
@@ -290,6 +303,7 @@ impl Client {
                     new_connections: connects,
                     upstream_bytes: bytes,
                     transfers: hop + 1,
+                    last_modified: r.last_modified,
                 });
             }
             if matches!(r.status, 301 | 302 | 303 | 307 | 308) && hop < 4 {

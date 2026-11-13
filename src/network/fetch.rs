@@ -3,7 +3,7 @@ use std::net::Ipv4Addr;
 mod policy;
 mod transport;
 pub use policy::initialize;
-pub use transport::LazyPool as Pool;
+pub use transport::{Download, LazyPool as Pool};
 #[derive(Debug)]
 pub struct Url {
     pub full: String,
@@ -104,3 +104,8 @@ pub(super) fn public(ip: Ipv4Addr) -> bool {
 #[cfg(test)]
 #[path = "fetch_regressions.rs"]
 mod security_regressions;
+
+#[cfg(feature = "cloud-sources")]
+pub(crate) fn allows_host(host: &str) -> bool {
+    policy::allows(host)
+}

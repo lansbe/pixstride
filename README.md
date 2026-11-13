@@ -1,6 +1,6 @@
 # pixstride
 
-A small image transformation server written in Rust. No image libraries, external Rust crates, or image cache. HTTPS uses the system libcurl. MIT licensed.
+A bounded image transformation server written in Rust, with a built-in codec engine and an optional libvips worker. No image cache. HTTPS uses the system libcurl. The project is MIT licensed; dependencies retain their own licenses.
 
 ## Run
 
@@ -24,7 +24,7 @@ http://localhost:8080/unsafe/rs:fit:128:128/plain/https://upload.wikimedia.org/w
 
 In unsigned mode, every request, including `/health`, must use `localhost`, `127.0.0.1` or `[::1]` in the `Host` header with the service port (`PIXSTRIDE_PORT`, default 8080). The port may be omitted only when the service port is 80. A Host check does not authenticate clients: loopback port publishing alone does not isolate other containers on the same network.
 
-`/health` is the health endpoint. Every image request reads its source again. Local files require an explicit read-only mount and `PIXSTRIDE_LOCAL_ROOT`; only flat regular filenames are accepted.
+`/health` is the health endpoint. Every image request reads its source again. Local files require an explicit read-only mount and `PIXSTRIDE_LOCAL_ROOT`; nested relative regular files are accepted in Unreleased builds; each path component is opened without following symlinks. Released 0.1.1 accepts flat names only.
 
 For deployment, omit `PIXSTRIDE_ALLOW_UNSAFE`, configure independent random hexadecimal `PIXSTRIDE_KEY` (at least 32 bytes) and `PIXSTRIDE_SALT` (at least 16 bytes), and keep an exact `PIXSTRIDE_ALLOWED_HOSTS` allowlist. Secrets also accept `_FILE` variables for mounted secret files. Place the service behind a TLS reverse proxy with rate limits. See [SECURITY.md](SECURITY.md).
 
@@ -37,17 +37,22 @@ docker exec pixstride pixstride sign '/rs:fit:320:240/plain/https://images.examp
 Replace the example host with your own allowed image host.
 
 <!-- generated:configuration:start -->
-Configuration names: `PIXSTRIDE_ALLOWED_HOSTS`, `PIXSTRIDE_ALLOW_UNSAFE`, `PIXSTRIDE_BIND`, `PIXSTRIDE_KEY`, `PIXSTRIDE_KEY_FILE`, `PIXSTRIDE_LOCAL_ROOT`, `PIXSTRIDE_PORT`, `PIXSTRIDE_SALT`, `PIXSTRIDE_SALT_FILE`, `PIXSTRIDE_WATERMARK_OPACITY`, `PIXSTRIDE_WATERMARK_PATH`. See [SECURITY.md](SECURITY.md) for deployment requirements.
+Configuration names: `PIXSTRIDE_ABS_ALLOWED_CONTAINERS`, `PIXSTRIDE_ABS_ENDPOINT`, `PIXSTRIDE_ABS_KEY`, `PIXSTRIDE_ABS_KEY_FILE`, `PIXSTRIDE_ABS_NAME`, `PIXSTRIDE_ABS_SAS`, `PIXSTRIDE_ABS_SAS_FILE`, `PIXSTRIDE_ALLOWED_HOSTS`, `PIXSTRIDE_ALLOW_ORIGIN`, `PIXSTRIDE_ALLOW_UNSAFE`, `PIXSTRIDE_AUTO_AVIF`, `PIXSTRIDE_AUTO_JXL`, `PIXSTRIDE_AUTO_WEBP`, `PIXSTRIDE_BIND`, `PIXSTRIDE_CONCURRENCY`, `PIXSTRIDE_ENGINE`, `PIXSTRIDE_GCS_ALLOWED_BUCKETS`, `PIXSTRIDE_GCS_CREDENTIAL`, `PIXSTRIDE_GCS_CREDENTIAL_FILE`, `PIXSTRIDE_GCS_CREDENTIAL_PATH`, `PIXSTRIDE_GCS_ENDPOINT`, `PIXSTRIDE_KEY`, `PIXSTRIDE_KEY_FILE`, `PIXSTRIDE_LAST_MODIFIED_BUSTER`, `PIXSTRIDE_LOCAL_ROOT`, `PIXSTRIDE_MAX_CLIENTS`, `PIXSTRIDE_MEMORY_BUDGET_MIB`, `PIXSTRIDE_OTLP_AUTHORIZATION`, `PIXSTRIDE_OTLP_AUTHORIZATION_FILE`, `PIXSTRIDE_OTLP_ENDPOINT`, `PIXSTRIDE_PNG_QUANTIZE`, `PIXSTRIDE_PORT`, `PIXSTRIDE_PRESETS`, `PIXSTRIDE_PRESETS_FILE`, `PIXSTRIDE_PROCESS_TIMEOUT`, `PIXSTRIDE_S3_ACCESS_KEY_ID`, `PIXSTRIDE_S3_ACCESS_KEY_ID_FILE`, `PIXSTRIDE_S3_ALLOWED_BUCKETS`, `PIXSTRIDE_S3_ENDPOINT`, `PIXSTRIDE_S3_REGION`, `PIXSTRIDE_S3_SECRET_ACCESS_KEY`, `PIXSTRIDE_S3_SECRET_ACCESS_KEY_FILE`, `PIXSTRIDE_S3_SESSION_TOKEN`, `PIXSTRIDE_S3_SESSION_TOKEN_FILE`, `PIXSTRIDE_SALT`, `PIXSTRIDE_SALT_FILE`, `PIXSTRIDE_SECRET`, `PIXSTRIDE_SECRET_FILE`, `PIXSTRIDE_SWIFT_ALLOWED_CONTAINERS`, `PIXSTRIDE_SWIFT_AUTH_URL`, `PIXSTRIDE_SWIFT_DOMAIN`, `PIXSTRIDE_SWIFT_ENDPOINT`, `PIXSTRIDE_SWIFT_PASSWORD`, `PIXSTRIDE_SWIFT_PASSWORD_FILE`, `PIXSTRIDE_SWIFT_PROJECT`, `PIXSTRIDE_SWIFT_TOKEN`, `PIXSTRIDE_SWIFT_TOKEN_FILE`, `PIXSTRIDE_SWIFT_USERNAME`, `PIXSTRIDE_SWIFT_USERNAME_FILE`, `PIXSTRIDE_TTL`, `PIXSTRIDE_UNIX_SOCKET`, `PIXSTRIDE_USE_ABS`, `PIXSTRIDE_USE_ETAG`, `PIXSTRIDE_USE_GCS`, `PIXSTRIDE_USE_LAST_MODIFIED`, `PIXSTRIDE_USE_S3`, `PIXSTRIDE_USE_SWIFT`, `PIXSTRIDE_WATERMARK_DATA`, `PIXSTRIDE_WATERMARK_OPACITY`, `PIXSTRIDE_WATERMARK_PATH`, `PIXSTRIDE_WATERMARK_URL`. See [SECURITY.md](SECURITY.md) for deployment requirements.
 <!-- generated:configuration:end -->
 
 ## Scope
 
-- Input: PNG, baseline/progressive JPEG, lossless WebP (VP8L), BMP/PPM, first-frame GIF, selected TIFF/ICO variants, and a restricted static SVG subset.
-- Output: PNG, baseline JPEG, lossless WebP, BMP, GIF, TIFF, ICO.
-- Resize, crop, gravity, quarter-turn rotation, flip, padding, background, blur, sharpen, pixelation, trimming, local watermarks, EXIF orientation and supported RGB ICC conversion.
-- Uses a subset of imgproxy URL syntax, for example `rs:fit:320:240`, `g:ce`, `q:80`. Unsupported options fail explicitly. This is **not a complete drop-in replacement for imgproxy**. Lossy WebP input, AVIF, HEIC, JPEG XL, animation and general SVG rendering are unsupported.
+The stable container example above runs the released 0.1.1 behavior. The following additions are **Unreleased** and require building this source; no new image or release has been published.
 
-Version 0.1.1 adds or tightens work limits for DEFLATE, JPEG, TIFF, SVG and filtered resizing. Some valid inputs can be rejected by these limits; see [SECURITY.md](SECURITY.md).
+- Built-in input/output codecs and bounded transforms remain available without libvips.
+- Optional native engine: PNG/JPEG/WebP/GIF/TIFF/AVIF/HEIC/JPEG XL, BMP/ICO bridges, broader static SVG, 16-bit gray/RGB/alpha, ICC/metadata handling and bounded GIF/WebP animation.
+- OSS URL options include presets, expiration, key rotation, DPR/zoom/minimum dimensions, canvas extension, smart/fractional crop, repeated watermarks, quality per format and bounded size targeting.
+- GET/HEAD, Bearer authorization, opt-in modern format negotiation, response validators, cache TTL bounded by URL expiration, UTF-8 filenames, CORS, Prometheus and optional OTLP/HTTP traces.
+- Optional S3/GCS/Azure/Swift readers; nested local files opened without following symlinks. Inbound IPv4/IPv6 TCP or a private Unix socket; bounded admission and optional native concurrency with explicit memory reservations.
+
+See [COMPATIBILITY.md](COMPATIBILITY.md) for the complete option/configuration matrix, build features, tests and differences. Pixstride is **not a complete drop-in replacement for imgproxy**. Native plugins and supported high-precision combinations vary by deployment; use `pixstride capabilities` and the native checks. HTTP/cloud fetches retain the public IPv4/exact-host policy. Native deadlines do not apply to the default in-process built-in engine.
+
+Version 0.1.1 introduced work limits that can reject expensive valid inputs. The new native path adds process/animation/output bounds; see [SECURITY.md](SECURITY.md).
 
 ## Benchmarks
 
@@ -74,8 +79,13 @@ Linux and macOS, ARM64 or x86-64; Rust 1.99 and libcurl development files.
 <!-- generated:build:end -->
 
 ```sh
+cargo fetch --locked
 cargo build --release --locked --offline
 ./target/release/pixstride --help
+# Optional engine, storage readers and OTLP exporter (libvips development files required):
+cargo build --release --all-features --locked --offline
+./target/release/pixstride capabilities
+PIXSTRIDE_ENGINE=native ./target/release/pixstride process input.png output.avif /unsafe/plain/local:///image@avif
 # Or build the container locally:
 docker build -t pixstride .
 ```

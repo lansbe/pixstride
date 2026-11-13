@@ -2,6 +2,17 @@
 !Dockerfile
 !Cargo.toml
 !Cargo.lock
+!build.rs
+!vendor/
+!vendor/rs-vips/
+!vendor/rs-vips/Cargo.toml
+!vendor/rs-vips/LICENSE
+!vendor/rs-vips/build.rs
+!vendor/rs-vips/src/
+!vendor/rs-vips/src/*.rs
+!scripts/
+!scripts/native_check.py
+!scripts/image_fixtures.py
 !src/
 !src/**/
 !src/**/*.rs
