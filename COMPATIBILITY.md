@@ -2,7 +2,7 @@
 
 The reference is **imgproxy OSS 4.0.21**, commit `302105ccd183d0038ef71aa11ab4ff3de5f0c989`. The immutable multi-platform image and platform manifests are recorded in [.github/checks/compatibility/reference.json](.github/checks/compatibility/reference.json). This is a compatibility target, not a claim of complete drop-in equivalence.
 
-Compatibility has three separate meanings: accepting a URL, producing the same HTTP/image behavior, and producing equivalent decoded pixels. The synthetic comparison checks dimensions, media type and pixels with per-operation tolerances in [cases.json](.github/checks/compatibility/cases.json). Metadata, alpha, 16-bit samples, animation timing, errors, resource limits and HTTP contracts have separate checks. Compressed bytes need not match. A passing small corpus does not establish equivalence for every image.
+Compatibility has three separate meanings: accepting a URL, producing the same HTTP/image behavior, and producing equivalent decoded pixels. The synthetic comparison checks dimensions, media type and pixels with per-operation tolerances in [cases.json](.github/checks/compatibility/cases.json). The corpus includes 50 decoded-image comparisons and seven HTTP error/limit comparisons (403 Bearer/signature, 404 invalid URL/options/expiry, 422 source pixel limit). Metadata, alpha, 16-bit samples, animation timing, resource limits and other HTTP contracts have separate checks. Compressed bytes need not match. A passing small corpus does not establish equivalence for every image.
 
 ## Architecture and dependencies
 

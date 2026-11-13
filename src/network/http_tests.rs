@@ -103,7 +103,7 @@ fn signed_request_behind_public_host_still_requires_valid_signature() {
         let response = exchange(signed_config(), |_| {
             format!("GET {target} HTTP/1.1\r\nHost: images.example.test:443\r\n\r\n")
         });
-        assert!(response.starts_with("HTTP/1.1 400 "), "{response}");
+        assert!(response.starts_with("HTTP/1.1 403 "), "{response}");
         assert!(response.ends_with("invalid signature"));
     }
 }
@@ -164,8 +164,8 @@ fn field<'a>(headers: &'a str, name: &str) -> &'a str {
 #[test]
 fn authorization_precedes_routes_and_metrics_remain_bounded() {
     for (token, status) in [
-        ("", "401"),
-        ("Bearer wrong", "401"),
+        ("", "403"),
+        ("Bearer wrong", "403"),
         ("Bearer example", "200"),
     ] {
         for route in ["/health", "/metrics"] {

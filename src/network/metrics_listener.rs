@@ -52,7 +52,7 @@ impl Listener {
                     if let Ok((valid, context)) = request {
                         let authorized = context.authorize(settings.secret.as_deref());
                         let (status, body) = if !authorized {
-                            (401, "Unauthorized".into())
+                            (403, "Forbidden".into())
                         } else if !valid {
                             (404, "Not Found".into())
                         } else {

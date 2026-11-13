@@ -56,7 +56,7 @@ def check(args):
                 status, headers, body = get('/unsafe/rs:fit:32:24/plain/local:///sample.svg@' + fmt)
                 assert status == 200 and headers['Content-Type'] == mime and len(body) > 20, fmt
                 assert headers['X-Image-Width'] == '32' and headers['X-Image-Height'] == '24'
-            for path, authorized, expected in [('/health', False, 401), ('/unsafe/plain/http://127.0.0.1/fixture@png', True, 502)]:
+            for path, authorized, expected in [('/health', False, 403), ('/unsafe/plain/http://127.0.0.1/fixture@png', True, 502)]:
                 try:
                     get(path, authorized)
                     raise AssertionError('Restricted request was accepted')

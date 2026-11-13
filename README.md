@@ -52,6 +52,8 @@ The stable container example above runs the released 0.1.1 behavior. The followi
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for the complete option/configuration matrix, build features, tests and differences. Pixstride is **not a complete drop-in replacement for imgproxy**. Native plugins and supported high-precision combinations vary by deployment; use `pixstride capabilities` and the native checks. HTTP/cloud fetches retain the public IPv4/exact-host policy. Native deadlines do not apply to the default in-process built-in engine.
 
+Bearer and signed URL failures now use OSS status 403; malformed or disabled processing URLs use 404. HTTP framing errors remain 400.
+
 Version 0.1.1 introduced work limits that can reject expensive valid inputs. The new native path adds process/animation/output bounds; see [SECURITY.md](SECURITY.md).
 
 ## Benchmarks

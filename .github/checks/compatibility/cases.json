@@ -352,5 +352,54 @@
     "format": "png",
     "max_error": 8,
     "mean_error": 1
+  },
+  {
+    "name": "invalid-signature",
+    "options": "",
+    "format": "png",
+    "status": 403,
+    "signature": "invalid"
+  },
+  {
+    "name": "unknown-option",
+    "options": "not_an_oss_option:1",
+    "format": "png",
+    "status": 404,
+    "signature": "unsafe"
+  },
+  {
+    "name": "invalid-dimension",
+    "options": "w:-1",
+    "format": "png",
+    "status": 404,
+    "signature": "unsafe"
+  },
+  {
+    "name": "unknown-preset",
+    "options": "pr:missing",
+    "format": "png",
+    "status": 404,
+    "signature": "unsafe"
+  },
+  {
+    "name": "expired-url",
+    "options": "exp:1",
+    "format": "png",
+    "status": 404,
+    "signature": "unsafe"
+  },
+  {
+    "name": "source-pixel-limit",
+    "options": "msr:0.000001",
+    "format": "png",
+    "status": 422,
+    "signature": "unsafe"
+  },
+  {
+    "name": "missing-bearer-secret",
+    "options": "",
+    "format": "png",
+    "status": 403,
+    "authorized": false
   }
 ]

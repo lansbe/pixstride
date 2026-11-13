@@ -97,7 +97,7 @@ def check(args):
             auth = {'Authorization': 'Bearer synthetic-secret'}
             target = '/unsafe/pr:thumb/plain/local:///nested/sample.png'
             with server(binary, root, settings) as (port, process, variables):
-                assert request(port, '/health')[0] == 401
+                assert request(port, '/health')[0] == 403
                 preflight=request(port,target,'OPTIONS',{'Origin':'https://example.test','Access-Control-Request-Method':'GET','Access-Control-Request-Headers':'authorization'})
                 assert preflight[0]==204 and preflight[2]==b'' and 'authorization' in preflight[1]['access-control-allow-headers'].lower()
                 assert request(port,target,'OPTIONS',{'Origin':'https://denied.test','Access-Control-Request-Method':'GET'})[0]==403
@@ -137,23 +137,23 @@ def check(args):
                           PIXSTRIDE_PATH_PREFIX='/images',PIXSTRIDE_HEALTH_CHECK_PATH='/ready',
                           PIXSTRIDE_PROMETHEUS_BIND=f'127.0.0.1:{metrics_port}',PIXSTRIDE_PROMETHEUS_NAMESPACE='synthetic')
             with server(binary,root,policy) as (port,_,variables):
-                assert request(port,'/images/ready')[0]==401
+                assert request(port,'/images/ready')[0]==403
                 assert request(port,'/images/ready',headers=auth)[0]==200
-                assert request(port,'/ready',headers=auth)[0]==400
+                assert request(port,'/ready',headers=auth)[0]==404
                 assert subprocess.run([str(binary),'healthcheck'],env=variables,capture_output=True,timeout=5).returncode==0
                 missing='/images/unsafe/rs:fit:10:10/plain/local:///missing.png@png'
                 image=request(port,missing,headers=auth)
                 assert image[0]==404 and image[1]['content-type']=='image/png'
                 assert image[1]['cache-control']=='public, max-age=30' and image[2].startswith(b'\x89PNG')
-                assert request(port,missing)[0]==401, 'Fallback bypassed authorization'
-                assert request(port,'/images/invalid/plain/local:///missing.png@png',headers=auth)[0]==400, 'Fallback bypassed URL authentication'
+                assert request(port,missing)[0]==403, 'Fallback bypassed authorization'
+                assert request(port,'/images/invalid/plain/local:///missing.png@png',headers=auth)[0]==403, 'Fallback bypassed URL authentication'
                 hinted=request(port,'/images/unsafe/plain/local:///nested/sample.png@png',headers={**auth,'Accept':'image/webp','Sec-CH-DPR':'2','Sec-CH-Width':'16'})
                 assert hinted[0]==200 and hinted[1]['content-type']=='image/webp'
                 assert hinted[1]['x-image-width']=='16' and hinted[1]['content-dpr']=='2'
                 assert 'Sec-CH-DPR' in hinted[1]['vary'] and 'Accept' in hinted[1]['vary']
                 explicit=request(port,'/images/unsafe/w:12/dpr:1/plain/local:///nested/sample.png@png',headers={**auth,'Sec-CH-DPR':'2','Sec-CH-Width':'16'})
                 assert explicit[1]['x-image-width']=='12' and explicit[1]['content-dpr']=='1', 'Hints overrode explicit URL options'
-                assert request(metrics_port,'/metrics')[0]==401
+                assert request(metrics_port,'/metrics')[0]==403
                 metric=request(metrics_port,'/metrics',headers=auth)
                 assert metric[0]==200 and b'synthetic_requests_total' in metric[2]
                 assert request(metrics_port,'/health',headers=auth)[0]==404

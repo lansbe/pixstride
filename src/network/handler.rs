@@ -91,10 +91,10 @@ pub(super) fn handle(
     if !context.authorize(settings.secret.as_deref()) {
         let _ = protocol::image_response(
             socket,
-            401,
+            403,
             "text/plain",
             "WWW-Authenticate: Bearer\r\n",
-            b"Unauthorized",
+            b"Forbidden",
             "no-store",
             context.head,
         );
@@ -135,7 +135,11 @@ pub(super) fn handle(
             let _ = failure(
                 socket,
                 context.head,
-                if e == "expired URL" { 404 } else { 400 },
+                if matches!(e, "invalid signature" | "URL security options are disabled") {
+                    403
+                } else {
+                    404
+                },
                 e,
             );
             return;

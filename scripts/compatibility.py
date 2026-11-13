@@ -37,8 +37,8 @@ def free_port():
         return s.getsockname()[1]
 
 
-def get(port, path):
-    request = urllib.request.Request(f'http://127.0.0.1:{port}{path}', headers={'Host': f'localhost:{port}'})
+def get(port, path, authorized=True):
+    request = urllib.request.Request(f'http://127.0.0.1:{port}{path}', headers={'Host': f'localhost:{port}', **({'Authorization':'Bearer synthetic-secret'} if authorized else {})})
     try:
         with urllib.request.urlopen(request, timeout=30) as r:
             return r.status, r.headers.get('Content-Type', ''), r.read()
@@ -59,6 +59,7 @@ def start(binary, directory, prefix, log):
     else:
         env.update(IMGPROXY_BIND=f'127.0.0.1:{port}', IMGPROXY_LOCAL_FILESYSTEM_ROOT=str(directory),
                    IMGPROXY_ALLOWED_SOURCES='local://', IMGPROXY_LOG_LEVEL='error',IMGPROXY_ALLOW_SECURITY_OPTIONS='true',IMGPROXY_WATERMARK_PATH=str(directory/'watermark.png'))
+    env.update({prefix+'_KEY':'42'*32,prefix+'_SALT':'37'*16,prefix+'_TRUSTED_SIGNATURES':'unsafe',prefix+'_SECRET':'synthetic-secret'})
     process = subprocess.Popen([str(binary)], env=env, stdout=log, stderr=log)
     try:
         deadline = time.monotonic() + 15
@@ -114,8 +115,8 @@ def compare(args):
                 ref, ref_port = start(upstream, directory, 'IMGPROXY', log)
                 processes.append(ref)
                 for case in cases:
-                    path = '/unsafe/' + (case['options'] + '/' if case['options'] else '') + 'plain/local:///'+case.get('source','fixture.png')+'@' + case['format']
-                    actual, expected = get(port, path), get(ref_port, path)
+                    path = '/' + case.get('signature','unsafe') + '/' + (case['options'] + '/' if case['options'] else '') + 'plain/local:///'+case.get('source','fixture.png')+'@' + case['format']
+                    actual, expected = get(port, path,case.get('authorized',True)), get(ref_port, path,case.get('authorized',True))
                     entry = {'name': case['name'], 'status': actual[0], 'reference_status': expected[0], 'pass': False}
                     if actual[0] != 200:
                         entry['error'] = actual[2].decode('utf-8', errors='replace')[:256]
@@ -129,6 +130,8 @@ def compare(args):
                             entry.update(max_error=maximum, mean_error=mean,
                                          **{'pass': actual[1].split(';')[0] == expected[1].split(';')[0]
                                             and maximum <= case['max_error'] and mean <= case['mean_error']})
+                    if case.get('status',200) != 200:
+                        entry['pass'] = actual[0] == expected[0] == case['status']
                     report['cases'].append(entry)
             finally:
                 for process in processes:
