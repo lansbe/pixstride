@@ -144,6 +144,10 @@ def check(args):
         while limited_palette[at+4:at+8] != b'PLTE':
             at += 12 + int.from_bytes(limited_palette[at:at+4],'big')
         assert int.from_bytes(limited_palette[at:at+4],'big') <= 48, 'PNG palette color limit ignored'
+        interlaced_palette = run(binary,root,source,env={'PIXSTRIDE_PNG_QUANTIZE':'1','PIXSTRIDE_PNG_QUANTIZATION_COLORS':'16','PIXSTRIDE_PNG_INTERLACED':'1'})
+        assert interlaced_palette[28] == 1
+        intermediate.write_bytes(interlaced_palette)
+        assert read_png(run(binary,root,intermediate))[0][:2] == (64,32), 'Interlaced palette cannot be decoded'
         configured = run(binary,root,source,output='webp',env={'PIXSTRIDE_QUALITY':'20','PIXSTRIDE_WEBP_PRESET':'picture','PIXSTRIDE_WEBP_EFFORT':'2'})
         assert configured.startswith(b'RIFF')
         assert run(binary,root,source,options='q:80',output='jpg',env={'PIXSTRIDE_QUALITY':'20'}) == run(binary,root,source,options='q:80',output='jpg'), 'URL did not override configured quality'
@@ -156,10 +160,19 @@ def check(args):
             svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">'+content+'</svg>')
             raster=read_png(run(binary,root,svg))
             assert raster[0][:2]==(32,24) and any(raster[1]), 'Static SVG feature rendered empty'
-        for content in ('<script/>', '<image href="file:///etc/passwd"/>', '<style>@import "https://example.invalid/x.css";</style>', '<style>rect{}<!--split-->@import "https://example.invalid/x.css";</style>'):
+        for content in ('<?xml-stylesheet href="https://example.invalid/x.css"?>', '<script/>', '<image href="file:///etc/passwd"/>', '<style>@import "https://example.invalid/x.css";</style>', '<style>rect{}<!--split-->@import "https://example.invalid/x.css";</style>'):
             svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">' + content + '</svg>')
             run(binary, root, svg, success=False)
-        passed.append('static-svg-boundary')
+        svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24" onload="bad()"><script>bad()</script><image href="https://example.invalid/a.png"/><rect width="32" height="24" fill="blue"/></svg>')
+        sanitized=run(binary,root,svg,output='svg',env={'PIXSTRIDE_SANITIZE_SVG':'1'})
+        assert all(value not in sanitized for value in (b'onload',b'script',b'https://example.invalid')), 'SVG sanitization retained active content'
+        assert b'rect' in sanitized
+        assert read_png(run(binary,root,svg,env={'PIXSTRIDE_SANITIZE_SVG':'1'}))[0][:2]==(32,24)
+        embedded=base64.b64encode(logo.read_bytes()).decode()
+        svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><image width="32" height="24" href="data:image/png;base64,'+embedded+'"/></svg>')
+        embedded_png=read_png(run(binary,root,svg))
+        assert embedded_png[0][:2]==(32,24) and 255 in embedded_png[1], 'Embedded SVG raster was not rendered'
+        passed.append('static-svg-sanitization-and-boundary')
         source.write_bytes(png(32, 24))
         run(binary, root, source, options='mb:1', output='jpg', success=False)
         run(binary, root, source, options='dpr:100000/el:1', success=False)

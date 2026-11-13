@@ -105,6 +105,7 @@ pub fn serve(ip: std::net::IpAddr, port: u16, path: Option<&std::path::Path>) ->
     let engine = Arc::new(super::engine::Engine::new(concurrency));
     let admission = Arc::new(AtomicUsize::new(0));
     super::lifecycle::initialize()?;
+    let metrics_listener = super::metrics_listener::Listener::start(Arc::clone(&settings))?;
     listener
         .set_nonblocking(true)
         .map_err(|_| "cannot configure listener")?;
@@ -154,5 +155,6 @@ pub fn serve(ip: std::net::IpAddr, port: u16, path: Option<&std::path::Path>) ->
     for worker in handles {
         let _ = worker.join();
     }
+    metrics_listener.finish();
     Ok(())
 }

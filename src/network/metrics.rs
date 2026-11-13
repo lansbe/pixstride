@@ -21,6 +21,7 @@ const LIMITS: [u64; 8] = [
 thread_local! {static RESPONSE:std::cell::Cell<u16>=const{std::cell::Cell::new(200)};}
 pub(crate) struct Guard(Instant, u128);
 pub fn begin() -> Guard {
+    super::telemetry::reset();
     ACTIVE.fetch_add(1, Ordering::Relaxed);
     RESPONSE.set(200);
     Guard(

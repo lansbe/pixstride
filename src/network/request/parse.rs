@@ -3,6 +3,13 @@ use super::*;
 /// query is excluded from the signature as in imgproxy; an embedded plain URL
 /// query must be escaped as `%3F` in the source path.
 pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
+    parse_with_hints(target, config, (None, None))
+}
+pub(crate) fn parse_with_hints(
+    target: &str,
+    config: &Config,
+    hints: (Option<usize>, Option<f64>),
+) -> Result<Request, Error> {
     if target.len() > MAX_TARGET
         || !target.starts_with('/')
         || target.bytes().any(|b| b <= 32 || b >= 127)
@@ -32,6 +39,14 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
         ..Default::default()
     };
     let mut options = TransformOptions::default();
+    if let Some(dpr) = hints.1 {
+        extra.dpr = dpr;
+        extra.native = true;
+    }
+    if let Some(width) = hints.0 {
+        options.width = (width as f64 / extra.dpr).round().max(1.0) as usize;
+        extra.native = true;
+    }
     let mut fmt = None;
     let mut quality = None;
     let mut auto_rotate = true;
@@ -42,10 +57,26 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
     let mut explicit_crop: Option<(usize, usize, Option<Gravity>)> = None;
     let mut raw = normalized.split('/').peekable();
     let mut requested = Vec::new();
-    while raw.peek().is_some_and(|part| part.contains(':')) {
-        requested.push(raw.next().unwrap().to_owned());
+    if config.policy.only_presets {
+        let names = raw.next().ok_or("preset selection required")?;
+        requested.push(format!(
+            "pr:{}",
+            names.replace(&config.policy.separator, ":")
+        ));
     }
-    let remaining = raw.collect::<Vec<_>>();
+    if !config.policy.only_presets {
+        while raw
+            .peek()
+            .is_some_and(|part| part.contains(&config.policy.separator))
+        {
+            requested.push(raw.next().unwrap().replace(&config.policy.separator, ":"));
+        }
+    }
+    config.policy.options(&requested)?;
+    let mut remaining = raw.collect::<Vec<_>>();
+    if config.policy.filename_suffix && remaining.first() != Some(&"plain") && remaining.len() > 1 {
+        remaining.pop();
+    }
     let expanded = config
         .defaults
         .iter()
@@ -389,6 +420,7 @@ pub(crate) fn parse(target: &str, config: &Config) -> Result<Request, Error> {
         }
     }
     let (source, extension) = source_and_extension(&remaining)?;
+    let source = config.policy.source(source)?;
     if let Some(extension) = extension {
         fmt = Some(extension);
     }

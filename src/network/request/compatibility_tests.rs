@@ -109,3 +109,42 @@ fn truncated_rotated_signatures_and_explicit_trust_do_not_change_path_binding() 
         assert!(parse(&format!("/other{path}"), &config).is_err());
     }
 }
+
+#[test]
+fn hints_are_defaults_and_explicit_url_options_win() {
+    let c = Config::unsafe_local();
+    let r = parse_with_hints("/unsafe/plain/local:///x@png", &c, (Some(24), Some(2.0))).unwrap();
+    assert_eq!((r.options.width, r.extra.dpr), (12, 2.0));
+    let r = parse_with_hints(
+        "/unsafe/w:8/dpr:1/plain/local:///x@png",
+        &c,
+        (Some(24), Some(2.0)),
+    )
+    .unwrap();
+    assert_eq!((r.options.width, r.extra.dpr), (8, 1.0));
+}
+#[test]
+fn preset_only_paths_and_url_policies_run_after_signature_validation() {
+    let mut c = Config::unsafe_local().with_presets("thumb=w:8").unwrap();
+    c.policy.only_presets = true;
+    assert_eq!(
+        parse("/unsafe/thumb/plain/local:///x@png", &c)
+            .unwrap()
+            .options
+            .width,
+        8
+    );
+    assert!(parse("/unsafe/w:8/plain/local:///x@png", &c).is_err());
+    c.policy.only_presets = false;
+    c.policy.separator = ",".into();
+    assert_eq!(
+        parse("/unsafe/w,12/plain/local:///x@png", &c)
+            .unwrap()
+            .options
+            .width,
+        12
+    );
+    c.policy.separator = ":".into();
+    c.policy.allow_security = false;
+    assert!(parse("/unsafe/maf:2/plain/local:///x@png", &c).is_err());
+}

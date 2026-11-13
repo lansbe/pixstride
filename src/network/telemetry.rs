@@ -1,22 +1,31 @@
-//! Opt-in OTLP/HTTP JSON spans, bounded queue and no request identifiers.
+//! Opt-in bounded telemetry and vendor notices without request/source identifiers.
 use crate::Error;
+#[cfg(feature = "telemetry")]
+mod client;
+#[cfg(feature = "telemetry")]
+mod cloudwatch;
+#[cfg(feature = "telemetry")]
+mod notices;
+#[cfg(feature = "telemetry")]
+mod payload;
 #[cfg(feature = "telemetry")]
 mod exporter {
     use super::*;
-    use std::sync::{
-        atomic::{AtomicBool, AtomicU64, Ordering},
-        mpsc::{self, SyncSender},
-        Arc, OnceLock,
+    use payload::{Event, Parent};
+    use std::{
+        cell::RefCell,
+        sync::{
+            atomic::{AtomicBool, AtomicU64, Ordering},
+            mpsc::{self, SyncSender},
+            Arc, OnceLock,
+        },
+        time::Duration,
     };
-    use std::time::{Duration, SystemTime, UNIX_EPOCH};
-    struct Event {
-        start: u128,
-        duration: u64,
-        status: u16,
-    }
     static EVENTS: OnceLock<SyncSender<Event>> = OnceLock::new();
+    static PROPAGATE: AtomicBool = AtomicBool::new(false);
     static DROPPED: AtomicU64 = AtomicU64::new(0);
     static FAILED: AtomicU64 = AtomicU64::new(0);
+    thread_local! {static PARENT:RefCell<Option<Parent>>=const{RefCell::new(None)};}
     pub(crate) struct Exporter {
         stop: Arc<AtomicBool>,
         worker: Option<std::thread::JoinHandle<()>>,
@@ -29,56 +38,104 @@ mod exporter {
             }
         }
     }
-    pub fn initialize() -> Result<Option<Exporter>, Error> {
-        let Some(endpoint) = std::env::var("PIXSTRIDE_OTLP_ENDPOINT").ok() else {
-            return Ok(None);
-        };
-        let url = reqwest::Url::parse(&endpoint).map_err(|_| "invalid OTLP endpoint")?;
-        if !matches!(url.scheme(), "http" | "https")
-            || !url.username().is_empty()
-            || url.password().is_some()
-            || url.fragment().is_some()
-        {
-            return Err("invalid OTLP endpoint");
+    fn flag(name: &str) -> Result<bool, Error> {
+        match std::env::var(name).as_deref() {
+            Ok("1" | "true") => Ok(true),
+            Ok("0" | "false") | Err(std::env::VarError::NotPresent) => Ok(false),
+            _ => Err("invalid telemetry flag"),
         }
-        let authorization = crate::config::secret("PIXSTRIDE_OTLP_AUTHORIZATION")?
-            .map(|s| reqwest::header::HeaderValue::from_str(&s))
-            .transpose()
-            .map_err(|_| "invalid OTLP authorization")?;
+    }
+    pub fn initialize() -> Result<Option<Exporter>, Error> {
+        let endpoints = client::endpoints()?;
+        let notices = notices::destinations()?;
+        let cloudwatch = cloudwatch::CloudWatch::from_env()?;
+        if endpoints.is_empty() && notices.is_empty() && cloudwatch.is_none() {
+            return Ok(None);
+        }
+        PROPAGATE.store(
+            flag("PIXSTRIDE_OTLP_PROPAGATE_EXTERNAL")?,
+            Ordering::Relaxed,
+        );
+        let service =
+            std::env::var("PIXSTRIDE_NEW_RELIC_APP_NAME").unwrap_or_else(|_| "pixstride".into());
+        if service.is_empty() || service.len() > 128 || service.chars().any(char::is_control) {
+            return Err("invalid telemetry service name");
+        }
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()
             .map_err(|_| "telemetry runtime unavailable")?;
         let client = {
             let _enter = runtime.enter();
-            reqwest::Client::builder()
-                .no_proxy()
-                .redirect(reqwest::redirect::Policy::none())
-                .timeout(Duration::from_secs(1))
-                .build()
-                .map_err(|_| "telemetry transport unavailable")?
+            client::client()?
         };
-        let seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap_or_default()
-            .as_nanos();
+        let mut random = [0u8; 16];
+        // SAFETY: getentropy writes at most the 16 bytes in this live array.
+        // Both supported Unix platforms expose this libc API (maximum 256 bytes).
+        if unsafe { libc::getentropy(random.as_mut_ptr().cast(), random.len()) } != 0 {
+            return Err("telemetry entropy unavailable");
+        }
+        let seed = u128::from_be_bytes(random);
         let (sender, receiver) = mpsc::sync_channel::<Event>(64);
         let stop = Arc::new(AtomicBool::new(false));
         let done = stop.clone();
-        let worker=std::thread::Builder::new().name("otlp-exporter".into()).spawn(move||{
-            let mut sequence=0u64;
-            while !done.load(Ordering::Acquire) {
-                let event=match receiver.recv_timeout(Duration::from_millis(100)){Ok(e)=>e,Err(mpsc::RecvTimeoutError::Timeout)=>continue,Err(_)=>break};
-                sequence=sequence.wrapping_add(1);
-                // Identifiers are generated locally, never derived from a URL,
-                // source, user header, authorization token or signing secret.
-                let trace=format!("{:032x}",seed.wrapping_add(u128::from(sequence)));
-                let span=format!("{sequence:016x}");
-                let payload=serde_json::json!({"resourceSpans":[{"resource":{"attributes":[{"key":"service.name","value":{"stringValue":"pixstride"}},{"key":"service.version","value":{"stringValue":env!("CARGO_PKG_VERSION")}}]},"scopeSpans":[{"scope":{"name":"pixstride.http"},"spans":[{"traceId":trace,"spanId":span,"name":"image.request","kind":2,"startTimeUnixNano":event.start.to_string(),"endTimeUnixNano":(event.start+u128::from(event.duration)).to_string(),"attributes":[{"key":"http.response.status_code","value":{"intValue":event.status.to_string()}}],"status":{"code":if event.status>=500{2}else{1}}}]}]}]});
-                let success=runtime.block_on(async {let mut request=client.post(url.clone()).header("Content-Type","application/json").body(payload.to_string());if let Some(auth)=&authorization{request=request.header(reqwest::header::AUTHORIZATION,auth.clone());}request.send().await.is_ok_and(|r|r.status().is_success())});
-                if !success{FAILED.fetch_add(1,Ordering::Relaxed);}
-            }
-        }).map_err(|_|"cannot start telemetry exporter")?;
+        let worker = std::thread::Builder::new()
+            .name("telemetry-exporter".into())
+            .spawn(move || {
+                let mut sequence = 0u64;
+                while !done.load(Ordering::Acquire) {
+                    let event = match receiver.recv_timeout(Duration::from_millis(100)) {
+                        Ok(e) => e,
+                        Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                        Err(_) => break,
+                    };
+                    sequence = sequence.wrapping_add(1);
+                    runtime.block_on(async {
+                        for endpoint in &endpoints {
+                            if let Some(payload) =
+                                payload::build(endpoint.kind, &event, seed, sequence, &service)
+                            {
+                                let success = client
+                                    .post(endpoint.url.clone())
+                                    .headers(endpoint.headers.clone())
+                                    .header("content-type", "application/json")
+                                    .body(payload.to_string())
+                                    .send()
+                                    .await
+                                    .is_ok_and(|r| r.status().is_success());
+                                if !success {
+                                    FAILED.fetch_add(1, Ordering::Relaxed);
+                                }
+                            }
+                        }
+                        if let Some(cloudwatch) = &cloudwatch {
+                            let success = match cloudwatch.request(&client, &event) {
+                                Ok(request) => {
+                                    request.send().await.is_ok_and(|r| r.status().is_success())
+                                }
+                                Err(_) => false,
+                            };
+                            if !success {
+                                FAILED.fetch_add(1, Ordering::Relaxed);
+                            }
+                        }
+                        if event.status >= 500 {
+                            let id = format!("{:032x}", seed.wrapping_add(u128::from(sequence)));
+                            for notice in &notices {
+                                if !notice
+                                    .request(&client, &event, &id)
+                                    .send()
+                                    .await
+                                    .is_ok_and(|r| r.status().is_success())
+                                {
+                                    FAILED.fetch_add(1, Ordering::Relaxed);
+                                }
+                            }
+                        }
+                    });
+                }
+            })
+            .map_err(|_| "cannot start telemetry exporter")?;
         EVENTS
             .set(sender)
             .map_err(|_| "telemetry already initialized")?;
@@ -87,13 +144,23 @@ mod exporter {
             worker: Some(worker),
         }))
     }
+    pub fn reset() {
+        PARENT.with(|p| *p.borrow_mut() = None);
+    }
+    pub fn parent(value: &str) {
+        if PROPAGATE.load(Ordering::Relaxed) {
+            PARENT.with(|p| *p.borrow_mut() = payload::parent(value));
+        }
+    }
     pub fn record(start: u128, duration: u64, status: u16) {
         if let Some(sender) = EVENTS.get() {
+            let parent = PARENT.with(|p| p.borrow().clone());
             if sender
                 .try_send(Event {
                     start,
                     duration,
                     status,
+                    parent,
                 })
                 .is_err()
             {
@@ -114,12 +181,28 @@ pub(crate) use exporter::*;
 pub(crate) struct Exporter;
 #[cfg(not(feature = "telemetry"))]
 pub fn initialize() -> Result<Option<Exporter>, Error> {
-    if std::env::var_os("PIXSTRIDE_OTLP_ENDPOINT").is_some() {
-        Err("OTLP requires the telemetry feature")
-    } else {
-        Ok(None)
+    for name in [
+        "PIXSTRIDE_OTLP_ENDPOINT",
+        "PIXSTRIDE_OTLP_METRICS_ENDPOINT",
+        "PIXSTRIDE_OTLP_LOGS_ENDPOINT",
+        "PIXSTRIDE_SENTRY_DSN",
+        "PIXSTRIDE_HONEYBADGER_KEY",
+        "PIXSTRIDE_AIRBRAKE_PROJECT_KEY",
+        "PIXSTRIDE_BUGSNAG_KEY",
+        "PIXSTRIDE_NEW_RELIC_KEY",
+        "PIXSTRIDE_DATADOG_KEY",
+        "PIXSTRIDE_CLOUD_WATCH_SERVICE_NAME",
+    ] {
+        if crate::config::secret(name)?.is_some() {
+            return Err("telemetry configuration requires telemetry feature");
+        }
     }
+    Ok(None)
 }
+#[cfg(not(feature = "telemetry"))]
+pub fn reset() {}
+#[cfg(not(feature = "telemetry"))]
+pub fn parent(_: &str) {}
 #[cfg(not(feature = "telemetry"))]
 pub fn record(_: u128, _: u64, _: u16) {}
 #[cfg(not(feature = "telemetry"))]

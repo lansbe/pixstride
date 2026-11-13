@@ -50,7 +50,6 @@ impl Config {
     /// Read supported imgproxy-style local configuration once at startup.
     /// Unset or empty watermark path disables the configured asset.
     pub fn from_env() -> Result<Self, Error> {
-        let path = std::env::var_os("PIXSTRIDE_WATERMARK_PATH");
         let opacity = match std::env::var_os("PIXSTRIDE_WATERMARK_OPACITY") {
             None => 1.0,
             Some(value) => value
@@ -59,13 +58,32 @@ impl Config {
                 .parse::<f64>()
                 .map_err(|_| "invalid watermark base opacity")?,
         };
+        Self::from_variables(
+            [
+                "PIXSTRIDE_WATERMARK_PATH",
+                "PIXSTRIDE_WATERMARK_URL",
+                "PIXSTRIDE_WATERMARK_DATA",
+            ],
+            opacity,
+        )
+    }
+
+    pub fn fallback_from_env() -> Result<Self, Error> {
+        Self::from_variables(
+            [
+                "PIXSTRIDE_FALLBACK_IMAGE_PATH",
+                "PIXSTRIDE_FALLBACK_IMAGE_URL",
+                "PIXSTRIDE_FALLBACK_IMAGE_DATA",
+            ],
+            1.0,
+        )
+    }
+
+    fn from_variables(names: [&str; 3], opacity: f64) -> Result<Self, Error> {
+        let path = std::env::var_os(names[0]);
         let mut config = Self::from_path(path.as_deref().map(OsStrExt::as_bytes), opacity)?;
-        let url = std::env::var("PIXSTRIDE_WATERMARK_URL")
-            .ok()
-            .filter(|s| !s.is_empty());
-        let data = std::env::var("PIXSTRIDE_WATERMARK_DATA")
-            .ok()
-            .filter(|s| !s.is_empty());
+        let url = std::env::var(names[1]).ok().filter(|s| !s.is_empty());
+        let data = std::env::var(names[2]).ok().filter(|s| !s.is_empty());
         if usize::from(config.path.is_some())
             + usize::from(url.is_some())
             + usize::from(data.is_some())

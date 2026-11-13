@@ -269,6 +269,5 @@ pub(crate) fn source_and_extension(
             suffix.filter(|s| !s.is_empty()).map(format).transpose()?,
         )
     };
-    validate_source(&source)?;
     Ok((source, extension))
 }

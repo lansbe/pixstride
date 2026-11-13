@@ -41,11 +41,24 @@ pub(super) fn handle(
         port,
         config.requires_local_host(),
         |target, context| {
+            let target = target.strip_prefix(&settings.path_prefix).unwrap_or("");
             let route = match target {
-                "/health" => Route::Health,
+                path if path == settings.health_path
+                    || path == "/health" && settings.health_path.is_empty() =>
+                {
+                    Route::Health
+                }
                 "/favicon.ico" => Route::Favicon,
                 "/metrics" => Route::Metrics,
-                _ => Route::Image(request::parse(target, config)),
+                _ => Route::Image(request::parse_with_hints(
+                    target,
+                    config,
+                    if settings.client_hints {
+                        context.hint_defaults()
+                    } else {
+                        (None, None)
+                    },
+                )),
             };
             (route, context)
         },
@@ -87,6 +100,7 @@ pub(super) fn handle(
         );
         return;
     }
+    super::telemetry::parent(&context.traceparent);
     let mut request = match route {
         Route::Health => {
             let _ = protocol::image_response(
@@ -127,7 +141,9 @@ pub(super) fn handle(
             return;
         }
     };
-    let vary = context.negotiate(&mut request, &settings.auto_formats);
+    let vary = context.negotiate(&mut request, &settings.auto_formats)
+        | context.enforce(&mut request, &settings.forced_formats);
+    let mut fallback_status = None;
     if request
         .watermark
         .as_ref()
@@ -152,8 +168,13 @@ pub(super) fn handle(
             {
                 Ok((b, modified)) => (Source::Local(b), 0, 0, 0, modified),
                 Err(e) => {
-                    let _ = failure(socket, context.head, 422, &e);
-                    return;
+                    if let Some((loaded, code)) = fallback(settings, 422) {
+                        fallback_status = Some(code);
+                        loaded
+                    } else {
+                        let _ = failure(socket, context.head, 422, &e);
+                        return;
+                    }
                 }
             }
         } else {
@@ -182,13 +203,18 @@ pub(super) fn handle(
                         .and_then(|s| httpdate::parse_http_date(&s).ok()),
                 ),
                 Err(_) => {
-                    let _ = failure(
-                        socket,
-                        context.head,
-                        502,
-                        "Unable to retrieve the complete public HTTP(S) source",
-                    );
-                    return;
+                    if let Some((loaded, code)) = fallback(settings, 502) {
+                        fallback_status = Some(code);
+                        loaded
+                    } else {
+                        let _ = failure(
+                            socket,
+                            context.head,
+                            502,
+                            "Unable to retrieve the complete public HTTP(S) source",
+                        );
+                        return;
+                    }
                 }
             }
         };
@@ -227,22 +253,39 @@ pub(super) fn handle(
                     "X-Upstream-New-Connections: {new_connections}\r\n"
                 ));
             }
+            let mut varies = Vec::new();
             if vary {
-                extra.push_str("Vary: Accept\r\n");
+                varies.push("Accept");
+            }
+            if settings.client_hints {
+                varies.extend(["Sec-CH-DPR", "DPR", "Sec-CH-Width", "Width"]);
+                extra.push_str(&format!("Content-DPR: {}\r\n", request.extra.dpr));
+            }
+            if !varies.is_empty() {
+                extra.push_str(&format!("Vary: {}\r\n", varies.join(", ")));
+            }
+            if settings.canonical
+                && (request.source.starts_with("http://") || request.source.starts_with("https://"))
+            {
+                extra.push_str(&format!(
+                    "Link: <{}>; rel=\"canonical\"\r\n",
+                    request.source.replace(['<', '>', '\r', '\n'], "")
+                ));
             }
             if let Some(origin) = &settings.origin {
                 extra.push_str(&format!("Access-Control-Allow-Origin: {origin}\r\n"));
             }
             extra.push_str(&super::headers::disposition(&request, out.mime));
-            let mut status = 200;
+            let mut status = fallback_status.unwrap_or(200);
             if settings.etag {
-                let etag = super::headers::etag(out.body.as_slice());
+                let etag =
+                    super::headers::etag_with_buster(out.body.as_slice(), &settings.etag_buster);
                 extra.push_str(&format!("ETag: {etag}\r\n"));
-                if super::headers::matches_etag(&context.if_none_match, &etag) {
+                if status == 200 && super::headers::matches_etag(&context.if_none_match, &etag) {
                     status = 304;
                 }
             }
-            if settings.last_modified {
+            if settings.last_modified && fallback_status.is_none() {
                 if let Some(modified) = modified.filter(|t| {
                     t.duration_since(std::time::UNIX_EPOCH)
                         .is_ok_and(|d| d.as_secs() <= 253_402_300_799)
@@ -272,7 +315,11 @@ pub(super) fn handle(
                     }
                 }
             }
-            let mut ttl = settings.ttl;
+            let mut ttl = if fallback_status.is_some() {
+                settings.fallback_ttl
+            } else {
+                settings.ttl
+            };
             if let Some(expiry) = request.extra.expires {
                 let now = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
@@ -304,6 +351,19 @@ pub(super) fn handle(
             let _ = failure(socket, context.head, 422, e);
         }
     }
+}
+
+type Loaded = (Source, u32, u64, u64, Option<std::time::SystemTime>);
+fn fallback(settings: &super::settings::Settings, error: u16) -> Option<(Loaded, u16)> {
+    let data = settings.fallback.as_ref()?.encoded().ok()?;
+    Some((
+        (Source::Remote(data), 0, 0, 0, None),
+        if settings.fallback_code == 0 {
+            error
+        } else {
+            settings.fallback_code
+        },
+    ))
 }
 
 fn failure(

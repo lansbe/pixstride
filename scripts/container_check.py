@@ -52,7 +52,7 @@ def check(args):
                     time.sleep(0.1)
             else:
                 raise AssertionError('Container readiness failed')
-            for fmt, mime in [('png', 'image/png'), ('avif', 'image/avif'), ('heic', 'image/heic'), ('jxl', 'image/jxl')]:
+            for fmt, mime in [('png', 'image/png'), ('avif', 'image/avif'), ('heic', 'image/heif'), ('jxl', 'image/jxl')]:
                 status, headers, body = get('/unsafe/rs:fit:32:24/plain/local:///sample.svg@' + fmt)
                 assert status == 200 and headers['Content-Type'] == mime and len(body) > 20, fmt
                 assert headers['X-Image-Width'] == '32' and headers['X-Image-Height'] == '24'

@@ -10,6 +10,15 @@ pub(crate) struct Settings {
     pub origin: Option<String>,
     pub last_modified: bool,
     pub modified_buster: u64,
+    pub fallback: Option<crate::watermark::Config>,
+    pub fallback_code: u16,
+    pub fallback_ttl: u64,
+    pub forced_formats: Vec<OutputFormat>,
+    pub client_hints: bool,
+    pub path_prefix: String,
+    pub health_path: String,
+    pub canonical: bool,
+    pub etag_buster: String,
 }
 
 impl Settings {
@@ -76,6 +85,49 @@ impl Settings {
         if !auto_formats.is_empty() && !cfg!(feature = "native-codecs") {
             return Err("automatic modern formats require native-codecs");
         }
+        let mut forced_formats = Vec::new();
+        for (name, format) in [
+            ("PIXSTRIDE_ENFORCE_JXL", OutputFormat::Jxl),
+            ("PIXSTRIDE_ENFORCE_AVIF", OutputFormat::Avif),
+            ("PIXSTRIDE_ENFORCE_WEBP", OutputFormat::Webp),
+        ] {
+            if flag(name)? {
+                forced_formats.push(format);
+            }
+        }
+        if !forced_formats.is_empty() && !cfg!(feature = "native-codecs") {
+            return Err("enforced formats require native-codecs");
+        }
+        let fallback = crate::watermark::Config::fallback_from_env()?;
+        let fallback = fallback.is_configured().then_some(fallback);
+        let fallback_code = std::env::var("PIXSTRIDE_FALLBACK_IMAGE_HTTP_CODE")
+            .unwrap_or_else(|_| "200".into())
+            .parse::<u16>()
+            .map_err(|_| "invalid fallback HTTP code")?;
+        if fallback_code != 0 && !(200..=599).contains(&fallback_code) {
+            return Err("invalid fallback HTTP code");
+        }
+        let fallback_ttl = number("PIXSTRIDE_FALLBACK_IMAGE_TTL")?;
+        if fallback_ttl > 31_536_000 {
+            return Err("fallback TTL exceeds one year");
+        }
+        let path_prefix = std::env::var("PIXSTRIDE_PATH_PREFIX").unwrap_or_default();
+        let health_path =
+            std::env::var("PIXSTRIDE_HEALTH_CHECK_PATH").unwrap_or_else(|_| "/health".into());
+        for path in [&path_prefix, &health_path] {
+            if path.len() > 1024
+                || (!path.is_empty() && !path.starts_with('/'))
+                || path
+                    .bytes()
+                    .any(|b| b <= 32 || b >= 127 || b"?#\\".contains(&b))
+            {
+                return Err("invalid HTTP route configuration");
+            }
+        }
+        let etag_buster = std::env::var("PIXSTRIDE_ETAG_BUSTER").unwrap_or_default();
+        if etag_buster.len() > 1024 {
+            return Err("ETag buster exceeds limit");
+        }
         let origin = std::env::var("PIXSTRIDE_ALLOW_ORIGIN").ok();
         if origin
             .as_ref()
@@ -91,6 +143,15 @@ impl Settings {
             origin,
             last_modified: flag("PIXSTRIDE_USE_LAST_MODIFIED")?,
             modified_buster,
+            fallback,
+            fallback_code,
+            fallback_ttl,
+            forced_formats,
+            client_hints: flag("PIXSTRIDE_ENABLE_CLIENT_HINTS")?,
+            path_prefix: path_prefix.trim_end_matches('/').into(),
+            health_path,
+            canonical: flag("PIXSTRIDE_SET_CANONICAL_HEADER")?,
+            etag_buster,
         })
     }
 }

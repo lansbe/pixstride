@@ -13,6 +13,7 @@ pub struct Encoding {
     pub jxl_effort: u8,
     pub linear: bool,
     pub rasterize_svg: bool,
+    pub sanitize_svg: bool,
 }
 impl Default for Encoding {
     fn default() -> Self {
@@ -27,6 +28,7 @@ impl Default for Encoding {
             jxl_effort: 4,
             linear: false,
             rasterize_svg: false,
+            sanitize_svg: false,
         }
     }
 }
@@ -82,6 +84,7 @@ impl Config {
             "PIXSTRIDE_JXL_EFFORT",
             "PIXSTRIDE_USE_LINEAR_COLORSPACE",
             "PIXSTRIDE_ALWAYS_RASTERIZE_SVG",
+            "PIXSTRIDE_SANITIZE_SVG",
         ] {
             if let Ok(value) = std::env::var(name) {
                 self.encoding.set(name, &value)?;
@@ -102,6 +105,7 @@ impl Config {
         }
         self.native_defaults =
             configured || !self.defaults.is_empty() || !self.preferred.is_empty();
+        self.policy = policy::Policy::from_env()?;
         // Validate every default now, including when no image request follows.
         let probe = Self {
             auth: Auth::UnsafeLocal,
@@ -112,6 +116,7 @@ impl Config {
             native_defaults: self.native_defaults,
             signature_size: 32,
             trusted: Vec::new(),
+            policy: Default::default(),
         };
         super::parse("/unsafe/plain/local:///defaults.png@png", &probe)?;
         Ok(self)
@@ -120,6 +125,7 @@ impl Config {
 impl Encoding {
     fn set(&mut self, name: &str, value: &str) -> Result<(), Error> {
         match name {
+            "PIXSTRIDE_SANITIZE_SVG" => self.sanitize_svg = flag(value)?,
             "PIXSTRIDE_ALWAYS_RASTERIZE_SVG" => self.rasterize_svg = flag(value)?,
             "PIXSTRIDE_JPEG_PROGRESSIVE" => self.jpeg_progressive = flag(value)?,
             "PIXSTRIDE_PNG_INTERLACED" => self.png_interlaced = flag(value)?,

@@ -31,7 +31,8 @@ def server(binary, root, extra=None):
                 if process.poll() is not None:
                     raise AssertionError('Server exited before readiness')
                 try:
-                    result = request(port, '/health', headers={'Authorization': 'Bearer synthetic-secret'}, unix=variables.get('PIXSTRIDE_UNIX_SOCKET'))
+                    health = variables.get('PIXSTRIDE_PATH_PREFIX','').rstrip('/') + variables.get('PIXSTRIDE_HEALTH_CHECK_PATH','/health')
+                    result = request(port, health, headers={'Authorization': 'Bearer synthetic-secret'}, unix=variables.get('PIXSTRIDE_UNIX_SOCKET'))
                     if result[0] == 200:
                         break
                 except (OSError, http.client.HTTPException):
@@ -127,6 +128,36 @@ def check(args):
                 assert all(value not in metrics for value in ('nested', 'sample.png', 'synthetic-secret', 'local://'))
                 assert process.poll() is None
                 passed.append('bounded-concurrent-soak-and-metric-privacy')
+            fallback = root / 'fallback.png'
+            fallback.write_bytes(png(20,12))
+            metrics_port = free_port()
+            policy = dict(PIXSTRIDE_SECRET='synthetic-secret',PIXSTRIDE_FALLBACK_IMAGE_PATH=str(fallback),
+                          PIXSTRIDE_FALLBACK_IMAGE_TTL='30',PIXSTRIDE_FALLBACK_IMAGE_HTTP_CODE='404',
+                          PIXSTRIDE_ENABLE_CLIENT_HINTS='1',PIXSTRIDE_ENFORCE_WEBP='1',
+                          PIXSTRIDE_PATH_PREFIX='/images',PIXSTRIDE_HEALTH_CHECK_PATH='/ready',
+                          PIXSTRIDE_PROMETHEUS_BIND=f'127.0.0.1:{metrics_port}',PIXSTRIDE_PROMETHEUS_NAMESPACE='synthetic')
+            with server(binary,root,policy) as (port,_,variables):
+                assert request(port,'/images/ready')[0]==401
+                assert request(port,'/images/ready',headers=auth)[0]==200
+                assert request(port,'/ready',headers=auth)[0]==400
+                assert subprocess.run([str(binary),'healthcheck'],env=variables,capture_output=True,timeout=5).returncode==0
+                missing='/images/unsafe/rs:fit:10:10/plain/local:///missing.png@png'
+                image=request(port,missing,headers=auth)
+                assert image[0]==404 and image[1]['content-type']=='image/png'
+                assert image[1]['cache-control']=='public, max-age=30' and image[2].startswith(b'\x89PNG')
+                assert request(port,missing)[0]==401, 'Fallback bypassed authorization'
+                assert request(port,'/images/invalid/plain/local:///missing.png@png',headers=auth)[0]==400, 'Fallback bypassed URL authentication'
+                hinted=request(port,'/images/unsafe/plain/local:///nested/sample.png@png',headers={**auth,'Accept':'image/webp','Sec-CH-DPR':'2','Sec-CH-Width':'16'})
+                assert hinted[0]==200 and hinted[1]['content-type']=='image/webp'
+                assert hinted[1]['x-image-width']=='16' and hinted[1]['content-dpr']=='2'
+                assert 'Sec-CH-DPR' in hinted[1]['vary'] and 'Accept' in hinted[1]['vary']
+                explicit=request(port,'/images/unsafe/w:12/dpr:1/plain/local:///nested/sample.png@png',headers={**auth,'Sec-CH-DPR':'2','Sec-CH-Width':'16'})
+                assert explicit[1]['x-image-width']=='12' and explicit[1]['content-dpr']=='1', 'Hints overrode explicit URL options'
+                assert request(metrics_port,'/metrics')[0]==401
+                metric=request(metrics_port,'/metrics',headers=auth)
+                assert metric[0]==200 and b'synthetic_requests_total' in metric[2]
+                assert request(metrics_port,'/health',headers=auth)[0]==404
+            passed.append('fallback-auth-client-hints-enforced-format-prefix-health-and-separate-metrics')
             unix = root / 'service.sock'
             with server(binary, root, {'PIXSTRIDE_UNIX_SOCKET': str(unix)}) as (port, _, variables):
                 assert request(port, '/health', unix=str(unix))[0] == 200

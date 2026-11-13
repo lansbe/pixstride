@@ -13,6 +13,9 @@
 !scripts/
 !scripts/native_check.py
 !scripts/image_fixtures.py
+!scripts/server_check.py
+!scripts/compatibility.py
+!scripts/telemetry_check.py
 !src/
 !src/**/
 !src/**/*.rs

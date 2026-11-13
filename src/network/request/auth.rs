@@ -25,6 +25,7 @@ impl Config {
             native_defaults: false,
             signature_size: 32,
             trusted: Vec::new(),
+            policy: Default::default(),
         })
     }
 
@@ -39,6 +40,7 @@ impl Config {
             native_defaults: false,
             signature_size: 32,
             trusted: Vec::new(),
+            policy: Default::default(),
         }
     }
 
@@ -53,6 +55,7 @@ impl Config {
             native_defaults: self.native_defaults,
             signature_size: 32,
             trusted: Vec::new(),
+            policy: Default::default(),
         };
         for name in self.presets.names() {
             super::parse(

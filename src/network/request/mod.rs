@@ -64,6 +64,7 @@ pub struct Config {
     native_defaults: bool,
     signature_size: usize,
     trusted: Vec<String>,
+    policy: policy::Policy,
 }
 mod watermark_spec;
 pub(crate) use watermark_spec::*;
@@ -73,6 +74,7 @@ pub(crate) use parse::*;
 mod auth;
 mod defaults;
 mod extended;
+mod policy;
 mod presets;
 
 #[cfg(test)]

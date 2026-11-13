@@ -52,6 +52,7 @@ pub(super) fn load(data: &[u8], frames: usize, thumbnail: bool) -> Result<VipsIm
         format,
         Some(
             OutputFormat::Gif
+                | OutputFormat::Jxl
                 | OutputFormat::Webp
                 | OutputFormat::Tiff
                 | OutputFormat::Heic
@@ -169,6 +170,13 @@ pub(super) fn process(
     Vips::cache_set_max_mem(0);
     Vips::cache_set_max_files(0);
     Vips::concurrency_set(1);
+    let sanitized;
+    let data = if r.extra.encoding.sanitize_svg && sniff(data) == Some(OutputFormat::Svg) {
+        sanitized = super::svg::sanitize(data)?;
+        &sanitized[..]
+    } else {
+        data
+    };
     let head = load(data, 1, r.extra.enforce_thumbnail)?;
     let frame_height = head.get_page_height().max(1);
     checked(head.get_width(), frame_height)?;
@@ -194,7 +202,16 @@ pub(super) fn process(
             || r.extra.extend
             || r.extra.extend_aspect
             || r.options.padding != Default::default());
-    let mut format = r.format.unwrap_or_else(|| {
+    let compatible = |f: &&OutputFormat| count == 1 || **f == OutputFormat::Webp;
+    let selected = r
+        .extra
+        .force_formats
+        .iter()
+        .find(compatible)
+        .copied()
+        .or(r.format)
+        .or_else(|| r.extra.auto_formats.iter().find(compatible).copied());
+    let mut format = selected.unwrap_or_else(|| {
         if source_format == OutputFormat::Svg && !r.extra.encoding.rasterize_svg {
             return OutputFormat::Svg;
         }

@@ -15,6 +15,8 @@ pub(crate) struct Context {
     pub origin: String,
     pub requested_method: String,
     pub requested_headers: String,
+    pub hints: [String; 4],
+    pub traceparent: String,
 }
 
 impl Context {
@@ -29,6 +31,11 @@ impl Context {
             let (name, value) = line.split_once(':').ok_or("invalid header")?;
             let name = name.to_ascii_lowercase();
             let field = match name.as_str() {
+                "sec-ch-dpr" => &mut result.hints[0],
+                "dpr" => &mut result.hints[1],
+                "sec-ch-width" => &mut result.hints[2],
+                "width" => &mut result.hints[3],
+                "traceparent" => &mut result.traceparent,
                 "accept" => &mut result.accept,
                 "authorization" => &mut result.authorization,
                 "if-none-match" => &mut result.if_none_match,
@@ -89,17 +96,35 @@ impl Context {
         Ok(format!("Access-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Authorization, If-None-Match, If-Modified-Since, Accept\r\nAccess-Control-Max-Age: 3600\r\nVary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers\r\n"))
     }
 
+    pub fn hint_defaults(&self) -> (Option<usize>, Option<f64>) {
+        let dpr = self.hints[..2].iter().find_map(|v| {
+            v.parse::<f64>()
+                .ok()
+                .filter(|n| n.is_finite() && *n > 0.0 && *n <= 8.0)
+        });
+        let width = self.hints[2..].iter().find_map(|v| {
+            v.parse::<usize>()
+                .ok()
+                .filter(|n| (1..=100_000).contains(n))
+        });
+        (width, dpr)
+    }
+    pub fn enforce(&self, r: &mut Request, formats: &[OutputFormat]) -> bool {
+        r.extra.force_formats = formats
+            .iter()
+            .copied()
+            .filter(|f| quality(&self.accept, f.mime()) > 0.0)
+            .collect();
+        r.extra.native |= !r.extra.force_formats.is_empty();
+        !formats.is_empty()
+    }
     pub fn negotiate(&self, r: &mut Request, formats: &[OutputFormat]) -> bool {
-        if r.format.is_some() {
-            return false;
-        }
-        for &format in formats {
-            if quality(&self.accept, format.mime()) > 0.0 {
-                r.format = Some(format);
-                r.extra.native = true;
-                break;
-            }
-        }
+        r.extra.auto_formats = formats
+            .iter()
+            .copied()
+            .filter(|f| quality(&self.accept, f.mime()) > 0.0)
+            .collect();
+        r.extra.native |= !r.extra.auto_formats.is_empty();
         !formats.is_empty()
     }
 }
@@ -167,8 +192,12 @@ pub(crate) fn disposition(r: &Request, mime: &str) -> String {
     )
 }
 
-pub(crate) fn etag(bytes: &[u8]) -> String {
+pub(crate) fn etag_with_buster(bytes: &[u8], buster: &str) -> String {
     let mut hash = crate::signature::Sha256::new();
+    if !buster.is_empty() {
+        hash.update(&(buster.len() as u64).to_be_bytes());
+        hash.update(buster.as_bytes());
+    }
     hash.update(bytes);
     format!(
         "\"{}\"",
@@ -203,7 +232,7 @@ mod tests {
         )
         .unwrap();
         assert!(h.negotiate(&mut r, &[OutputFormat::Webp, OutputFormat::Avif]));
-        assert_eq!(r.format, Some(OutputFormat::Avif));
+        assert_eq!(r.extra.auto_formats, vec![OutputFormat::Avif]);
         assert!(matches_etag("W/\"test\",\"other\"", "\"test\""));
     }
 }

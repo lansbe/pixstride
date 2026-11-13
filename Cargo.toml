@@ -25,6 +25,7 @@ httpdate = "1.0.3"
 libc = "0.2.191"
 libvips = { version = "=0.7.0", package = "rs-vips", optional = true }
 opendal = { version = "=0.59.5", default-features = false, features = ["services-s3", "services-gcs", "services-azblob", "services-swift", "executors-tokio"], optional = true }
+regex = { version = "1.13.1", default-features = false, features = ["std", "perf", "unicode"] }
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "stream"], optional = true }
 roxmltree = { version = "0.21.2", optional = true }
 serde = { version = "1.0.229", features = ["derive"] }

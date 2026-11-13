@@ -72,9 +72,16 @@ pub fn run() -> Result<(), Error> {
             let authorization = secret
                 .map(|s| format!("Authorization: Bearer {s}\r\n"))
                 .unwrap_or_default();
+            let prefix = std::env::var("PIXSTRIDE_PATH_PREFIX").unwrap_or_default();
+            let health =
+                std::env::var("PIXSTRIDE_HEALTH_CHECK_PATH").unwrap_or_else(|_| "/health".into());
+            let health = format!("{}{health}", prefix.trim_end_matches('/'));
+            if !health.starts_with('/') || health.bytes().any(|b| b <= 32 || b >= 127) {
+                return Err("invalid health route");
+            }
             write!(
                 socket,
-                "GET /health HTTP/1.1\r\nHost: localhost:{port}\r\n{authorization}\r\n"
+                "GET {health} HTTP/1.1\r\nHost: localhost:{port}\r\n{authorization}\r\n"
             )
             .map_err(|_| "health write failed")?;
             let mut bytes = [0; 128];
