@@ -92,7 +92,11 @@ impl Config {
             return Err("configure only one watermark source");
         }
         if let Some(url) = url {
-            crate::fetch::Url::parse(&url).map_err(|_| "invalid configured watermark URL")?;
+            if cloud_url(&url) {
+                crate::network::cloud::split(&url)?;
+            } else {
+                crate::fetch::Url::parse(&url).map_err(|_| "invalid configured watermark URL")?;
+            }
             config.url = Some(url);
         }
         if let Some(data) = data {
@@ -116,6 +120,10 @@ impl Config {
             return Ok(data.clone());
         }
         if let Some(url) = &self.url {
+            if cloud_url(url) {
+                return crate::network::cloud::fetch(url, MAX_WATERMARK_BYTES)
+                    .map(|download| download.body);
+            }
             static POOL: std::sync::OnceLock<Result<crate::fetch::Pool, Error>> =
                 std::sync::OnceLock::new();
             let pool = POOL.get_or_init(|| {
@@ -143,6 +151,12 @@ impl Config {
     pub fn is_configured(&self) -> bool {
         self.path.is_some() || self.url.is_some() || self.data.is_some()
     }
+}
+
+fn cloud_url(url: &str) -> bool {
+    ["s3://", "gs://", "gcs://", "abs://", "swift://"]
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
 }
 
 fn validate_canvas(image: &Image) -> Result<(), Error> {

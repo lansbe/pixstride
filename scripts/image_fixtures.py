@@ -177,3 +177,57 @@ def read_webp_animation(data):
             delays.append(int.from_bytes(body[12:15], 'little'))
         offset += 8 + size + size % 2
     return delays, loop
+
+
+def animated_jxl(root):
+    """Build a tiny synthetic animation through the installed libjxl C API."""
+    import os
+    import shlex
+    import subprocess
+    source = root / 'jxl-animation.c'
+    executable = root / 'jxl-animation'
+    source.write_text(r'''
+#include <jxl/encode.h>
+#include <stdio.h>
+#include <stdint.h>
+int main(void) {
+    JxlEncoder* encoder = JxlEncoderCreate(NULL);
+    if (!encoder) return 1;
+    JxlBasicInfo info;
+    JxlEncoderInitBasicInfo(&info);
+    info.xsize = 4; info.ysize = 4; info.bits_per_sample = 8;
+    info.num_color_channels = 3; info.uses_original_profile = JXL_TRUE;
+    info.have_animation = JXL_TRUE;
+    info.animation.tps_numerator = 1000; info.animation.tps_denominator = 1;
+    info.animation.num_loops = 3;
+    JxlColorEncoding color;
+    JxlColorEncodingSetToSRGB(&color, JXL_FALSE);
+    int result = 1;
+    if (JxlEncoderSetBasicInfo(encoder, &info) != JXL_ENC_SUCCESS ||
+        JxlEncoderSetColorEncoding(encoder, &color) != JXL_ENC_SUCCESS) goto finish;
+    JxlEncoderFrameSettings* settings = JxlEncoderFrameSettingsCreate(encoder, NULL);
+    if (!settings || JxlEncoderSetFrameLossless(settings, JXL_TRUE) != JXL_ENC_SUCCESS) goto finish;
+    JxlPixelFormat format = {3, JXL_TYPE_UINT8, JXL_NATIVE_ENDIAN, 0};
+    for (int frame = 0; frame < 2; ++frame) {
+        JxlFrameHeader header;
+        JxlEncoderInitFrameHeader(&header);
+        header.duration = frame == 0 ? 50 : 100;
+        uint8_t pixels[4 * 4 * 3] = {0};
+        for (int pixel = 0; pixel < 16; ++pixel) pixels[pixel * 3 + frame] = 255;
+        if (JxlEncoderSetFrameHeader(settings, &header) != JXL_ENC_SUCCESS ||
+            JxlEncoderAddImageFrame(settings, &format, pixels, sizeof(pixels)) != JXL_ENC_SUCCESS) goto finish;
+    }
+    JxlEncoderCloseInput(encoder);
+    uint8_t buffer[65536]; uint8_t* next = buffer; size_t available = sizeof(buffer);
+    if (JxlEncoderProcessOutput(encoder, &next, &available) != JXL_ENC_SUCCESS) goto finish;
+    if (fwrite(buffer, 1, sizeof(buffer) - available, stdout) != sizeof(buffer) - available) goto finish;
+    result = 0;
+finish:
+    JxlEncoderDestroy(encoder);
+    return result;
+}
+''')
+    flags = shlex.split(subprocess.check_output(['pkg-config', '--cflags', '--libs', 'libjxl'], text=True))
+    runtime_paths = ['-Wl,-rpath,' + flag[2:] for flag in flags if flag.startswith('-L') and len(flag)>2]
+    subprocess.run([*shlex.split(os.environ.get('CC', 'cc')), '-std=c11', str(source), '-o', str(executable), *flags, *runtime_paths], check=True, capture_output=True, timeout=30)
+    return subprocess.check_output([str(executable)], timeout=30)

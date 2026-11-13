@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import zlib
 
-from image_fixtures import png, read_png, animated_gif, read_gif, read_webp_animation, exif, rgb_icc
+from image_fixtures import png, read_png, animated_gif, read_gif, read_webp_animation, exif, rgb_icc, animated_jxl
 
 
 def run(binary, root, source, options='', output='png', success=True, env=None):
@@ -95,6 +95,11 @@ def check(args):
         delays, loop = read_webp_animation(run(binary, root, animation, options='maf:2/q:100', output='webp'))
         assert delays == [50, 100] and loop == 3, (delays, loop)
         assert len(read_gif(run(binary, root, animation, output='gif'))[1]) == 1
+        jxl = root / 'animation.jxl'
+        jxl.write_bytes(animated_jxl(root))
+        jxl_gif = read_gif(run(binary,root,jxl,options='maf:2',output='gif'))
+        assert jxl_gif[1] == [50,100] and jxl_gif[2] == 2, jxl_gif
+        passed.append('jxl-animation-input')
         passed.append('animation-timing-and-loops')
         xmp = b'<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" dc:rights="Public copyright" dc:description="private-location"/></rdf:RDF>'
         source.write_bytes(png(32, 24, extra=[(b'iTXt', b'XML:com.adobe.xmp\0\0\0\0\0' + xmp)]))

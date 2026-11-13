@@ -70,11 +70,12 @@ mod exporter {
             client::client()?
         };
         let mut random = [0u8; 16];
-        // SAFETY: getentropy writes at most the 16 bytes in this live array.
-        // Both supported Unix platforms expose this libc API (maximum 256 bytes).
-        if unsafe { libc::getentropy(random.as_mut_ptr().cast(), random.len()) } != 0 {
-            return Err("telemetry entropy unavailable");
-        }
+        // Read OS entropy once at startup on macOS, glibc and musl. No image,
+        // request header or administrator-selected path participates in the ID.
+        use std::io::Read;
+        std::fs::File::open("/dev/urandom")
+            .and_then(|mut file| file.read_exact(&mut random))
+            .map_err(|_| "telemetry entropy unavailable")?;
         let seed = u128::from_be_bytes(random);
         let (sender, receiver) = mpsc::sync_channel::<Event>(64);
         let stop = Arc::new(AtomicBool::new(false));

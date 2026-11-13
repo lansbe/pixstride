@@ -1,5 +1,5 @@
 FROM rust:1.99.0-alpine3.24@sha256:0cce0a5e0e8ba67b455257a3a02a1d99005f382748789d6464460028810f1627 AS build
-RUN apk add --no-cache curl-dev openssl-dev pkgconf vips-dev vips-heif vips-jxl libheif-aom libheif-x265 python3 font-dejavu \
+RUN apk add --no-cache curl-dev openssl-dev pkgconf vips-dev libjxl-dev vips-heif vips-jxl libheif-aom libheif-x265 python3 font-dejavu \
     && rustup component add rustfmt clippy
 WORKDIR /build
 COPY Cargo.toml Cargo.lock build.rs ./
