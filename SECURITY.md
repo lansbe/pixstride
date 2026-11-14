@@ -5,7 +5,7 @@
 Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/lansbe/pixstride/security/advisories/new). Do not put secrets, private images, internal URLs, or exploit details in public issues.
 
 <!-- generated:support:start -->
-Only the latest stable release receives fixes (currently `0.1.1`). Alpha, beta and release-candidate builds are for testing; no response-time SLA is offered.
+Only the latest stable release receives fixes (currently `0.2.0`). Alpha, beta and release-candidate builds are for testing; no response-time SLA is offered.
 <!-- generated:support:end -->
 
 ## Deployment boundary
@@ -20,6 +20,7 @@ Terminate inbound TLS and apply rate, connection and request limits at a reverse
 - Remote fetches require exact allowed hosts, HTTP(S), allowed ports (80/443 by default) and permitted IPv4/IPv6 destinations. The address supplied to the actual socket-opening callback is checked, including redirects and retries; mapped IPv6 is checked as IPv4. Loopback, private and link-local address classes each require an explicit administrator opt-in and still require exact hosts/ports. Other reserved/documentation/multicast ranges are refused. Proxy environment settings are ignored. TLS certificate/hostname verification is enabled by default; `PIXSTRIDE_IGNORE_SSL_VERIFICATION` is an explicit source-HTTP-only override. HTTPS downgrades are rejected.
 - Redirects are manually checked (default four, configurable 0–16). Download time is bounded cumulatively (default 15 seconds, configurable 1–120), source bodies to 64 MiB and upstream headers to 64 KiB. Connections may be reused; image bodies are not cached.
 - Four admitted requests and one image-processing operation at a time by default, bounded overload handling, 16 KiB request headers, a five-second header deadline and a fifteen-second total response-write deadline. GET/HEAD plus CORS OPTIONS preflight in Unreleased builds, no request bodies. Opt-in keep-alive allows at most 32 requests per connection with a fixed pending-input buffer and bounded idle time.
+- In Unreleased builds, any response-write failure closes the connection before another pipelined request is parsed. Successful responses retain the existing keep-alive behavior and connection limits.
 - Images are bounded to 50 million pixels; individual aligned buffers to 512 MiB. Local reads use a pinned directory descriptor, reject symlinks/non-regular files, and detect ordinary concurrent changes. Local sources are disabled unless configured. Unreleased builds walk nested paths using pinned descriptors and refuse symlinks at every component.
 - Unsupported formats, features and color profiles fail explicitly. Source URLs and signing secrets are not logged by the service. Responses use `no-store` by default, `nosniff` and `no-referrer`. Unreleased opt-in cache TTLs are capped by signed expiry; conditional responses are authenticated and validate the current source before use.
 

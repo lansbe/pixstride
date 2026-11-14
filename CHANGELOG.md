@@ -4,6 +4,12 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Security
+
+- Close keep-alive connections after a failed or truncated response write, preventing later pipelined requests from being processed after an incomplete response.
+
+## [0.2.0] - 2026-11-14
+
 ### Added
 
 - Optional S3 client-side KMS decryption for authenticated V2 AES-GCM and V3 committing HKDF-SHA512 envelopes, bounded in-place payload authentication and MIME/Unicode context handling. Real TLS S3/KMS tests cover independent envelopes, SigV4 and tamper/downgrade rejection.
@@ -37,7 +43,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
-- External crates and image libraries are permitted; feature-specific dependencies, resource limits and migration differences are documented in `COMPATIBILITY.md`. Native and cloud capabilities are opt-in in Cargo; the container includes them.
+- External crates and image libraries are permitted; feature-specific dependencies, resource limits and migration differences are documented in the [0.2.0 compatibility guide](https://github.com/lansbe/pixstride/blob/v0.2.0/COMPATIBILITY.md). Native and cloud capabilities are opt-in in Cargo; the container includes them.
 - Building now requires fetching locked Cargo dependencies before offline checks. Python tooling requires Python 3.11+.
 - Release version tags are immutable. Prereleases never update the stable Docker or GitHub `latest` release, and older releases cannot roll a channel backwards.
 
@@ -83,6 +89,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Linux AMD64/ARM64 Docker images, MIT licensing and deployment documentation.
 - Historical CPU, loopback HTTP and RAM comparisons with their quality and environment limitations. This is not full imgproxy compatibility.
 
-[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/lansbe/pixstride/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/lansbe/pixstride/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/lansbe/pixstride/releases/tag/v0.1.0

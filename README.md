@@ -12,7 +12,7 @@ docker run --rm --name pixstride -p 127.0.0.1:8080:8080 \
   --read-only --cap-drop=ALL --security-opt=no-new-privileges \
   --memory=512m --pids-limit=64 --cpus=2 \
   -e PIXSTRIDE_ALLOW_UNSAFE=1 -e PIXSTRIDE_ALLOWED_HOSTS=upload.wikimedia.org \
-  ghcr.io/lansbe/pixstride:0.1.1
+  ghcr.io/lansbe/pixstride:0.2.0
 ```
 <!-- generated:run:end -->
 
