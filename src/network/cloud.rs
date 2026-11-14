@@ -4,12 +4,22 @@ use super::fetch;
 use crate::config;
 use crate::Error;
 
-pub(crate) fn split(source: &str) -> Result<(&str, &str, &str), Error> {
+pub(crate) fn split(source: &str) -> Result<(&str, &str, &str, &str), Error> {
     let (scheme, rest) = source.split_once("://").ok_or("invalid storage source")?;
     if !matches!(scheme, "s3" | "gs" | "gcs" | "abs" | "swift") {
         return Err("unsupported storage source");
     }
     let (bucket, key) = rest.split_once('/').ok_or("storage object key required")?;
+    let separator =
+        std::env::var("PIXSTRIDE_SOURCE_URL_QUERY_SEPARATOR").unwrap_or_else(|_| "?".into());
+    if separator.len() > 16 || separator.chars().any(char::is_control) {
+        return Err("invalid source query separator");
+    }
+    let (key, query) = if separator.is_empty() {
+        (key, "")
+    } else {
+        key.split_once(&separator).unwrap_or((key, ""))
+    };
     if bucket.is_empty()
         || bucket.len() > 253
         || !bucket
@@ -18,11 +28,13 @@ pub(crate) fn split(source: &str) -> Result<(&str, &str, &str), Error> {
         || key.is_empty()
         || key.len() > 12000
         || key.split('/').any(|s| s == "." || s == "..")
-        || key.contains(['?', '#', '\\'])
+        || key.contains('\\')
+        || query.len() > 2048
+        || query.chars().any(char::is_control)
     {
         return Err("invalid storage bucket or object key");
     }
-    Ok((scheme, bucket, key))
+    Ok((scheme, bucket, key, query))
 }
 
 #[cfg(not(feature = "cloud-sources"))]
@@ -34,14 +46,34 @@ pub fn fetch(_: &str, _: usize) -> Result<fetch::Download, Error> {
 pub fn fetch(source: &str, max: usize) -> Result<fetch::Download, Error> {
     use opendal::{services, HttpTransporter, OperationContext, Operator};
     use std::time::Duration;
-    let (scheme, bucket, key) = split(source)?;
-    let (enabled, allowed) = match scheme {
-        "s3" => ("PIXSTRIDE_USE_S3", "PIXSTRIDE_S3_ALLOWED_BUCKETS"),
-        "gs" | "gcs" => ("PIXSTRIDE_USE_GCS", "PIXSTRIDE_GCS_ALLOWED_BUCKETS"),
-        "abs" => ("PIXSTRIDE_USE_ABS", "PIXSTRIDE_ABS_ALLOWED_CONTAINERS"),
-        _ => ("PIXSTRIDE_USE_SWIFT", "PIXSTRIDE_SWIFT_ALLOWED_CONTAINERS"),
+    let (scheme, bucket, key, query) = split(source)?;
+    let (enabled, allowed, denied) = match scheme {
+        "s3" => (
+            "PIXSTRIDE_USE_S3",
+            "PIXSTRIDE_S3_ALLOWED_BUCKETS",
+            "PIXSTRIDE_S3_DENIED_BUCKETS",
+        ),
+        "gs" | "gcs" => (
+            "PIXSTRIDE_USE_GCS",
+            "PIXSTRIDE_GCS_ALLOWED_BUCKETS",
+            "PIXSTRIDE_GCS_DENIED_BUCKETS",
+        ),
+        "abs" => (
+            "PIXSTRIDE_USE_ABS",
+            "PIXSTRIDE_ABS_ALLOWED_CONTAINERS",
+            "PIXSTRIDE_ABS_DENIED_CONTAINERS",
+        ),
+        _ => (
+            "PIXSTRIDE_USE_SWIFT",
+            "PIXSTRIDE_SWIFT_ALLOWED_CONTAINERS",
+            "PIXSTRIDE_SWIFT_DENIED_CONTAINERS",
+        ),
     };
     if std::env::var(enabled).as_deref() != Ok("1")
+        || std::env::var(denied)
+            .unwrap_or_default()
+            .split(',')
+            .any(|v| v.trim() == bucket)
         || !std::env::var(allowed)
             .unwrap_or_default()
             .split(',')
@@ -68,6 +100,18 @@ pub fn fetch(source: &str, max: usize) -> Result<fetch::Download, Error> {
                         .bucket(bucket)
                         .region(&region)
                         .endpoint(&endpoint);
+                    if matches!(
+                        std::env::var("PIXSTRIDE_S3_ENDPOINT_USE_PATH_STYLE").as_deref(),
+                        Ok("0" | "false")
+                    ) {
+                        b = b.enable_virtual_host_style();
+                    }
+                    if let Some(v) = config::secret("PIXSTRIDE_S3_ASSUME_ROLE_ARN")? {
+                        b = b.role_arn(&v);
+                    }
+                    if let Some(v) = config::secret("PIXSTRIDE_S3_ASSUME_ROLE_EXTERNAL_ID")? {
+                        b = b.external_id(&v);
+                    }
                     if let Some(v) = config::secret("PIXSTRIDE_S3_ACCESS_KEY_ID")? {
                         b = b.access_key_id(&v);
                     }
@@ -109,37 +153,50 @@ pub fn fetch(source: &str, max: usize) -> Result<fetch::Download, Error> {
                     Operator::new(b)
                 }
                 _ => {
-                    let endpoint = std::env::var("PIXSTRIDE_SWIFT_ENDPOINT")
-                        .map_err(|_| "Swift endpoint required")?;
+                    let (token, endpoint) = super::swift_auth::session(
+                        &super::cloud_transport::Transport::new(1024 * 1024)
+                            .map_err(|_| "Swift authentication transport unavailable")?,
+                    )
+                    .await?;
                     let mut b = services::Swift::default()
                         .container(bucket)
                         .endpoint(&endpoint);
-                    let token = if let Some(v) = config::secret("PIXSTRIDE_SWIFT_TOKEN")? {
-                        v
-                    } else {
-                        super::swift_auth::token(
-                            &super::cloud_transport::Transport::new(1024 * 1024)
-                                .map_err(|_| "Keystone transport unavailable")?,
-                        )
-                        .await?
-                    };
                     b = b.token(&token);
                     Operator::new(b)
                 }
             }
             .map_err(|_| "invalid storage configuration")?;
-            let operator = operator.with_context(
-                OperationContext::new().with_http_transport(HttpTransporter::new(transport)),
-            );
+            let operator = operator.with_context(OperationContext::new().with_http_transport(
+                HttpTransporter::new(super::cloud_transport::Generation {
+                    inner: transport,
+                    value: if matches!(scheme, "gs" | "gcs")
+                        && query.parse::<u64>().is_ok_and(|v| v > 0)
+                    {
+                        Some(query.into())
+                    } else {
+                        None
+                    },
+                }),
+            ));
             tokio::time::timeout(Duration::from_secs(15), async {
-                let stat = operator
-                    .stat(key)
-                    .await
-                    .map_err(|_| "cannot inspect storage source")?;
+                let version = if scheme == "s3" { query } else { "" };
+                let stat = operator.stat_with(key);
+                let stat = if version.is_empty() {
+                    stat
+                } else {
+                    stat.version(version)
+                }
+                .await
+                .map_err(|_| "cannot inspect storage source")?;
                 if !stat.is_file() || stat.content_length() > max as u64 {
                     return Err("storage source exceeds limit");
                 }
                 let read = operator.read_with(key).range(0..max as u64 + 1);
+                let read = if version.is_empty() {
+                    read
+                } else {
+                    read.version(version)
+                };
                 let read = if let Some(etag) = stat.etag() {
                     read.if_match(etag)
                 } else {
@@ -187,17 +244,20 @@ mod tests {
     fn storage_authorities_cannot_select_an_endpoint_or_escape_an_object_prefix() {
         assert_eq!(
             split("s3://images/a/b.png").unwrap(),
-            ("s3", "images", "a/b.png")
+            ("s3", "images", "a/b.png", "")
         );
         for s in [
             "s3://images/../secret",
             "s3://user@host/a",
             "s3://host:80/a",
-            "gs://images/a?token=x",
             "swift://images/./x",
             "abs://images/",
         ] {
             assert!(split(s).is_err(), "{s}");
         }
+        assert_eq!(
+            split("s3://images/a?version-2").unwrap(),
+            ("s3", "images", "a", "version-2")
+        );
     }
 }

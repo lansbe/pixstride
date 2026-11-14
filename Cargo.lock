@@ -370,6 +370,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "dotenvy"
+version = "0.15.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1aaf95b3e5c8f23aa320147307562d361db0ae0d51242340f558153b4eb2439b"
+
+[[package]]
 name = "errno"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1262,8 +1268,10 @@ checksum = "a89322df9ebe1c1578d689c92318e070967d1042b512afbe49518723f4e6d5cd"
 name = "pixstride"
 version = "0.1.1"
 dependencies = [
+ "bytes",
  "color_quant",
  "cookie_store",
+ "dotenvy",
  "futures-util",
  "gif",
  "http",
@@ -1272,6 +1280,9 @@ dependencies = [
  "opendal",
  "psl",
  "regex",
+ "reqsign-aws-v4",
+ "reqsign-core",
+ "reqsign-google",
  "reqwest",
  "roxmltree",
  "rs-vips",

@@ -68,6 +68,22 @@ impl Settings {
                 .map_err(|_| "invalid HTTP configuration number")
         };
         let ttl = number("PIXSTRIDE_TTL")?;
+        if std::env::var_os("PIXSTRIDE_S3_ENDPOINT_USE_PATH_STYLE").is_some() {
+            flag("PIXSTRIDE_S3_ENDPOINT_USE_PATH_STYLE")?;
+        }
+        if std::env::var("PIXSTRIDE_SOURCE_URL_QUERY_SEPARATOR")
+            .is_ok_and(|v| v.len() > 16 || v.chars().any(char::is_control))
+        {
+            return Err("invalid source query separator");
+        }
+        if std::env::var("PIXSTRIDE_SWIFT_AUTH_VERSION")
+            .is_ok_and(|v| !v.parse::<u8>().is_ok_and(|n| n <= 3))
+        {
+            return Err("Swift auth version must be 0..3");
+        }
+        if flag("PIXSTRIDE_ALLOW_METADATA_CREDENTIALS")? && !cfg!(feature = "cloud-sources") {
+            return Err("metadata credentials require cloud-sources");
+        }
         if ttl > 31_536_000 {
             return Err("HTTP TTL exceeds one year");
         }

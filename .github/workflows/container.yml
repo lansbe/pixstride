@@ -70,6 +70,7 @@ jobs:
           python3 scripts/native_check.py --binary target/debug/pixstride
           python3 scripts/server_check.py --binary target/debug/pixstride
           python3 scripts/telemetry_check.py --binary target/debug/pixstride
+          python3 scripts/config_check.py --binary target/debug/pixstride
           python3 scripts/robustness.py --binary target/debug/pixstride
       - name: Build the pinned OSS reference and compare decoded pixels
         run: |

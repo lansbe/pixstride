@@ -9,6 +9,8 @@ pub(crate) mod server;
 pub(crate) mod cloud;
 #[cfg(feature = "cloud-sources")]
 mod cloud_transport;
+#[cfg(feature = "cloud-sources")]
+mod credential_metadata;
 pub(crate) mod headers;
 pub(crate) mod metrics;
 pub(crate) mod settings;

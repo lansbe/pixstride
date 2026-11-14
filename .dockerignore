@@ -15,6 +15,7 @@
 !scripts/image_fixtures.py
 !scripts/server_check.py
 !scripts/source_check.py
+!scripts/config_check.py
 !scripts/compatibility.py
 !scripts/telemetry_check.py
 !src/

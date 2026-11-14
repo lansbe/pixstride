@@ -12,6 +12,12 @@ pub fn run() -> Result<(), Error> {
     if args.get(1).is_some_and(|s| s == "native-worker") {
         return crate::processing::native::worker();
     }
+    if matches!(
+        args.get(1).map(String::as_str).unwrap_or("serve"),
+        "serve" | "process" | "sign" | "healthcheck"
+    ) {
+        crate::config_sources::load()?;
+    }
     match args.get(1).map(String::as_str).unwrap_or("serve") {
         "serve" if args.len() <= 2 => {
             let port = std::env::var("PIXSTRIDE_PORT")

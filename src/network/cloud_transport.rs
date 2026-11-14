@@ -13,12 +13,45 @@ pub(super) struct Transport {
     max: usize,
 }
 struct Resolver;
+#[derive(Clone)]
+pub(super) struct Generation<T> {
+    pub inner: T,
+    pub value: Option<String>,
+}
+impl<T: HttpTransport> HttpTransport for Generation<T> {
+    async fn fetch(
+        &self,
+        mut request: http::Request<Buffer>,
+    ) -> opendal::Result<http::Response<HttpBody>> {
+        if let Some(value) = &self.value {
+            if matches!(
+                request.extensions().get::<opendal::raw::Operation>(),
+                Some(opendal::raw::Operation::Read | opendal::raw::Operation::Stat)
+            ) {
+                let separator = if request.uri().query().is_some() {
+                    '&'
+                } else {
+                    '?'
+                };
+                *request.uri_mut() = format!("{}{separator}generation={value}", request.uri())
+                    .parse()
+                    .map_err(|_| error("invalid object generation"))?;
+            }
+        }
+        self.inner.fetch(request).await
+    }
+}
 impl Resolve for Resolver {
     fn resolve(&self, name: Name) -> Resolving {
         Box::pin(async move {
             let addrs = tokio::net::lookup_host((name.as_str(), 0)).await?;
             let addrs = addrs
-                .filter(|a| super::fetch::policy::allows_ip(a.ip()))
+                .filter(|a| {
+                    super::fetch::policy::allows_ip(a.ip())
+                        || super::credential_metadata::enabled()
+                            && name.as_str() == "metadata.google.internal"
+                            && a.ip() == "169.254.169.254".parse::<IpAddr>().unwrap()
+                })
                 .collect::<Vec<SocketAddr>>();
             if addrs.is_empty() {
                 return Err(
@@ -67,18 +100,19 @@ impl HttpTransport for Transport {
         let (parts, body) = request.into_parts();
         let url = super::fetch::Url::parse(&parts.uri.to_string())
             .map_err(|_| error("invalid cloud endpoint"))?;
-        if url.scheme != "https" {
+        let metadata = super::credential_metadata::permits(&url, &parts.method, &parts.headers);
+        if url.scheme != "https" && !metadata {
             return Err(error("cloud endpoints require HTTPS"));
         }
-        if !super::fetch::policy::allows_port(url.port) {
+        if !metadata && !super::fetch::policy::allows_port(url.port) {
             return Err(error("cloud endpoint port refused"));
         }
         if let Ok(ip) = url.host.parse::<IpAddr>() {
-            if !super::fetch::policy::allows_ip(ip) {
+            if !super::fetch::policy::allows_ip(ip) && !metadata {
                 return Err(error("private cloud endpoint refused"));
             }
         }
-        let auth = identity(&url.host);
+        let auth = identity(&url.host) || metadata;
         if !auth && !super::fetch::allows_host(&url.host) {
             return Err(error("cloud endpoint is not in allowed hosts"));
         }

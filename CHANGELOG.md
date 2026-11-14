@@ -6,6 +6,9 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- Optional staged startup configuration from AWS Secrets Manager, paginated decrypted SSM parameters, Google Secret Manager with CRC32C and local environment files. SDK OAuth/ADC and credential files are covered by synthetic protocol checks; native workers never load these sources.
+- SDK metadata credentials behind a separate explicit opt-in; S3 roles/external IDs/path style, S3/GCS object versions, per-provider bucket deny lists and Swift v1/v2/v3 authentication with public regional catalog discovery and independent user/project domains.
+
 - IPv4/IPv6 source fetching, explicit loopback/private/link-local and port policies, bounded download/redirect settings and configurable User-Agent/TLS verification. Real loopback IPv4/IPv6 checks cover redirects and per-request cookie isolation.
 - Opt-in origin Cache-Control/Expires passthrough, subordinate to signed URL expiration, fallback policy and private cookie caching. Send an explicit restrictive Content-Security-Policy on responses.
 - Bounded single byte ranges for admitted raw images, strong/date If-Range, conditional-response precedence, suffix/open-ended ranges and 206/416 responses without a second body allocation.
