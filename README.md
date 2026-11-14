@@ -81,7 +81,7 @@ The native PNG palette fallback uses color_quant 2.0.0. Its corrected quantizer 
 ## Build
 
 <!-- generated:build:start -->
-Linux and macOS, ARM64 or x86-64; Rust 1.99 and libcurl development files.
+Linux and macOS, ARM64 or x86-64; Rust 1.100 and libcurl development files.
 <!-- generated:build:end -->
 
 ```sh
