@@ -25,6 +25,7 @@ Unreleased builds require `PIXSTRIDE_SIGNATURE_SIZE` to be 16–32 bytes, with a
 - In Unreleased builds, any response-write failure closes the connection before another pipelined request is parsed. Successful responses retain the existing keep-alive behavior and connection limits.
 - Images are bounded to 50 million pixels; individual aligned buffers to 512 MiB. Local reads use a pinned directory descriptor, reject symlinks/non-regular files, and detect ordinary concurrent changes. Local sources are disabled unless configured. Unreleased builds walk nested paths using pinned descriptors and refuse symlinks at every component.
 - Unsupported formats, features and color profiles fail explicitly. Source URLs and signing secrets are not logged by the service. Responses use `no-store` by default, `nosniff` and `no-referrer`. Unreleased opt-in cache TTLs are capped by signed expiry; conditional responses are authenticated and validate the current source before use.
+- With `PIXSTRIDE_SECRET` configured, successful image responses include `Authorization` in `Vary`, including when public cache TTLs are enabled. Configure intermediary caches to honor `Vary` and include `Authorization` in the cache key; otherwise disable shared caching for protected routes. Missing or incorrect Bearer credentials receive a `no-store` 403 before source loading. Purge protected responses cached before deploying this fix so entries without `Vary: Authorization` cannot be reused.
 
 ## Source and processing limits
 

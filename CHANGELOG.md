@@ -6,6 +6,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Security
 
+- Add `Authorization` to `Vary` on Bearer-protected image responses so shared caches cannot reuse an authorized response for requests with missing or different credentials. Configured public cache TTLs remain available to authorized requests.
 - Close keep-alive connections after a failed or truncated response write, preventing later pipelined requests from being processed after an incomplete response.
 - Require `PIXSTRIDE_SIGNATURE_SIZE` to be 16–32 bytes (default 32), preventing practical exhaustive forgery of short HMAC signatures. Configurations using 1–15 bytes now fail server startup and the `sign` command. Before upgrading, configure every signer and server to use the same supported size and regenerate signed URLs; existing short signatures are no longer accepted.
 

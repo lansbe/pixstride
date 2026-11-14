@@ -107,7 +107,8 @@ def check(args):
                 assert request(port, target, 'HEAD')[2] == b''
                 image = request(port, target, headers={**auth, 'Accept': 'image/webp'})
                 assert image[0] == 200 and image[1]['content-type'] == 'image/webp', image[:2]
-                assert image[1]['vary'] == 'Accept' and image[1]['x-image-width'] == '16'
+                assert {value.strip().lower() for value in image[1]['vary'].split(',')} == {'authorization', 'accept'}
+                assert image[1]['x-image-width'] == '16'
                 assert image[1]['x-origin-width']=='32' and image[1]['x-origin-height']=='24'
                 assert image[1]['x-result-width']=='16' and image[1]['x-result-height']=='12'
                 assert int(image[1]['x-origin-content-length'])==(root/'nested'/'sample.png').stat().st_size
