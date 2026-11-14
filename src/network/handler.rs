@@ -32,7 +32,7 @@ pub(super) fn handle(
     pool: &fetch::Pool,
     engine: &super::engine::Engine,
     settings: &super::settings::Settings,
-) {
+) -> std::io::Result<()> {
     let _metrics = super::metrics::begin();
     let _ = socket.set_nodelay(true);
     let _ = socket.set_write_timeout(Some(Duration::from_secs(15)));
@@ -65,8 +65,7 @@ pub(super) fn handle(
     ) {
         Ok(result) => result,
         Err(_) => {
-            let _ = protocol::text(socket, 400, "Invalid HTTP request");
-            return;
+            return protocol::text(socket, 400, "Invalid HTTP request");
         }
     };
     protocol::request_keep_alive(
@@ -76,26 +75,21 @@ pub(super) fn handle(
             .any(|s| matches!(s.trim().to_ascii_lowercase().as_str(), "close" | "upgrade")),
     );
     if context.preflight {
-        match context.preflight_headers(settings.origin.as_deref()) {
-            Ok(headers) => {
-                let _ = protocol::image_response(
-                    socket,
-                    204,
-                    "text/plain",
-                    &headers,
-                    b"",
-                    "no-store",
-                    true,
-                );
-            }
-            Err(error) => {
-                let _ = failure(socket, false, 403, error);
-            }
-        }
-        return;
+        return match context.preflight_headers(settings.origin.as_deref()) {
+            Ok(headers) => protocol::image_response(
+                socket,
+                204,
+                "text/plain",
+                &headers,
+                b"",
+                "no-store",
+                true,
+            ),
+            Err(error) => failure(socket, false, 403, error),
+        };
     }
     if !context.authorize(settings.secret.as_deref()) {
-        let _ = protocol::image_response(
+        return protocol::image_response(
             socket,
             403,
             "text/plain",
@@ -104,12 +98,11 @@ pub(super) fn handle(
             "no-store",
             context.head,
         );
-        return;
     }
     super::telemetry::parent(&context.traceparent);
     let mut request = match route {
         Route::Health => {
-            let _ = protocol::image_response(
+            return protocol::image_response(
                 socket,
                 200,
                 "text/plain",
@@ -118,10 +111,9 @@ pub(super) fn handle(
                 "no-store",
                 context.head,
             );
-            return;
         }
         Route::Metrics => {
-            let _ = protocol::image_response(
+            return protocol::image_response(
                 socket,
                 200,
                 "text/plain; version=0.0.4",
@@ -130,15 +122,13 @@ pub(super) fn handle(
                 "no-store",
                 context.head,
             );
-            return;
         }
         Route::Favicon => {
-            let _ = failure(socket, context.head, 204, "");
-            return;
+            return failure(socket, context.head, 204, "");
         }
         Route::Image(Ok(r)) => r,
         Route::Image(Err(e)) => {
-            let _ = failure(
+            return failure(
                 socket,
                 context.head,
                 if matches!(e, "invalid signature" | "URL security options are disabled") {
@@ -148,7 +138,6 @@ pub(super) fn handle(
                 },
                 e,
             );
-            return;
         }
     };
     let vary = context.negotiate(&mut request, &settings.auto_formats)
@@ -162,13 +151,12 @@ pub(super) fn handle(
         .is_some_and(|spec| spec.opacity > 0.0)
         && !watermark.is_configured()
     {
-        let _ = failure(
+        return failure(
             socket,
             context.head,
             422,
             "watermark image is not configured",
         );
-        return;
     }
     let started = Instant::now();
     let (mut source, transfers, upstream, new_connections, modified, origin_cache) =
@@ -184,8 +172,7 @@ pub(super) fn handle(
                         fallback_status = Some(code);
                         loaded
                     } else {
-                        let _ = failure(socket, context.head, 422, &e);
-                        return;
+                        return failure(socket, context.head, 422, &e);
                     }
                 }
             }
@@ -237,33 +224,30 @@ pub(super) fn handle(
                         fallback_status = Some(code);
                         loaded
                     } else {
-                        let _ = failure(
+                        return failure(
                             socket,
                             context.head,
                             502,
                             "Unable to retrieve the complete permitted source",
                         );
-                        return;
                     }
                 }
             }
         };
     if source.bytes_mut().len() > request.extra.max_source_bytes {
-        let _ = failure(
+        return failure(
             socket,
             context.head,
             422,
             "source exceeds requested byte limit",
         );
-        return;
     }
     let fetch_ms = started.elapsed().as_secs_f64() * 1000.0;
     let queued = Instant::now();
     let lock = match engine.acquire() {
         Ok(l) => l,
         Err(_) => {
-            let _ = failure(socket, context.head, 503, "Image worker unavailable");
-            return;
+            return failure(socket, context.head, 503, "Image worker unavailable");
         }
     };
     let queue_ms = queued.elapsed().as_secs_f64() * 1000.0;
@@ -420,7 +404,7 @@ pub(super) fn handle(
                     }
                 }
             }
-            let _ = protocol::image_response(
+            protocol::image_response(
                 socket,
                 status,
                 out.mime,
@@ -428,11 +412,9 @@ pub(super) fn handle(
                 body,
                 if status == 416 { "no-store" } else { &cache },
                 context.head,
-            );
+            )
         }
-        Err(e) => {
-            let _ = failure(socket, context.head, 422, e);
-        }
+        Err(e) => failure(socket, context.head, 422, e),
     }
 }
 

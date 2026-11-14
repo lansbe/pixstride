@@ -127,7 +127,7 @@ pub fn serve(ip: std::net::IpAddr, port: u16, path: Option<&std::path::Path>) ->
                     let mut socket = super::connection::Connection::new(socket);
                     for index in 0..32 {
                         super::protocol::allow_keep_alive(settings.keep_alive > 0 && index < 31);
-                        handle(
+                        let response = handle(
                             &mut socket,
                             port,
                             &root,
@@ -137,7 +137,8 @@ pub fn serve(ip: std::net::IpAddr, port: u16, path: Option<&std::path::Path>) ->
                             &engine,
                             &settings,
                         );
-                        if !super::protocol::keeping_alive()
+                        if response.is_err()
+                            || !super::protocol::keeping_alive()
                             || !socket.next(std::time::Duration::from_secs(settings.keep_alive))
                         {
                             break;
