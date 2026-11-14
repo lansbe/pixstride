@@ -13,6 +13,12 @@
 !/CONTRIBUTING.md
 !/CHANGELOG.md
 !/COMPATIBILITY.md
+!/BENCHMARKS.md
+!/benchmarks/
+!/benchmarks/cases.json
+!/benchmarks/versions.json
+!/benchmarks/results/
+!/benchmarks/results/*.json
 !/scripts/
 !/scripts/*.py
 !/vendor/
@@ -34,6 +40,7 @@
 !/.github/
 !/.github/workflows/
 !/.github/workflows/container.yml
+!/.github/workflows/benchmark.yml
 !/.github/dependabot.yml
 !/.github/checks/
 !/.github/checks/abi/
