@@ -32,7 +32,7 @@ inside && /curl_easy_setopt\(/ {
     emit(value)
 }
 END {
-    if (failed || !finished || count != 21) {
+    if (failed || !finished || count != 23) {
         print "could not extract all curl options from transport.rs" > "/dev/stderr"; exit 1
     }
     print "]"
@@ -102,10 +102,14 @@ END {
 
 awk '
 BEGIN { print "[" }
-/a\.address\[[0-9]+\]/ {
-    value = $0; sub(/.*a\.address\[/, "", value); sub(/\].*/, "", value)
-    if (value !~ /^[0-9]+$/) { failed = 1; exit 1 }
-    print value ","; count++
+/Ipv4Addr::new/ {
+    rest = $0
+    while (match(rest, /a\.address\[[0-9]+\]/)) {
+        value = substr(rest, RSTART, RLENGTH)
+        rest = substr(rest, RSTART + RLENGTH)
+        sub(/a\.address\[/, "", value); sub(/\].*/, "", value)
+        print value ","; count++
+    }
 }
 END {
     if (failed || count != 4) {
@@ -119,8 +123,10 @@ printf '\ntransport_abi_checks!();\n' >> "$tmp/transport_abi_probe.rs"
 cat "$repo/src/network/local.rs" > "$tmp/local_abi_probe.rs"
 printf '\nlocal_abi_checks!();\n' >> "$tmp/local_abi_probe.rs"
 cp "$here/abi_harness.rs" "$here/abi_probe_tests.rs" "$tmp/"
+cp "$repo/src/network/fetch/policy.rs" "$tmp/policy.rs"
+cp "$repo/src/network/fetch/response.rs" "$tmp/response.rs"
 cc -std=c11 -Wall -Wextra -Werror -c "$here/abi_check.c" -o "$tmp/abi_check.o"
 # RUSTFLAGS carries the build target and linker options where provided.
 # shellcheck disable=SC2086
-rustc --edition=2021 "$tmp/abi_harness.rs" ${RUSTFLAGS:-} -C "link-arg=$tmp/abi_check.o" -o "$tmp/abi_check"
+CARGO_PKG_VERSION=abi rustc --edition=2021 "$tmp/abi_harness.rs" ${RUSTFLAGS:-} -C "link-arg=$tmp/abi_check.o" -o "$tmp/abi_check"
 "$tmp/abi_check"

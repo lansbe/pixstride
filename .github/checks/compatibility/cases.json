@@ -1,0 +1,405 @@
+[
+  {
+    "name": "identity",
+    "options": "",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "fit",
+    "options": "rs:fit:24:16",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fill",
+    "options": "rs:fill:24:24",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "force",
+    "options": "rs:force:24:12",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "rotate",
+    "options": "rot:90",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "flip",
+    "options": "fl:1:1",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "crop",
+    "options": "c:24:16:soea",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "padding",
+    "options": "pd:2:4:6:8/bg:ffffff",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "dpr",
+    "options": "rs:fit:12:8/dpr:2",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "zoom",
+    "options": "rs:fit:12:8/z:2",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "extend",
+    "options": "rs:fit:24:24/ex:1/bg:ffffff",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fill-down",
+    "options": "rs:fill-down:96:96",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "smart-crop",
+    "options": "rs:fill:24:24/g:sm",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fractional-crop",
+    "options": "c:0.5:0.5",
+    "format": "png",
+    "max_error": 0,
+    "mean_error": 0
+  },
+  {
+    "name": "blur",
+    "options": "bl:1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "sharpen",
+    "options": "sh:1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "lossy-webp",
+    "options": "rs:fit:24:16/q:75",
+    "format": "webp",
+    "max_error": 12,
+    "mean_error": 2
+  },
+  {
+    "name": "avif-small-fallback",
+    "options": "rs:fit:24:16/q:75",
+    "format": "avif",
+    "max_error": 12,
+    "mean_error": 2
+  },
+  {
+    "name": "avif",
+    "options": "rs:fit:48:32/q:75",
+    "format": "avif",
+    "max_error": 12,
+    "mean_error": 2
+  },
+  {
+    "name": "minimum-crop",
+    "options": "rs:fit:24:16/mw:32",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "minimum-height",
+    "options": "rs:fit:24:16/mh:24",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "offset-gravity",
+    "options": "rs:fill:24:24/g:soea:0.1:0.1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "extend-offset",
+    "options": "rs:fit:24:24/ex:1:no:0:2/bg:ffffff",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "crop-offset",
+    "options": "c:24:16:soea:0.1:0.1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "crop-rotation",
+    "options": "c:16:24:soea:0.1:0.1/rot:90",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fill-zoom",
+    "options": "rs:fill:12:8/z:2",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "extend-aspect",
+    "options": "rs:fit:24:24/exar:1/bg:ffffff",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "nonuniform-zoom",
+    "options": "rs:fit:12:8/z:2:1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "format-quality",
+    "options": "rs:fit:48:32/q:20/fq:webp:75",
+    "format": "webp",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "watermark",
+    "options": "wm:0.5:soea:2:2:0.2",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "watermark-repeat",
+    "options": "wm:0.5:re:4:4:0.1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "watermark-relative",
+    "options": "dpr:0.5/wm:1:noea:0.1:0.1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "alpha-identity",
+    "options": "",
+    "source": "alpha.png",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "alpha-resize",
+    "options": "rs:fit:16:12",
+    "source": "alpha.png",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "alpha-extend",
+    "options": "rs:fit:16:16/ex:1",
+    "source": "alpha.png",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "alpha-background",
+    "options": "bg:ffffff",
+    "source": "alpha.png",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "large-fit-dpr-half",
+    "options": "rs:fit:128:80/dpr:0.5",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "large-fit-dpr-half-extend",
+    "options": "rs:fit:128:80/dpr:0.5/ex:1",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "small-fit-dpr-two",
+    "options": "rs:fit:32:20/dpr:2",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "large-force-dpr-half",
+    "options": "rs:force:128:40/dpr:0.5",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "force-width-only",
+    "options": "rs:force:32:0/dpr:0.5",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "min-enlarge-without-flag",
+    "options": "mw:128",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "min-plus-dpr",
+    "options": "rs:fit:16:16/mw:48/dpr:0.5",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "min-height-force",
+    "options": "rs:force:16:20/mh:48",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fit-zoom-offset",
+    "options": "rs:fit:24:20/z:1.5:2/g:soea:2:3",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "fill-down-larger",
+    "options": "rs:fill-down:128:128/dpr:0.5",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "extend-with-zoom",
+    "options": "rs:fit:32:32/z:0.5/ex:1:noea",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "both-extension-gravities",
+    "options": "rs:fit:100:100/z:0.5:1/ex:1:noea/exar:1:sowe",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "max-dimension-padding",
+    "options": "rs:fill:32:32/pd:8/mrd:24",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "max-dimension-extend",
+    "options": "rs:fit:128:128/ex:1/mrd:48",
+    "format": "png",
+    "max_error": 8,
+    "mean_error": 1
+  },
+  {
+    "name": "invalid-signature",
+    "options": "",
+    "format": "png",
+    "status": 403,
+    "signature": "invalid"
+  },
+  {
+    "name": "unknown-option",
+    "options": "not_an_oss_option:1",
+    "format": "png",
+    "status": 404,
+    "signature": "unsafe"
+  },
+  {
+    "name": "invalid-dimension",
+    "options": "w:-1",
+    "format": "png",
+    "status": 404,
+    "signature": "unsafe"
+  },
+  {
+    "name": "unknown-preset",
+    "options": "pr:missing",
+    "format": "png",
+    "status": 404,
+    "signature": "unsafe"
+  },
+  {
+    "name": "expired-url",
+    "options": "exp:1",
+    "format": "png",
+    "status": 404,
+    "signature": "unsafe"
+  },
+  {
+    "name": "source-pixel-limit",
+    "options": "msr:0.000001",
+    "format": "png",
+    "status": 422,
+    "signature": "unsafe"
+  },
+  {
+    "name": "missing-bearer-secret",
+    "options": "",
+    "format": "png",
+    "status": 403,
+    "authorized": false
+  }
+]

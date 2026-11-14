@@ -90,6 +90,7 @@ pub(crate) fn read_rgba(pixels: &[u8], position: usize) -> u32 {
 pub(crate) fn signed_magnitude(value: u8) -> u64 {
     i16::from(value as i8).unsigned_abs() as u64
 }
+
 #[cfg(any(
     test,
     not(all(
@@ -371,4 +372,29 @@ pub(crate) fn prepare_owned(image: Image) -> Result<Prepared, Error> {
         modes,
         transformed: Residuals::InPlace(pixels),
     })
+}
+
+#[cfg(test)]
+mod lane_tests {
+    use super::*;
+    #[test]
+    fn vector_predictor_scores_match_scalar_with_wrapping_channels() {
+        let predictions = [
+            0,
+            1,
+            u32::MAX,
+            0x80808080,
+            0xff00ff00,
+            0x01020304,
+            0x7f80ff00,
+            0xaabbccdd,
+        ];
+        for current in [0, u32::MAX, 0x0080ff7f, 0x11223344, 0xdeadbeef] {
+            let mut actual = [0; 8];
+            let mut expected = [0; 8];
+            score_predictions(current, &predictions, &mut actual);
+            score_predictions_scalar(current, &predictions, &mut expected);
+            assert_eq!(actual, expected);
+        }
+    }
 }

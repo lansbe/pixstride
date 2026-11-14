@@ -8,7 +8,7 @@
 
 use std::{
     io::Read,
-    net::{Shutdown, TcpStream},
+    net::Shutdown,
     sync::atomic::{AtomicUsize, Ordering},
     time::{Duration, Instant},
 };
@@ -28,7 +28,7 @@ impl Drop for Permit {
 
 /// Respond to a rejected connection without blocking the listener. Saturation
 /// beyond the rejection budget is handled by closing the extra connection.
-pub fn reject(socket: TcpStream) {
+pub fn reject(socket: Box<dyn super::socket::Socket>) {
     if ACTIVE
         .try_update(Ordering::Acquire, Ordering::Relaxed, |n| {
             if n < MAX_REJECTIONS {
@@ -51,9 +51,9 @@ pub fn reject(socket: TcpStream) {
         });
 }
 
-fn respond(mut socket: TcpStream) {
+fn respond(mut socket: Box<dyn super::socket::Socket>) {
     let _ = socket.set_write_timeout(Some(WRITE_TIMEOUT));
-    let _ = crate::protocol::text(&mut socket, 503, "Four requests already active");
+    let _ = crate::protocol::text(socket.as_mut(), 503, "Request admission is full");
     let _ = socket.shutdown(Shutdown::Write);
     let deadline = Instant::now() + DRAIN_TIMEOUT;
     let mut remaining = MAX_DRAIN;

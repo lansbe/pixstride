@@ -2,9 +2,9 @@
 
 Use English names, comments and documentation. Keep pull requests focused and preserve image fidelity, resource bounds and explicit failure for unsupported behavior. Contributions are licensed under MIT.
 
-The code is divided into `src/codecs` (formats and metadata), `src/processing` (geometry/effects/pipeline), `src/network` (HTTP, sources, admission), and `src/security` (signatures). `config.rs`, `buffer.rs`, and `os.rs` own startup, aligned memory, and administrator-selected file reads. Modules should stay below 500 lines; split by responsibility, not arbitrary fragments. Every unsafe operation needs a verifiable bounds, ownership or platform-ABI argument.
+The code is divided into `src/codecs` (formats and metadata), `src/processing` (geometry/effects/pipeline), `src/network` (HTTP, sources, admission), and `src/security` (signatures). `config.rs`, `buffer.rs`, and `os.rs` own startup, aligned memory, and administrator-selected file reads. First-party modules in `src/` should stay below 500 lines; split by responsibility, not arbitrary fragments. Imported generated dependency code retains its upstream layout and must include license, provenance and a documented minimal patch. Every unsafe operation needs a verifiable bounds, ownership or platform-ABI argument.
 
-Run `cargo fmt --check`, `cargo clippy --locked --offline -- -D warnings`, and build/run the Docker image. Validate supported platforms and compare decoded pixels for codec changes; include bounded synthetic regression cases in the pull request. Never submit personal images, machine paths, secret values, private URLs, research archives or benchmark dumps. Do not add external image libraries or Rust crates without discussing the architecture first.
+Run `cargo fmt --check`, `cargo clippy --locked --offline -- -D warnings`, and build/run the Docker image. Validate supported platforms and compare decoded pixels for codec changes; include bounded synthetic regression cases in the pull request. Never submit personal images, machine paths, secret values, private URLs, research archives or benchmark dumps. External libraries and Rust crates are permitted; document their purpose, license, supported platforms and resource behavior, and commit the updated lockfile.
 
 Benchmarks must state hardware, compiler, output bytes and decoded-pixel differences, cache state, concurrency, CPU accounting, HTTP percentiles and peak RSS. A faster different output is not an equal-quality win. Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
@@ -25,6 +25,8 @@ The cleanup command checks ancestry against fresh `origin/master` and `origin/de
 
 ## Documentation
 
+Project scripts require Python 3.11 or newer (including the standard-library `tomllib`).
+
 Update user-visible behavior, limitations and configuration in the relevant Markdown files in the same PR. Add notable changes under `CHANGELOG.md` / `Unreleased`, grouped as Added, Changed, Deprecated, Removed, Fixed or Security. Explain compatibility changes and migration steps. Do not paste a commit log or unverified performance claims into release notes.
 
 ```sh
@@ -34,6 +36,12 @@ python3 -m unittest discover -s .github/checks/project -v
 ```
 
 Generated blocks synchronize the stable Docker example, Rust requirement, configuration-name inventory and supported stable version from Cargo, the sources and the changelog. CI fails if they drift or local Markdown links break. It also requires changelog and user-documentation updates with runtime changes, and workflow documentation with infrastructure changes. Review is still required: automation cannot verify that prose accurately describes image quality, security guarantees or benchmark results. Edit prose outside generated blocks; never invent results to satisfy a check.
+
+## Compatibility qualification
+
+The optional `native-codecs`, `cloud-sources`, `cloud-config`, `s3-decryption`, `source-cookies` and `telemetry` features are described in [COMPATIBILITY.md](COMPATIBILITY.md), including dependency licensing and intentional migration differences. Fetch locked dependencies once before running offline checks. Native checks require a C compiler and libjxl headers; native builds require libvips 8.18 development files and the enabled codecs (HEIF AV1/HEVC and JXL included for the full checks). S3 cryptographic checks need OpenSSL 3 development files, its CLI and pkg-config. Inspect `pixstride capabilities`; then test actual encoders, not only registered operations. `config_sources` stages administrator-selected configuration before any server threads and keeps the bootstrap SDK transport separate from image-source policy.
+
+The container builds/checks both feature configurations and includes all optional features. Its native round-trip check runs during the build; runtime smoke tests/scans continue to use the exact image manifest. The workflow also checks native macOS ARM64 and Intel, builds the pinned reference, compares decoded outputs, runs HTTP/Unix/keep-alive/framing/OTLP, secret-manager bootstrap and real TLS S3/KMS tests, and bounded mutation/soak smoke. macOS installs OpenSSL 3 explicitly and exports its pkg-config path; the fixture generator uses the installed C API. These jobs gate tagged promotion; they do not publish from branch pushes. Keep generated reports, corpora, temporary certificates/keys and logs untracked. See the compatibility guide for reproducible commands and the limits of this evidence.
 
 ## Releases
 

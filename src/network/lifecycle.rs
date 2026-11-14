@@ -1,6 +1,5 @@
 //! Signal-aware socket admission without a polling delay on ready connections.
 use std::{
-    net::TcpListener,
     os::fd::AsRawFd,
     sync::atomic::{AtomicBool, Ordering},
 };
@@ -29,7 +28,10 @@ pub fn initialize() -> Result<(), crate::Error> {
     }
     Ok(())
 }
-pub fn wait(listener: &TcpListener) -> Result<bool, crate::Error> {
+pub fn stopping() -> bool {
+    STOP.load(Ordering::Relaxed)
+}
+pub fn wait(listener: &impl AsRawFd) -> Result<bool, crate::Error> {
     while !STOP.load(Ordering::Relaxed) {
         let mut fd = PollFd {
             fd: listener.as_raw_fd(),

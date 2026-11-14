@@ -16,6 +16,8 @@ const MAX_SCALE: f64 = 1000.0;
 /// supplied by the requesting client.
 pub struct Config {
     path: Option<Vec<u8>>,
+    url: Option<String>,
+    data: Option<Vec<u8>>,
     base_opacity: f64,
 }
 
@@ -24,7 +26,7 @@ impl Config {
     /// The file is opened again on use to detect replacement and ordinary
     /// changes; this startup check is not an atomic filesystem snapshot.
     pub fn from_path(path: Option<&[u8]>, base_opacity: f64) -> Result<Self, Error> {
-        if !base_opacity.is_finite() || base_opacity <= 0.0 || base_opacity > 1.0 {
+        if !base_opacity.is_finite() || base_opacity < 0.0 || base_opacity > 1.0 {
             return Err("invalid watermark base opacity");
         }
         let path = path.filter(|value| !value.is_empty());
@@ -39,6 +41,8 @@ impl Config {
         }
         Ok(Self {
             path: path.map(<[u8]>::to_vec),
+            url: None,
+            data: None,
             base_opacity,
         })
     }
@@ -46,7 +50,6 @@ impl Config {
     /// Read supported imgproxy-style local configuration once at startup.
     /// Unset or empty watermark path disables the configured asset.
     pub fn from_env() -> Result<Self, Error> {
-        let path = std::env::var_os("PIXSTRIDE_WATERMARK_PATH");
         let opacity = match std::env::var_os("PIXSTRIDE_WATERMARK_OPACITY") {
             None => 1.0,
             Some(value) => value
@@ -55,12 +58,105 @@ impl Config {
                 .parse::<f64>()
                 .map_err(|_| "invalid watermark base opacity")?,
         };
-        Self::from_path(path.as_deref().map(OsStrExt::as_bytes), opacity)
+        Self::from_variables(
+            [
+                "PIXSTRIDE_WATERMARK_PATH",
+                "PIXSTRIDE_WATERMARK_URL",
+                "PIXSTRIDE_WATERMARK_DATA",
+            ],
+            opacity,
+        )
+    }
+
+    pub fn fallback_from_env() -> Result<Self, Error> {
+        Self::from_variables(
+            [
+                "PIXSTRIDE_FALLBACK_IMAGE_PATH",
+                "PIXSTRIDE_FALLBACK_IMAGE_URL",
+                "PIXSTRIDE_FALLBACK_IMAGE_DATA",
+            ],
+            1.0,
+        )
+    }
+
+    fn from_variables(names: [&str; 3], opacity: f64) -> Result<Self, Error> {
+        let path = std::env::var_os(names[0]);
+        let mut config = Self::from_path(path.as_deref().map(OsStrExt::as_bytes), opacity)?;
+        let url = std::env::var(names[1]).ok().filter(|s| !s.is_empty());
+        let data = std::env::var(names[2]).ok().filter(|s| !s.is_empty());
+        if usize::from(config.path.is_some())
+            + usize::from(url.is_some())
+            + usize::from(data.is_some())
+            > 1
+        {
+            return Err("configure only one watermark source");
+        }
+        if let Some(url) = url {
+            if cloud_url(&url) {
+                crate::network::cloud::split(&url)?;
+            } else {
+                crate::fetch::Url::parse(&url).map_err(|_| "invalid configured watermark URL")?;
+            }
+            config.url = Some(url);
+        }
+        if let Some(data) = data {
+            if data.len() > MAX_WATERMARK_BYTES * 4 / 3 + 4 {
+                return Err("watermark data exceeds limit");
+            }
+            let bytes = crate::signature::decode_base64url(
+                &data.replace('+', "-").replace('/', "_"),
+                true,
+            )?;
+            if bytes.is_empty() || bytes.len() > MAX_WATERMARK_BYTES {
+                return Err("invalid watermark data size");
+            }
+            config.data = Some(bytes);
+        }
+        Ok(config)
+    }
+
+    pub(crate) fn encoded(&self) -> Result<Vec<u8>, Error> {
+        if let Some(data) = &self.data {
+            return Ok(data.clone());
+        }
+        if let Some(url) = &self.url {
+            if cloud_url(url) {
+                return crate::network::cloud::fetch(url, MAX_WATERMARK_BYTES)
+                    .map(|download| download.body);
+            }
+            static POOL: std::sync::OnceLock<Result<crate::fetch::Pool, Error>> =
+                std::sync::OnceLock::new();
+            let pool = POOL.get_or_init(|| {
+                crate::fetch::Pool::new().map_err(|_| "watermark transport unavailable")
+            });
+            let pool = pool.as_ref().map_err(|e| *e)?;
+            return pool
+                .fetch(url, MAX_WATERMARK_BYTES)
+                .map(|d| d.body)
+                .map_err(|_| "cannot fetch configured watermark");
+        }
+        let Some(path) = &self.path else {
+            return Ok(Vec::new());
+        };
+        Ok(os::InputFile::open(path)?
+            .read_limited(MAX_WATERMARK_BYTES)?
+            .as_slice()
+            .to_vec())
+    }
+    #[cfg(feature = "native-codecs")]
+    pub(crate) fn base_opacity(&self) -> f64 {
+        self.base_opacity
     }
 
     pub fn is_configured(&self) -> bool {
-        self.path.is_some()
+        self.path.is_some() || self.url.is_some() || self.data.is_some()
     }
+}
+
+fn cloud_url(url: &str) -> bool {
+    ["s3://", "gs://", "gcs://", "abs://", "swift://"]
+        .iter()
+        .any(|prefix| url.starts_with(prefix))
 }
 
 fn validate_canvas(image: &Image) -> Result<(), Error> {
@@ -123,18 +219,10 @@ fn scaled_box(dimension: usize, scale: f64) -> Result<usize, Error> {
 }
 
 fn load(config: &Config) -> Result<Image, Error> {
-    let path = config
-        .path
-        .as_deref()
-        .ok_or("watermark image is not configured")?;
-    let file = os::InputFile::open(path)?;
-    if file.len() == 0 {
-        return Err("watermark file is empty");
+    let bytes = config.encoded()?;
+    if bytes.is_empty() {
+        return Err("watermark image is not configured");
     }
-    if file.len() > MAX_WATERMARK_BYTES {
-        return Err("watermark file exceeds limit");
-    }
-    let bytes = file.read_limited(MAX_WATERMARK_BYTES)?;
     let orientation = metadata::orientation(bytes.as_slice())?;
     let profile = metadata::extract_icc(bytes.as_slice())?;
     let mut image = pipeline::decode(bytes.as_slice())?;

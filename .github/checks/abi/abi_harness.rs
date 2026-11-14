@@ -4,19 +4,30 @@
 
 use std::net::Ipv4Addr;
 pub type Result<T> = std::result::Result<T, String>;
+pub type Error = &'static str;
 
 pub struct Buffer(Vec<u8>);
 impl Buffer {
     fn new(len: usize) -> Result<Self> { Ok(Self(vec![0; len])) }
     fn as_mut_slice(&mut self) -> &mut [u8] { &mut self.0 }
 }
-pub struct Url { full: String, host: String, scheme: String }
+pub struct Url { full: String, host: String, scheme: String, port: u16 }
 impl Url {
     fn parse(_: &str) -> Result<Self> { Err("ABI stand-in".into()) }
     fn redirect(&self, _: &str) -> Result<Self> { Err("ABI stand-in".into()) }
 }
 fn public(_: Ipv4Addr) -> bool { false }
-mod policy { pub fn allows(_: &str) -> bool { false } }
+mod policy;
+mod response;
+mod network {
+    pub mod cookies {
+        pub struct Jar;
+        impl Jar {
+            pub fn header(&self, _: &str) -> Result<Option<String>, &'static str> { Ok(None) }
+            pub fn response(&mut self, _: &str, _: &str) -> Result<(), &'static str> { Ok(()) }
+        }
+    }
+}
 
 #[macro_use]
 mod abi_probe_tests;
@@ -39,6 +50,7 @@ unsafe extern "C" {
     fn abi_socket_flags() -> i32;
     fn abi_ipv4_octet_offset() -> usize;
     fn abi_make_sockaddr(out: *mut u8, valid_family: i32);
+    fn abi_make_sockaddr_v6(out: *mut u8) -> i32;
 }
 
 const OPTIONS: &[i32] = &include!("curl_options.rs");

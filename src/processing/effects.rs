@@ -13,7 +13,7 @@ const MAX_BLOCK: usize = 1024;
 const MAX_FILTER_TAPS: usize = 120_000_000;
 const MAX_TRIM_PIXELS: usize = 5_000_000;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Trim {
     pub threshold: u8,
     /// RGB comparison color. Alpha is ignored; None selects the top-left
@@ -21,7 +21,7 @@ pub struct Trim {
     pub color: Option<[u8; 4]>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct Effects {
     pub blur_sigma: f64,
     pub sharpen_sigma: f64,
