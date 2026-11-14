@@ -5,3 +5,34 @@ pub(crate) mod overload;
 pub(crate) mod protocol;
 pub(crate) mod request;
 pub(crate) mod server;
+
+#[cfg(feature = "cloud-sources")]
+pub(crate) mod aws_identity;
+pub(crate) mod cloud;
+#[cfg(feature = "cloud-sources")]
+mod cloud_transport;
+#[cfg(feature = "cloud-sources")]
+mod credential_metadata;
+pub(crate) mod headers;
+pub(crate) mod metrics;
+#[cfg(feature = "s3-decryption")]
+mod s3_decryption;
+#[cfg(feature = "s3-decryption")]
+mod s3_metadata;
+pub(crate) mod settings;
+#[cfg(feature = "cloud-sources")]
+mod swift_auth;
+
+#[cfg(all(test, feature = "cloud-sources"))]
+mod cloud_tests;
+mod engine;
+mod handler;
+pub(crate) mod socket;
+mod telemetry;
+
+mod metrics_listener;
+
+mod connection;
+
+pub(crate) mod cookies;
+mod range;

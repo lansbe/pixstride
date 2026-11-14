@@ -54,7 +54,6 @@ fn remote_url_parser_accepts_only_supported_authorities() {
         "https://example.test:/a.png",
         "https://user@example.test/a.png",
         "https://example.test:0/a.png",
-        "https://example.test:81/a.png",
         "https://example.test:notaport/a.png",
         "https://example.test/a.png#fragment",
         "https://example.test/a b",
@@ -65,6 +64,14 @@ fn remote_url_parser_accepts_only_supported_authorities() {
     for value in invalid {
         assert!(Url::parse(value).is_err(), "accepted {value:?}");
     }
+    let ipv6 = Url::parse("https://[2001:4860:4860::8888]:8443/a").unwrap();
+    assert_eq!(ipv6.host, "2001:4860:4860::8888");
+    assert_eq!(
+        ipv6.redirect("/next").unwrap().full,
+        "https://[2001:4860:4860::8888]:8443/next"
+    );
+    assert!(Url::parse("https://[::1]extra/").is_err());
+    assert!(Url::parse("https://[fe80::1%25en0]/").is_err());
 }
 
 #[test]

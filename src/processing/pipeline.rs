@@ -7,6 +7,7 @@ pub struct Processed {
     pub mime: &'static str,
     pub width: usize,
     pub height: usize,
+    pub origin: [usize; 2],
 }
 
 fn jpeg_frame(data: &[u8]) -> Result<Option<(u8, usize, usize, usize)>, Error> {
@@ -205,6 +206,12 @@ pub fn process(
     request: &Request,
     watermark: &crate::watermark::Config,
 ) -> Result<Processed, Error> {
+    if request.extra.native
+        || crate::processing::native::needs(data)
+        || std::env::var("PIXSTRIDE_ENGINE").as_deref() == Ok("native")
+    {
+        return crate::processing::native::process(data, request, watermark);
+    }
     if !request.strip_metadata {
         return Err("retaining all source metadata is not yet supported");
     }
@@ -308,6 +315,7 @@ pub fn process(
                     },
                     width,
                     height,
+                    origin: [sw, sh],
                 });
             }
         }
@@ -372,12 +380,14 @@ pub fn process(
                         mime,
                         width,
                         height,
+                        origin: [source_width, source_height],
                     });
                 }
             }
         }
     }
     let mut decoded = decode(data)?;
+    let origin = [decoded.width, decoded.height];
     if request.strip_color_profile {
         if let Some(icc) = profile.take() {
             crate::metadata::convert_to_srgb(&mut decoded, &icc)?;
@@ -411,6 +421,9 @@ pub fn process(
             OutputFormat::Ico => (crate::extra_encode::encode_ico(&image)?, "image/x-icon"),
             OutputFormat::Gif => (crate::gif_encode::encode(&image)?, "image/gif"),
             OutputFormat::Webp => unreachable!(),
+            OutputFormat::Avif | OutputFormat::Heic | OutputFormat::Jxl | OutputFormat::Svg => {
+                return Err("native engine required")
+            }
         };
         drop(image);
         encoded
@@ -420,9 +433,14 @@ pub fn process(
             OutputFormat::Png => crate::metadata::preserve_icc_png(body.as_slice(), &icc)?,
             OutputFormat::Jpeg => crate::metadata::preserve_icc_jpeg(body.as_slice(), &icc)?,
             OutputFormat::Webp => crate::metadata::preserve_icc_webp(body.as_slice(), &icc)?,
-            OutputFormat::Bmp | OutputFormat::Tiff | OutputFormat::Ico | OutputFormat::Gif => {
-                return Err("ICC preservation unavailable for selected output")
-            }
+            OutputFormat::Bmp
+            | OutputFormat::Tiff
+            | OutputFormat::Ico
+            | OutputFormat::Gif
+            | OutputFormat::Avif
+            | OutputFormat::Heic
+            | OutputFormat::Jxl
+            | OutputFormat::Svg => return Err("ICC preservation unavailable for selected output"),
         };
     }
     Ok(Processed {
@@ -430,5 +448,6 @@ pub fn process(
         mime,
         width,
         height,
+        origin,
     })
 }

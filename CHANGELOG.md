@@ -6,13 +6,64 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- Optional S3 client-side KMS decryption for authenticated V2 AES-GCM and V3 committing HKDF-SHA512 envelopes, bounded in-place payload authentication and MIME/Unicode context handling. Real TLS S3/KMS tests cover independent envelopes, SigV4 and tamper/downgrade rejection.
+- CloudWatch SDK/profile credentials under the existing one-second export deadline; shared source identity transport for S3 roles and KMS. Optional cloud root CAs retain certificate/hostname verification.
+- OSS origin/result debug headers from both engines and bounded gzip/deflate HTTP source decoding with separate wire-byte accounting.
+- Optional staged startup configuration from AWS Secrets Manager, paginated decrypted SSM parameters, Google Secret Manager with CRC32C and local environment files. SDK OAuth/ADC and credential files are covered by synthetic protocol checks; native workers never load these sources.
+- SDK metadata credentials behind a separate explicit opt-in; S3 roles/external IDs/path style and per-bucket regions, S3/GCS object versions, per-provider bucket deny lists and Swift v1/v2/v3 authentication with public regional catalog discovery and independent user/project domains.
+
+- IPv4/IPv6 source fetching, explicit loopback/private/link-local and port policies, bounded download/redirect settings and configurable User-Agent/TLS verification. Real loopback IPv4/IPv6 checks cover redirects and per-request cookie isolation.
+- Opt-in origin Cache-Control/Expires passthrough, subordinate to signed URL expiration, fallback policy and private cookie caching. Send an explicit restrictive Content-Security-Policy on responses.
+- Bounded single byte ranges for admitted raw images, strong/date If-Range, conditional-response precedence, suffix/open-ended ranges and 206/416 responses without a second body allocation.
+
+- Optional per-source cookie passthrough with RFC6265 rules, a pinned public suffix list, bounded per-request storage and no cookie state in pooled transports. Cookie-dependent image responses always disable shared caching.
+
+- Opt-in HTTP keep-alive and pipelining with a 32-request connection limit, fixed pending-input buffer, idle expiry and signal-aware shutdown; verify reuse, request framing and shutdown on all CI platforms.
+
+- Bounded URL rewriting/source patterns, preset-only policy, Client Hints, enforced formats, configurable HTTP routes, authenticated separate Prometheus listener and processed fallback images.
+- SVG sanitization with bounded embedded PNG/JPEG resources; HEIF response MIME matching OSS and JPEG XL animation input.
+- OTLP metrics/logs, optional W3C parent sampling and PEM TLS identity; direct Datadog/New Relic OTLP, four error-notice APIs and CloudWatch SigV4 with local protocol tests on all CI platforms.
+
+- Native JPEG progressive/PNG interlaced and bounded palette settings, encoder effort/preset controls, processing defaults, preferred formats, truncated HMAC and explicit trusted signatures.
+
+- Optional isolated libvips engine with native WebP/AVIF/HEIC/JPEG XL, broader static SVG, 16-bit colour/alpha, selected copyright metadata and bounded GIF/WebP animation.
+- OSS URL presets, key rotation, expiration, DPR/zoom/minimum dimensions, extension, smart/fractional crops, watermark tiling/URL/Base64, per-format quality and bounded output-size search.
+- HEAD, Bearer authorization, opt-in modern format negotiation, ETag/Last-Modified/TTL, UTF-8 disposition, CORS, Prometheus and optional bounded OTLP/HTTP traces.
+- Optional S3/GCS/Azure/Swift readers with per-request credential loading and Keystone v3 token exchange, nested confined local paths, inbound IPv6/Unix sockets and native concurrency with explicit memory reservations.
+- Pinned imgproxy 4.0.21 compatibility matrix, synthetic differential/native/HTTP/mutation/soak checks and macOS ARM64/Intel CI alongside Linux containers.
 - A protected `develop` integration line, separate prerelease channels, automatic merged-branch deletion and a safe local cleanup command.
 - Generated Markdown sections, documentation consistency checks and release preparation that synchronizes Cargo versions and the changelog.
 - Automatic GitHub release notes from the reviewed changelog after both container architectures pass validation.
 
 ### Changed
 
+- External crates and image libraries are permitted; feature-specific dependencies, resource limits and migration differences are documented in `COMPATIBILITY.md`. Native and cloud capabilities are opt-in in Cargo; the container includes them.
+- Building now requires fetching locked Cargo dependencies before offline checks. Python tooling requires Python 3.11+.
 - Release version tags are immutable. Prereleases never update the stable Docker or GitHub `latest` release, and older releases cannot roll a channel backwards.
+
+### Fixed
+
+- Read exactly the bounded stat size for SDK object bodies, avoiding short-read rejection when the server returns fewer bytes than the prior maximum-sized request.
+- Keep credential/configuration/certificate reads nonblocking and limited to regular targets while supporting rotating mounted symlinks; image-source confinement remains unchanged.
+- Wait for listener readiness in the nonblocking acceptance regression, avoiding a scheduling race after TCP connect.
+
+- Match OSS HTTP error statuses for Bearer authorization, invalid signatures, processing URLs, expiration and source pixel limits; add seven negative differential cases.
+
+- Read startup entropy through the OS random device on glibc, musl and macOS; qualify JPEG XL animation input with the installed encoder API and allow configured watermark/fallback cloud sources.
+
+- Match effective DPR, minimum-size priority, separate extension gravities, zoomed canvases and result limits including padding against 50 synthetic OSS comparisons; support RGB ICC retention with watermark composition and quoted local SVG references.
+- Install Go explicitly in macOS CI for the pinned OSS reference build.
+
+- Explicitly return accepted sockets to blocking mode on nonblocking listeners, preventing intermittent macOS HTTP 400 responses before request data arrives.
+- Read a complete bounded health status line instead of assuming the first TCP read contains it.
+- Use the platform C character type and GLib allocation cleanup in the locally patched libvips binding, including unsigned C char on Linux ARM64.
+
+### Security
+
+- Reject active foreign XML namespaces in SVG passthrough and remove them during sanitization; include an XHTML object regression alongside scripts/styles/external references.
+
+- Bound native child lifetime, pipes, frame totals and encoding attempts; remove secrets from child environments and reject external/active SVG resources.
+- Preserve host/public-address checks in cloud SDK transport, use conditional object reads and reject symlinks throughout nested local paths.
 
 ## [0.1.1] - 2026-11-08
 

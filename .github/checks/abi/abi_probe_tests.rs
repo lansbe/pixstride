@@ -31,6 +31,13 @@ macro_rules! transport_abi_checks {
             assert!(valid_family(&address.address), "C IPv4 family layout");
             unsafe { crate::abi_make_sockaddr(address.address.as_mut_ptr(), 0) };
             assert!(!valid_family(&address.address), "C non-IPv4 family layout");
+            #[repr(C)]
+            struct Extended { family: c_int, kind: c_int, protocol: c_int, length: c_uint, address: [u8; 28] }
+            let mut v6 = Extended { family: 0, kind: 1, protocol: 6, length: 28, address: [0; 28] };
+            v6.family = unsafe { crate::abi_make_sockaddr_v6(v6.address.as_mut_ptr()) };
+            assert_eq!(unsafe { destination((&v6 as *const Extended).cast()) }, Some("2606:4700::1".parse().unwrap()));
+            v6.length = 16;
+            assert!(unsafe { destination((&v6 as *const Extended).cast()) }.is_none());
             let _: unsafe extern "C" fn(*mut c_char, usize, usize, *mut c_void) -> usize = write_body;
             let _: unsafe extern "C" fn(*mut c_char, usize, usize, *mut c_void) -> usize = write_header;
             let _: unsafe extern "C" fn(*mut c_void, c_int, *mut Address) -> c_int = open_socket;

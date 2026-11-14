@@ -1,9 +1,10 @@
 use crate::Result;
 use std::net::Ipv4Addr;
-mod policy;
+pub(crate) mod policy;
+mod response;
 mod transport;
 pub use policy::initialize;
-pub use transport::LazyPool as Pool;
+pub use transport::{Download, LazyPool as Pool};
 #[derive(Debug)]
 pub struct Url {
     pub full: String,
@@ -30,18 +31,43 @@ impl Url {
         }
         let end = tail.find(['/', '?']).unwrap_or(tail.len());
         let authority = &tail[..end];
-        let (host, port) = match authority.split_once(':') {
-            Some((h, p)) => (h, p.parse().map_err(|_| "Invalid port")?),
-            None => (authority, if scheme == "https" { 443 } else { 80 }),
+        let (host, port) = if let Some(v6) = authority.strip_prefix('[') {
+            let (ip, suffix) = v6.split_once(']').ok_or("Invalid IPv6 authority")?;
+            let ip = ip
+                .parse::<std::net::Ipv6Addr>()
+                .map_err(|_| "Invalid IPv6 address")?;
+            let port = if suffix.is_empty() {
+                if scheme == "https" {
+                    443
+                } else {
+                    80
+                }
+            } else {
+                suffix
+                    .strip_prefix(':')
+                    .ok_or("Invalid IPv6 port")?
+                    .parse()
+                    .map_err(|_| "Invalid port")?
+            };
+            (ip.to_string(), port)
+        } else {
+            match authority.split_once(':') {
+                Some((h, p)) => (h.to_owned(), p.parse().map_err(|_| "Invalid port")?),
+                None => (
+                    authority.to_owned(),
+                    if scheme == "https" { 443 } else { 80 },
+                ),
+            }
         };
         if host.is_empty()
             || host.len() > 253
-            || !host
-                .bytes()
-                .all(|b| b.is_ascii_alphanumeric() || b".-".contains(&b))
-            || !matches!(port, 80 | 443)
+            || (host.parse::<std::net::Ipv6Addr>().is_err()
+                && !host
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b".-".contains(&b)))
+            || port == 0
         {
-            return Err("Public host required, without credentials, on port 80 or 443".into());
+            return Err("Host required, without credentials, on a valid port".into());
         }
         let path = match &tail[end..] {
             "" => "/".to_string(),
@@ -60,7 +86,12 @@ impl Url {
         if location.contains("://") {
             return Self::parse(location);
         }
-        let authority = format!("{}://{}:{}", self.scheme, self.host, self.port);
+        let host = if self.host.contains(':') {
+            format!("[{}]", self.host)
+        } else {
+            self.host.clone()
+        };
+        let authority = format!("{}://{}:{}", self.scheme, host, self.port);
         let next = if location.starts_with("//") {
             format!("{}:{location}", self.scheme)
         } else if location.starts_with('/') {
@@ -104,3 +135,8 @@ pub(super) fn public(ip: Ipv4Addr) -> bool {
 #[cfg(test)]
 #[path = "fetch_regressions.rs"]
 mod security_regressions;
+
+#[cfg(feature = "cloud-sources")]
+pub(crate) fn allows_host(host: &str) -> bool {
+    policy::allows(host)
+}

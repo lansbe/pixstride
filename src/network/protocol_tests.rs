@@ -183,7 +183,10 @@ fn blocked_response_respects_the_shorter_total_deadline() {
     server
         .set_write_timeout(Some(Duration::from_millis(250)))
         .unwrap();
+    // TCP may still accept a short response after a larger nonblocking write
+    // reports WouldBlock. Exceed that residual capacity to exercise the deadline.
+    let body = "busy".repeat(256 * 1024);
     let started = Instant::now();
-    assert!(text(&mut server, 503, "busy").is_err());
+    assert!(text(&mut server, 503, &body).is_err());
     assert!(started.elapsed() < Duration::from_secs(5));
 }

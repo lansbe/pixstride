@@ -1,0 +1,15 @@
+[package]
+name = "rs-vips"
+version = "0.7.0"
+edition = "2021"
+license = "MIT"
+build = "build.rs"
+publish = false
+
+[lib]
+name = "rs_vips"
+path = "src/lib.rs"
+
+[dependencies]
+num-derive = "0.4.2"
+num-traits = "0.2"

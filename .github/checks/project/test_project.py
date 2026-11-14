@@ -56,13 +56,18 @@ class DocumentationTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="pixstride-project-test-")
         self.root = Path(self.directory.name)
-        for name in ("Cargo.toml", "Cargo.lock", "README.md", "SECURITY.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE"):
+        for name in ("Cargo.toml", "Cargo.lock", "README.md", "SECURITY.md", "CHANGELOG.md", "CONTRIBUTING.md", "COMPATIBILITY.md", "LICENSE"):
             shutil.copyfile(ROOT / name, self.root / name)
         shutil.copytree(ROOT / "src", self.root / "src")
         (self.root / ".github").mkdir()
+        (self.root / "vendor/rs-vips").mkdir(parents=True)
+        shutil.copyfile(ROOT / "vendor/rs-vips/README.md", self.root / "vendor/rs-vips/README.md")
+        shutil.copytree(ROOT / ".github/checks/compatibility", self.root / ".github/checks/compatibility")
         run("git", "init", "-b", "master", cwd=self.root)
         run("git", "config", "user.name", "Fixture", cwd=self.root)
         run("git", "config", "user.email", "fixture@example.invalid", cwd=self.root)
+        # Synthetic repositories must not execute the developer's global hooks.
+        run("git", "config", "core.hooksPath", "/dev/null", cwd=self.root)
         # Fixed fixture metadata keeps these tests valid after real version bumps.
         current = project.package(self.root)["version"]
         for name in ("Cargo.toml", "Cargo.lock"):
@@ -166,6 +171,7 @@ class CleanupTests(unittest.TestCase):
             run("git", "clone", str(origin), str(work), cwd=root)
             run("git", "config", "user.name", "Fixture", cwd=work)
             run("git", "config", "user.email", "fixture@example.invalid", cwd=work)
+            run("git", "config", "core.hooksPath", "/dev/null", cwd=work)
             (work / "sample").write_text("baseline")
             run("git", "add", ".", cwd=work)
             run("git", "-c", "commit.gpgsign=false", "commit", "-m", "baseline", cwd=work)

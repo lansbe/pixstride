@@ -1,0 +1,10 @@
+{
+  "version": "4.0.21",
+  "source_commit": "302105ccd183d0038ef71aa11ab4ff3de5f0c989",
+  "source_url": "https://github.com/imgproxy/imgproxy/tree/302105ccd183d0038ef71aa11ab4ff3de5f0c989",
+  "image": "docker.io/darthsim/imgproxy:v4.0.21@sha256:69ae09dbc3349944564cb2f66cf35f80a4a9a78fda73d06061a337849520ab1f",
+  "platforms": {
+    "linux/amd64": "sha256:cd75a92d4e7a28cce252f0393b5f58b6281457146e7fc27b5189d98c0e403845",
+    "linux/arm64": "sha256:025f782ab2a68f8aed5ae0d68037615981f07138e39fe1744f435848137cfc12"
+  }
+}

@@ -11,7 +11,7 @@ pub type Error = &'static str;
 const MAX_TARGET: usize = 16 * 1024;
 const MAX_SOURCE: usize = 12_000;
 const MAX_DIMENSION: usize = 100_000;
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OutputFormat {
     Png,
     Bmp,
@@ -20,9 +20,13 @@ pub enum OutputFormat {
     Tiff,
     Ico,
     Gif,
+    Avif,
+    Heic,
+    Jxl,
+    Svg,
 }
 /// OSS watermark parameters; the image itself comes from server configuration.
-#[derive(Clone, Copy, Debug)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug)]
 pub struct WatermarkSpec {
     pub opacity: f64,
     pub gravity: Gravity,
@@ -31,8 +35,10 @@ pub struct WatermarkSpec {
     /// Zero retains the source watermark's native size.
     pub scale: f64,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct Request {
     pub source: String,
+    pub extra: extended::Options,
     pub options: TransformOptions,
     /// None delegates format selection to the caller; unsupported selections must fail.
     pub format: Option<OutputFormat>,
@@ -45,14 +51,31 @@ pub struct Request {
     pub watermark: Option<WatermarkSpec>,
 }
 pub(crate) enum Auth {
-    Signed { key: Vec<u8>, salt: Vec<u8> },
+    Signed { pairs: Vec<(Vec<u8>, Vec<u8>)> },
     UnsafeLocal,
 }
 /// Secrets are private and deliberately do not implement Debug or Display.
 pub struct Config {
     auth: Auth,
+    presets: presets::Presets,
+    defaults: Vec<String>,
+    encoding: defaults::Encoding,
+    preferred: Vec<OutputFormat>,
+    native_defaults: bool,
+    signature_size: usize,
+    trusted: Vec<String>,
+    policy: policy::Policy,
 }
 mod watermark_spec;
 pub(crate) use watermark_spec::*;
 mod parse;
 pub(crate) use parse::*;
+
+mod auth;
+mod defaults;
+mod extended;
+mod policy;
+mod presets;
+
+#[cfg(test)]
+mod compatibility_tests;

@@ -382,3 +382,26 @@ pub fn encode(image: &Image) -> Result<Buffer, Error> {
     }
     Ok(result)
 }
+
+#[cfg(test)]
+mod lane_tests {
+    use super::*;
+    #[test]
+    fn vector_filter_scores_match_the_scalar_reference_at_lane_boundaries() {
+        for channels in [3, 4] {
+            for width in [1, 3, 4, 5, 15, 16, 17, 31, 32, 33, 257] {
+                let current = (0..width * channels)
+                    .map(|i| (i * 73 + 19) as u8)
+                    .collect::<Vec<_>>();
+                let previous = (0..width * channels)
+                    .map(|i| (i * 137 + 251) as u8)
+                    .collect::<Vec<_>>();
+                assert_eq!(
+                    score_filters(&current, &previous, channels),
+                    score_filters_scalar(&current, &previous, channels),
+                    "{width} pixels, {channels} channels"
+                );
+            }
+        }
+    }
+}

@@ -1,6 +1,6 @@
 //! Local source root pinned by directory descriptor on supported Unix platforms.
 //!
-//! Names are flat and the final component is opened with `O_NOFOLLOW`. The
+//! Each relative path component is opened with `O_NOFOLLOW`. The
 //! directory descriptor remains authoritative if the configured path is
 //! renamed or replaced. Sources are read into one bounded private buffer.
 
@@ -78,38 +78,59 @@ impl LocalRoot {
             .ok_or("local source must start with local:///")?;
         if name.is_empty()
             || name.len() > MAX_SOURCE_NAME
-            || name == "."
-            || name == ".."
+            || name.split('/').count() > 64
             || name
                 .bytes()
-                .any(|b| b <= 32 || b >= 127 || matches!(b, b'/' | b'\\' | b'?' | b'#'))
+                .any(|b| b < 32 || b == 127 || matches!(b, b'\\' | b'?' | b'#'))
         {
-            return Err("local source must be a flat filename".into());
+            return Err("invalid local source path".into());
         }
-        let name = CString::new(name).map_err(|_| "invalid local source name")?;
-        loop {
-            // SAFETY: the directory remains open for the call, `name` is a
-            // live NUL-terminated string with no embedded slash, and no mode
-            // argument is needed because no creation flag is used.
-            let fd = unsafe {
-                openat(
-                    self.directory.as_raw_fd(),
-                    name.as_ptr(),
-                    O_RDONLY | O_NONBLOCK | O_NOFOLLOW | O_CLOEXEC,
-                )
+        let mut directory = self
+            .directory
+            .try_clone()
+            .map_err(|_| "cannot duplicate source root")?;
+        let mut components = name.split('/').peekable();
+        while let Some(component) = components.next() {
+            if matches!(component, "" | "." | "..") {
+                return Err("invalid local path component".into());
+            }
+            let component = CString::new(component).map_err(|_| "invalid local source name")?;
+            let flags = O_RDONLY
+                | O_NONBLOCK
+                | O_NOFOLLOW
+                | O_CLOEXEC
+                | if components.peek().is_some() {
+                    O_DIRECTORY
+                } else {
+                    0
+                };
+            let file = loop {
+                // SAFETY: directory pins the parent while openat resolves one
+                // NUL-terminated component. NOFOLLOW applies at every level;
+                // no creation flag is set, and success transfers one owned fd.
+                let fd = unsafe { openat(directory.as_raw_fd(), component.as_ptr(), flags) };
+                if fd >= 0 {
+                    break unsafe { File::from_raw_fd(fd) };
+                }
+                if io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
+                    return Err("file not found or cannot be opened safely".into());
+                }
             };
-            if fd >= 0 {
-                // SAFETY: a successful openat returns a new owned descriptor.
-                return Ok(unsafe { File::from_raw_fd(fd) });
+            if components.peek().is_none() {
+                return Ok(file);
             }
-            if io::Error::last_os_error().kind() != io::ErrorKind::Interrupted {
-                return Err("file not found or cannot be opened safely".into());
-            }
+            directory = file;
         }
+        Err("local object required".into())
     }
 
-    pub fn read(&self, source: &str) -> Result<Buffer, String> {
-        read_checked(self.open_name(source)?, || {})
+    pub fn read_with_modified(
+        &self,
+        source: &str,
+    ) -> Result<(Buffer, Option<std::time::SystemTime>), String> {
+        let file = self.open_name(source)?;
+        let modified = file.metadata().ok().and_then(|m| m.modified().ok());
+        Ok((read_checked(file, || {})?, modified))
     }
 }
 

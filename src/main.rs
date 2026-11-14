@@ -24,6 +24,7 @@ mod security;
 use security::signature;
 mod buffer;
 mod config;
+mod config_sources;
 mod os;
 pub use buffer::Buffer;
 pub type Error = &'static str;

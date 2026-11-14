@@ -3,7 +3,7 @@
 //! Pixels use straight alpha. Operations run in this order: source crop,
 //! resize, clockwise rotation, flips, result crop, padding, background, watermark.
 use crate::{resize, Buffer, Error, Image, MAX_PIXELS};
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ResizeMode {
     Fit,
     Fill,
@@ -11,7 +11,7 @@ pub enum ResizeMode {
     /// Choose fill when source and target have the same orientation, fit otherwise.
     Auto,
 }
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq)]
 pub enum Gravity {
     Center,
     North,
@@ -28,25 +28,25 @@ pub enum Gravity {
         y: f64,
     },
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Rotation {
     R0,
     R90,
     R180,
     R270,
 }
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Filter {
     Lanczos3,
 }
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Padding {
     pub top: usize,
     pub right: usize,
     pub bottom: usize,
     pub left: usize,
 }
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy, Debug, PartialEq)]
 pub struct Crop {
     /// Zero means the corresponding source dimension.
     pub width: usize,
@@ -61,6 +61,7 @@ pub struct Watermark {
     /// Overall opacity, 0 to 255, multiplied with the watermark alpha.
     pub opacity: u8,
 }
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct TransformOptions {
     /// Zero leaves a dimension proportional; both zero mean no resize.
     pub width: usize,
@@ -74,24 +75,25 @@ pub struct TransformOptions {
     pub padding: Padding,
     /// Optional background composited behind every pixel, including padding.
     pub background: Option<[u8; 4]>,
+    #[serde(skip)]
     pub watermark: Option<Watermark>,
     pub method: Filter,
     pub crop: Option<Crop>,
 }
-#[derive(Clone, Copy)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
 pub(crate) enum Alignment {
     Start,
     Center,
     End,
     Focus(f64),
 }
-#[derive(Clone, Copy)]
+#[derive(serde::Serialize, serde::Deserialize, Clone, Copy)]
 pub(crate) struct ResizePlan {
-    width: usize,
-    height: usize,
-    target_w: usize,
-    target_h: usize,
-    fill: bool,
+    pub(crate) width: usize,
+    pub(crate) height: usize,
+    pub(crate) target_w: usize,
+    pub(crate) target_h: usize,
+    pub(crate) fill: bool,
 }
 mod filter;
 pub(crate) use filter::*;
