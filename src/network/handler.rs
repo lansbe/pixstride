@@ -288,6 +288,11 @@ pub(super) fn handle(
                 ));
             }
             let mut varies = Vec::new();
+            if settings.secret.is_some() {
+                // Public authenticated responses are cacheable, so bind shared-cache
+                // reuse to the credential that passed this request.
+                varies.push("Authorization");
+            }
             if cookie_sensitive {
                 varies.push("Cookie");
             }
