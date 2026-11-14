@@ -1,4 +1,5 @@
-use super::{open_socket, Address};
+use super::{open_socket, resolve_redirect, Address};
+use crate::network::fetch::Url;
 use std::{net::Ipv4Addr, os::fd::FromRawFd, ptr};
 
 fn address_for(ip: Ipv4Addr) -> Address {
@@ -54,4 +55,50 @@ fn socket_callback_refuses_invalid_arguments() {
     assert_eq!(unsafe { open_socket(ptr::null_mut(), 1, &mut address) }, -1);
     address.length = 15;
     assert_eq!(unsafe { open_socket(ptr::null_mut(), 0, &mut address) }, -1);
+}
+
+#[test]
+fn redirects_remain_inside_the_allowed_source_prefix() {
+    let current = Url::parse("https://images.example/public/image.png").unwrap();
+    let allows_public = |source: &str| source.starts_with("https://images.example/public/");
+
+    assert!(resolve_redirect(
+        &current,
+        "https://images.example/private/image.png",
+        &allows_public,
+    )
+    .is_err());
+    assert!(resolve_redirect(&current, "/private/image.png", &allows_public).is_err());
+    for location in [
+        "../private/image.png",
+        "./../private/image.png",
+        "/public/../private/image.png",
+        "https://images.example/public/../private/image.png",
+        "//images.example/public/../private/image.png",
+    ] {
+        assert!(
+            resolve_redirect(&current, location, &allows_public).is_err(),
+            "allowed redirect outside the public prefix: {location}"
+        );
+    }
+    assert!(resolve_redirect(
+        &current,
+        "//images.example/private/image.png",
+        &allows_public,
+    )
+    .is_err());
+    assert_eq!(
+        resolve_redirect(&current, "/public/next.png", &allows_public)
+            .unwrap()
+            .full,
+        "https://images.example/public/next.png"
+    );
+    for location in ["./next.png", "sub/../next.png"] {
+        assert_eq!(
+            resolve_redirect(&current, location, &allows_public)
+                .unwrap()
+                .full,
+            "https://images.example/public/next.png"
+        );
+    }
 }

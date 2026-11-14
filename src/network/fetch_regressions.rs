@@ -87,3 +87,30 @@ fn redirect_parsing_is_bounded_to_supported_url_syntax() {
     assert!(base.redirect("https://user@example.test/a.png").is_err());
     assert!(base.redirect("#fragment").is_err());
 }
+
+#[test]
+fn remote_paths_normalize_dot_segments_without_reinterpreting_other_bytes() {
+    for (path, expected) in [
+        ("/public/../private/image.png", "/private/image.png"),
+        ("/public/./image.png", "/public/image.png"),
+        ("/public/sub/../image.png", "/public/image.png"),
+        ("/../../image.png", "/image.png"),
+        ("/public/.", "/public/"),
+        ("/public/..", "/"),
+        ("/public//.", "/public//"),
+        ("/public/a//../image.png", "/public/a/image.png"),
+        ("/public//image.png", "/public//image.png"),
+        ("/public/%2e%2e/image.png", "/public/%2e%2e/image.png"),
+        ("/public/.%2e/image.png", "/public/.%2e/image.png"),
+        ("/public/%2f../image.png", "/public/%2f../image.png"),
+        ("/public/.../image.png", "/public/.../image.png"),
+        (
+            "/public/./image.png?next=/../x",
+            "/public/image.png?next=/../x",
+        ),
+    ] {
+        let url = Url::parse(&format!("https://EXAMPLE.TEST:443{path}")).unwrap();
+        assert_eq!(url.path, expected, "path: {path}");
+        assert_eq!(url.full, format!("https://EXAMPLE.TEST:443{expected}"));
+    }
+}

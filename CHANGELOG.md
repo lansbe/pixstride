@@ -67,6 +67,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Security
 
+- Enforce allowed-source patterns on every HTTP redirect and on normalized initial HTTP paths, preventing literal `.` and `..` segments from escaping an allowed path prefix. Relative redirects that stay within the allowed prefix remain supported.
+
 - Reject active foreign XML namespaces in SVG passthrough and remove them during sanitization; include an XHTML object regression alongside scripts/styles/external references.
 
 - Bound native child lifetime, pipes, frame totals and encoding attempts; remove secrets from child environments and reject external/active SVG resources.
