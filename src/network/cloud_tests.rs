@@ -226,7 +226,7 @@ impl HttpTransport for RolePeer {
                 .to_str()
                 .unwrap()
                 .contains("Credential=fixture-key/"));
-            let body=b"<AssumeRoleResponse><AssumeRoleResult><Credentials><AccessKeyId>ASIATEMPORARYFIXTURE</AccessKeyId><SecretAccessKey>temporary-secret</SecretAccessKey><SessionToken>temporary-session</SessionToken><Expiration>2099-01-01T00:00:00Z</Expiration></Credentials></AssumeRoleResult></AssumeRoleResponse>";
+            let body=b"<AssumeRoleResponse><AssumeRoleResult><Credentials><AccessKeyId>FIXTURETEMPORARYKEY</AccessKeyId><SecretAccessKey>temporary-secret</SecretAccessKey><SessionToken>temporary-session</SessionToken><Expiration>2099-01-01T00:00:00Z</Expiration></Credentials></AssumeRoleResult></AssumeRoleResponse>";
             return Ok(http::Response::builder()
                 .status(200)
                 .body(HttpBody::new(
@@ -238,7 +238,7 @@ impl HttpTransport for RolePeer {
         assert!(r.headers()["authorization"]
             .to_str()
             .unwrap()
-            .contains("Credential=ASIATEMPORARYFIXTURE/"));
+            .contains("Credential=FIXTURETEMPORARYKEY/"));
         assert_eq!(r.headers()["x-amz-security-token"], "temporary-session");
         self.0.fetch(r).await
     }

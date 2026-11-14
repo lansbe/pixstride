@@ -8,6 +8,8 @@ Run `cargo fmt --check`, `cargo clippy --locked --offline -- -D warnings`, and b
 
 Benchmarks must state hardware, compiler, output bytes and decoded-pixel differences, cache state, concurrency, CPU accounting, HTTP percentiles and peak RSS. A faster different output is not an equal-quality win. Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
+Use obviously fictitious credentials in synthetic tests, without real provider key prefixes or token formats, so fixtures do not trigger secret-scanning alerts.
+
 ## Branches and pull requests
 
 `master` is the default, stable branch. `develop` is the integration branch. Both are permanent and protected against deletion and force-pushes. Changes go through pull requests with the documentation check and both container checks passing. Merge commits preserve ancestry across these two lines and make branch cleanup verifiable. No extra permanent `beta` branch is needed.
