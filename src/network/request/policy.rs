@@ -197,8 +197,7 @@ impl Policy {
         Ok(source)
     }
     fn allows_source(&self, source: &str) -> bool {
-        self.allowed_sources.is_empty()
-            || self.allowed_sources.iter().any(|p| p.is_match(source))
+        self.allowed_sources.is_empty() || self.allowed_sources.iter().any(|p| p.is_match(source))
     }
 }
 impl Config {

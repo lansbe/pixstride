@@ -326,6 +326,9 @@ impl Client {
         let policy = policy::settings();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(policy.timeout);
         let mut url = Url::parse(raw)?;
+        if !allows_source(&url.full) {
+            return Err("source does not match allowed patterns".into());
+        }
         let mut connects = 0;
         let mut bytes = 0;
         for hop in 0..=policy.redirects {

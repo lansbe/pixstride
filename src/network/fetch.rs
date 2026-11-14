@@ -74,6 +74,7 @@ impl Url {
             p if p.starts_with('?') => format!("/{p}"),
             p => p.to_string(),
         };
+        let path = normalize_path(&path);
         Ok(Self {
             full: format!("{scheme}://{authority}{path}"),
             scheme: scheme.into(),
@@ -114,6 +115,30 @@ impl Url {
         };
         Self::parse(&next)
     }
+}
+// Match libcurl's removal of literal dot segments before policy checks. Keep
+// query bytes, percent escapes and repeated slashes as the transport sees them.
+fn normalize_path(value: &str) -> String {
+    let (path, query) = value.split_once('?').unwrap_or((value, ""));
+    let mut segments = Vec::new();
+    for segment in path[1..].split('/') {
+        match segment {
+            "." => {}
+            ".." => {
+                segments.pop();
+            }
+            _ => segments.push(segment),
+        }
+    }
+    if path.ends_with("/.") || path.ends_with("/..") {
+        segments.push("");
+    }
+    let mut result = format!("/{}", segments.join("/"));
+    if value.contains('?') {
+        result.push('?');
+        result.push_str(query);
+    }
+    result
 }
 pub(super) fn public(ip: Ipv4Addr) -> bool {
     let [a, b, c, _] = ip.octets();

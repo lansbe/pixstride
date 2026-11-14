@@ -69,6 +69,18 @@ fn redirects_remain_inside_the_allowed_source_prefix() {
     )
     .is_err());
     assert!(resolve_redirect(&current, "/private/image.png", &allows_public).is_err());
+    for location in [
+        "../private/image.png",
+        "./../private/image.png",
+        "/public/../private/image.png",
+        "https://images.example/public/../private/image.png",
+        "//images.example/public/../private/image.png",
+    ] {
+        assert!(
+            resolve_redirect(&current, location, &allows_public).is_err(),
+            "allowed redirect outside the public prefix: {location}"
+        );
+    }
     assert!(resolve_redirect(
         &current,
         "//images.example/private/image.png",
@@ -81,4 +93,12 @@ fn redirects_remain_inside_the_allowed_source_prefix() {
             .full,
         "https://images.example/public/next.png"
     );
+    for location in ["./next.png", "sub/../next.png"] {
+        assert_eq!(
+            resolve_redirect(&current, location, &allows_public)
+                .unwrap()
+                .full,
+            "https://images.example/public/next.png"
+        );
+    }
 }
