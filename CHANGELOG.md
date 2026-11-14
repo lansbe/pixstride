@@ -6,6 +6,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Security
 
+- Close keep-alive connections after a failed or truncated response write, preventing later pipelined requests from being processed after an incomplete response.
 - Add `Authorization` to `Vary` on Bearer-protected image responses so shared caches cannot reuse an authorized response for requests with missing or different credentials. Configured public cache TTLs remain available to authorized requests.
 
 ## [0.2.0] - 2026-11-14
