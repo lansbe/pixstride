@@ -15,6 +15,21 @@ from benchmark_metrics import pixel_agreement
 
 
 class BenchmarkCorpusTests(unittest.TestCase):
+    @unittest.skipUnless(importlib.util.find_spec('PIL'), 'Pillow is installed by the benchmark workflow')
+    def test_photo_normalization_does_not_attach_rgb_icc_to_grayscale_fixture(self):
+        from PIL import Image, ImageCms
+        from benchmark_fixtures import normalized_photo
+        with tempfile.TemporaryDirectory() as directory:
+            source, target = Path(directory) / 'source.png', Path(directory) / 'gray.png'
+            profile = ImageCms.ImageCmsProfile(ImageCms.createProfile('sRGB')).tobytes()
+            Image.new('RGB', (2, 2), 'red').save(source, icc_profile=profile)
+            normalized = normalized_photo(source)
+            normalized.convert('L').save(target)
+            with Image.open(target) as result:
+                self.assertEqual(result.mode, 'L')
+                self.assertNotIn('icc_profile', result.info)
+            self.assertEqual(normalized.getpixel((0, 0)), (255, 0, 0))
+
     def test_catalog_rejects_duplicates_and_missing_sources(self):
         cases = json.loads((ROOT / 'benchmarks/cases.json').read_text())
         sources = {c['source']: {} for c in cases['cases']}

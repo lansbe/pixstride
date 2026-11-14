@@ -1,6 +1,7 @@
 """Shared, checksum-pinned public corpus; preparation is outside timed work."""
 import argparse
 import hashlib
+import io
 import json
 from pathlib import Path
 import re
@@ -93,6 +94,21 @@ def download(source, cache):
             time.sleep(2 ** attempt)
 
 
+def normalized_photo(path):
+    from PIL import Image, ImageCms, ImageOps
+    with Image.open(path) as original:
+        oriented = ImageOps.exif_transpose(original)
+        profile = original.info.get('icc_profile')
+        if profile:
+            converted = ImageCms.profileToProfile(oriented, ImageCms.ImageCmsProfile(io.BytesIO(profile)),
+                                                  ImageCms.createProfile('sRGB'), outputMode='RGB')
+        else:
+            converted = oriented.convert('RGB')
+        # Pillow propagates info through resize/convert; an RGB profile on L is invalid.
+        converted.info.clear()
+        return converted
+
+
 def prepare(root, cache):
     import PIL
     from PIL import Image, ImageDraw, ImageOps, features
@@ -103,8 +119,7 @@ def prepare(root, cache):
     cache.mkdir(parents=True, exist_ok=True)
     images = {}
     for source in SOURCES:
-        with Image.open(download(source, cache)) as original:
-            images[source['name']] = ImageOps.exif_transpose(original).convert('RGB')
+        images[source['name']] = normalized_photo(download(source, cache))
     landscape = images['landscape.jpg'].resize((2048, 920), Image.Resampling.LANCZOS)
     earth = ImageOps.fit(images['earth.jpg'], (1600, 1600), Image.Resampling.LANCZOS)
     landscape.save(root / 'landscape.jpg', quality=90, subsampling=0, optimize=False)
@@ -132,7 +147,7 @@ def prepare(root, cache):
     manifest = {'schema_version': 1, 'sources': SOURCES, 'files': {},
                 'generator': {'pillow': PIL.__version__, 'jpeg': features.version_codec('jpg'),
                               'zlib': features.version_codec('zlib')},
-                'changes': 'Photos resized/cropped and re-encoded without metadata; synthetic graphics generated deterministically.'}
+                'changes': 'Photos converted to sRGB, resized/cropped and re-encoded without metadata; synthetic graphics generated deterministically.'}
     for name in names:
         path = root / name
         if name.endswith('.svg'):
