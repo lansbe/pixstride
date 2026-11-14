@@ -6,7 +6,7 @@ The code is divided into `src/codecs` (formats and metadata), `src/processing` (
 
 Run `cargo fmt --check`, `cargo clippy --locked --offline -- -D warnings`, and build/run the Docker image. Validate supported platforms and compare decoded pixels for codec changes; include bounded synthetic regression cases in the pull request. Never submit personal images, machine paths, secret values, private URLs, private research archives or unsanitized benchmark dumps. Public benchmark evidence follows the restrictions below. External libraries and Rust crates are permitted; document their purpose, license, supported platforms and resource behavior, and commit the updated lockfile.
 
-Benchmarks must state hardware, compiler, output bytes and decoded-pixel differences, cache state, concurrency, CPU accounting, HTTP percentiles and peak memory with its accounting scope. Process RSS and cgroup charges are different metrics and must be named explicitly. A faster different output is not an equal-quality win. Report security issues privately as described in [SECURITY.md](SECURITY.md).
+Benchmarks must state hardware, compiler or immutable tested image/binary identity, output bytes and decoded-pixel differences, cache state, concurrency, CPU accounting, HTTP percentiles and peak memory with its accounting scope. Process RSS and cgroup charges are different metrics and must be named explicitly. A faster different output is not an equal-quality win. Report security issues privately as described in [SECURITY.md](SECURITY.md).
 
 Use obviously fictitious credentials in synthetic tests, without real provider key prefixes or token formats, so fixtures do not trigger secret-scanning alerts.
 
