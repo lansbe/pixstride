@@ -4,6 +4,10 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Changed
+
+- Require Rust 1.100 and use Rust 1.100.0 for the pinned Alpine builder and native CI. This includes the Rust 1.99.1 FFI/linker regression fixes; the runtime Alpine release and image-processing contract are unchanged.
+
 ### Security
 
 - Close keep-alive connections after a failed or truncated response write, preventing later pipelined requests from being processed after an incomplete response.

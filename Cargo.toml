@@ -2,7 +2,7 @@
 name = "pixstride"
 version = "0.2.0"
 edition = "2021"
-rust-version = "1.99"
+rust-version = "1.100"
 license = "MIT"
 description = "A bounded image transformation server written in Rust"
 repository = "https://github.com/lansbe/pixstride"

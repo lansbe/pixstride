@@ -79,7 +79,7 @@ Only 3/20 outputs were pixel-identical across engines. Filters, JPEG chroma samp
 ## Build
 
 <!-- generated:build:start -->
-Linux and macOS, ARM64 or x86-64; Rust 1.99 and libcurl development files.
+Linux and macOS, ARM64 or x86-64; Rust 1.100 and libcurl development files.
 <!-- generated:build:end -->
 
 ```sh
