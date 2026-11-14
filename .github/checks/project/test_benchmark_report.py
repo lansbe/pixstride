@@ -1,8 +1,12 @@
 """Publishing must reject partial, incompatible or inconsistent measurements."""
 import copy
+import gzip
+import hashlib
 import json
 from pathlib import Path
 import sys
+import tempfile
+import subprocess
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
@@ -20,7 +24,7 @@ def measured_report(architecture='amd64'):
               'host': {'architecture': architecture},
               'protocol': {'batches': 6, 'requests_per_batch': 24, 'warmups': 5,
                            'concurrency': 1, 'cpus': 2, 'memory_bytes': MEMORY_BYTES},
-              'images': {name: {'reference': name + '@sha256:' + 'd' * 64} for name in ['pixstride', 'imgproxy']},
+              'images': {name: {'reference': name + '@sha256:' + 'd' * 64, 'architecture': architecture, 'os': 'linux'} for name in ['pixstride', 'imgproxy']},
               'cases': []}
     orders = balanced_orders(ENGINES, 6)
     for index in range(25):
@@ -30,6 +34,7 @@ def measured_report(architecture='amd64'):
                         'latencies_ns': [1_000_000, 2_000_000] * 12,
                         'index': i, 'position': order.index(engine)} for i, order in enumerate(orders)]
             case['engines'][engine] = {'batches': batches,
+                'output': {'bytes': 10, 'sha256': 'a' * 64, 'mime': 'image/png', 'dimensions': [1, 1]},
                 'summary': {**summarize_batches(batches), 'cgroup_peak_memory_bytes': 1048576},
                 'pixels_vs_imgproxy': {'exact_visible_pixels': True}}
         report['cases'].append(case)
@@ -37,6 +42,55 @@ def measured_report(architecture='amd64'):
 
 
 class BenchmarkReportTests(unittest.TestCase):
+    def test_host_and_image_architecture_must_agree_before_publication(self):
+        report = measured_report('arm64')
+        report['images']['pixstride']['architecture'] = 'amd64'
+        with self.assertRaises(ValueError):
+            validate_report(report)
+        report = measured_report()
+        report['images']['imgproxy']['os'] = 'darwin'
+        with self.assertRaises(ValueError):
+            validate_report(report)
+
+    def test_noise_statistics_used_in_prose_must_match_raw_batches(self):
+        report = measured_report()
+        report['cases'][0]['engines'][ENGINES[0]]['summary']['cpu_batch_cv'] = -99
+        with self.assertRaises(ValueError):
+            validate_report(report)
+
+    def test_csv_export_rejects_incomparable_reports_without_creating_table(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            left, right = root / 'amd.json', root / 'arm.json'
+            left.write_text(json.dumps(measured_report()))
+            changed = measured_report('arm64')
+            changed['protocol']['warmups'] = 6
+            right.write_text(json.dumps(changed))
+            target = root / 'result.csv'
+            completed = subprocess.run([sys.executable, str(Path(__file__).resolve().parents[3] / 'scripts/benchmark_report.py'),
+                                        '--reports', str(left), str(right), '--csv', str(target)], capture_output=True)
+            self.assertNotEqual(completed.returncode, 0)
+            self.assertFalse(target.exists())
+
+    def test_published_archives_preserve_samples_and_detect_summary_drift(self):
+        from benchmark_report import publish_results, check_results_directory
+        reports = [measured_report(), measured_report('arm64')]
+        loaded = [(r, json.dumps(r).encode()) for r in reports]
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            publish_results(loaded, root)
+            check_results_directory(root)
+            compressed = (root / 'linux-amd64.raw.json.gz').read_bytes()
+            self.assertEqual(gzip.decompress(compressed), loaded[0][1])
+            summary_path = root / 'linux-amd64.json'
+            summary = json.loads(summary_path.read_text())
+            self.assertEqual(summary['raw_evidence']['sha256'], hashlib.sha256(compressed).hexdigest())
+            self.assertEqual(summary['cases'][0]['engines'][ENGINES[0]]['batches'][0]['requests'], 24)
+            summary['cases'][0]['engines'][ENGINES[0]]['summary']['cpu_ms_per_request'] = 999
+            summary_path.write_text(json.dumps(summary))
+            with self.assertRaises(ValueError):
+                check_results_directory(root)
+
     def test_missing_cases_or_samples_and_stale_derived_statistics_fail(self):
         original = measured_report()
         validate_report(original)

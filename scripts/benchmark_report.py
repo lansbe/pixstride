@@ -11,7 +11,7 @@ import statistics
 
 from benchmark_fixtures import ROOT, corpus_hash, sha256
 from benchmark_metrics import balanced_orders, percentile, summarize_batches
-from benchmark_runtime import ENGINES, MEMORY_BYTES
+from benchmark_runtime import ENGINES, MEMORY_BYTES, require_native_image
 
 LABELS = {'pixstride_default': 'Pixstride default', 'pixstride_native': 'Pixstride native', 'imgproxy': 'imgproxy'}
 
@@ -31,6 +31,11 @@ def validate_report(report):
         raise ValueError('Corpus manifest is inconsistent')
     if report['host']['architecture'] not in {'amd64', 'arm64'}:
         raise ValueError('Unsupported report architecture')
+    for product in ['pixstride', 'imgproxy']:
+        image = report.get('images', {}).get(product, {})
+        if not {'architecture', 'os'}.issubset(image):
+            raise ValueError('Reports require inspected image architecture and operating system')
+        require_native_image(image['architecture'], image['os'], report['host']['architecture'])
     orders = balanced_orders(ENGINES, protocol['batches'])
     for case in cases:
         if case.get('status') != 'success' or set(case.get('engines', {})) != set(ENGINES):
@@ -44,8 +49,12 @@ def validate_report(report):
                         or batch['index'] != i or batch['position'] != orders[i].index(engine)):
                     raise ValueError('Incomplete samples or unbalanced engine ordering')
             calculated = summarize_batches(batches)
-            for key in ['requests', 'batches', 'cpu_ms_per_request', 'latency_p50_ms', 'latency_p95_ms']:
-                if not math.isclose(calculated[key], entry['summary'][key], rel_tol=1e-12, abs_tol=1e-12):
+            for key, value in calculated.items():
+                actual = entry['summary'][key]
+                expected_values, actual_values = (value, actual) if isinstance(value, list) else ([value], [actual])
+                if len(expected_values) != len(actual_values) or any(
+                        not math.isclose(a, b, rel_tol=1e-12, abs_tol=1e-12)
+                        for a, b in zip(expected_values, actual_values)):
                     raise ValueError('Derived statistics disagree with raw samples: ' + key)
             if entry['summary']['cpu_ms_per_request'] <= 0 or entry['summary']['cgroup_peak_memory_bytes'] <= 0:
                 raise ValueError('Invalid CPU or memory accounting')
@@ -103,7 +112,8 @@ def render_tables(reports):
         cpu = ', '.join(host['cpu_model']).replace('|', '\\|')
         text += f'### Linux {host["architecture"]}\n\n'
         text += f'{cpu}; {host["logical_cpus"]} logical CPUs, two selected; {host["os_release"]["PRETTY_NAME"]}, kernel {host["kernel"]}. '
-        text += f'[Measurement run]({report["workflow_url"]}).\n\n'
+        text += (f'[Measurement run]({report["workflow_url"]}).\n\n'
+                 if report.get('workflow_url') else 'Local measurement run.\n\n')
         text += 'Each triple is **Pixstride default / Pixstride native / imgproxy**. Pixel MAE is **default / native**, taking the larger black/white composite error against imgproxy. Memory is the fresh container lifetime cgroup peak, including startup, warmups, file cache and kernel memory.\n\n'
         text += '| Case | CPU ms/request | HTTP p50 ms | HTTP p95 ms | Peak cgroup MiB | Output KiB | Pixel MAE |\n'
         text += '|---|---:|---:|---:|---:|---:|---:|\n'
@@ -141,6 +151,19 @@ def load(path):
     return validate_report(json.loads(raw)), raw
 
 
+def summary_document(report, raw, compressed):
+    stem = 'linux-' + report['host']['architecture']
+    summary = copy.deepcopy(report)
+    summary['kind'] = 'summary'
+    summary['raw_evidence'] = {'file': stem + '.raw.json.gz', 'sha256': sha256(compressed), 'json_sha256': sha256(raw)}
+    for case in summary['cases']:
+        for entry in case['engines'].values():
+            for batch in entry['batches']:
+                values = batch.pop('latencies_ns')
+                batch.update(requests=len(values), latency_p50_ns=percentile(values, .5), latency_p95_ns=percentile(values, .95))
+    return summary
+
+
 def publish_results(loaded, directory):
     validate_pair([report for report, _ in loaded])
     directory.mkdir(parents=True, exist_ok=True)
@@ -148,15 +171,24 @@ def publish_results(loaded, directory):
         stem = 'linux-' + report['host']['architecture']
         compressed = gzip.compress(raw, mtime=0)
         (directory / (stem + '.raw.json.gz')).write_bytes(compressed)
-        summary = copy.deepcopy(report)
-        summary['kind'] = 'summary'
-        summary['raw_evidence'] = {'file': stem + '.raw.json.gz', 'sha256': sha256(compressed), 'json_sha256': sha256(raw)}
-        for case in summary['cases']:
-            for entry in case['engines'].values():
-                for batch in entry['batches']:
-                    values = batch.pop('latencies_ns')
-                    batch.update(requests=len(values), latency_p50_ns=percentile(values, .5), latency_p95_ns=percentile(values, .95))
+        summary = summary_document(report, raw, compressed)
         (directory / (stem + '.json')).write_text(json.dumps(summary, indent=2, allow_nan=False) + '\n')
+
+
+def check_results_directory(directory):
+    reports = []
+    for arch in ['amd64', 'arm64']:
+        stem = 'linux-' + arch
+        compressed = (directory / (stem + '.raw.json.gz')).read_bytes()
+        summary = json.loads((directory / (stem + '.json')).read_text())
+        if summary.get('raw_evidence', {}).get('sha256') != sha256(compressed):
+            raise ValueError('Raw evidence archive digest mismatch: ' + stem)
+        raw = gzip.decompress(compressed)
+        report = validate_report(json.loads(raw))
+        if summary != summary_document(report, raw, compressed):
+            raise ValueError('Published summary differs from raw measurements: ' + stem)
+        reports.append(report)
+    validate_pair(reports)
 
 
 def replace_block(path, name, content, check=False):
@@ -185,6 +217,8 @@ def main():
     args = parser.parse_args()
     loaded = [load(path) for path in args.reports]
     reports = [report for report, _ in loaded]
+    if len(reports) > 1:
+        validate_pair(reports)
     if args.publish_results:
         publish_results(loaded, args.publish_results)
     if args.markdown:
@@ -197,6 +231,8 @@ def main():
             writer.writerows(rows)
     if args.update_docs or args.check:
         validate_pair(reports)
+        if args.check:
+            check_results_directory(ROOT / 'benchmarks/results')
         replace_block(ROOT / 'README.md', 'summary', render_overview(reports), args.check)
         replace_block(ROOT / 'BENCHMARKS.md', 'tables', render_tables(reports), args.check)
     print('Validated ' + str(len(reports)) + ' complete native Linux reports')

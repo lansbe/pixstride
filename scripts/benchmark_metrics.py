@@ -1,6 +1,7 @@
 """Numerical definitions shared by the Linux runner and offline reports."""
 import itertools
 import math
+import re
 from pathlib import Path
 import statistics
 
@@ -75,7 +76,7 @@ def parse_counters(cpu_text, memory_peak_text, events_text):
         raise ValueError('Require cgroup-v2 CPU, peak-memory and event counters') from error
 
 
-def cgroup_location(pid, proc_root=Path('/proc'), cgroup_root=Path('/sys/fs/cgroup')):
+def cgroup_location(pid, proc_root=Path('/proc'), cgroup_root=Path('/sys/fs/cgroup'), container_id=None):
     if not isinstance(pid, int) or pid < 1:
         raise ValueError('A running container PID is required')
     lines = (Path(proc_root) / str(pid) / 'cgroup').read_text().splitlines()
@@ -86,6 +87,12 @@ def cgroup_location(pid, proc_root=Path('/proc'), cgroup_root=Path('/sys/fs/cgro
     group = (root / unified[0].lstrip('/')).resolve()
     if not group.is_relative_to(root) or not group.is_dir():
         raise ValueError('Container cgroup is unavailable from this host')
+    if container_id is not None:
+        if not re.fullmatch(r'[0-9a-f]{64}', container_id):
+            raise ValueError('Require the full inspected Docker container ID')
+        identities = {container_id, 'docker-' + container_id, 'docker-' + container_id + '.scope'}
+        if not identities.intersection(group.parts):
+            raise ValueError('Docker PID belongs to a foreign/non-local container cgroup')
     return group
 
 

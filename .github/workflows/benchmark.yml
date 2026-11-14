@@ -10,6 +10,7 @@ on:
       - scripts/benchmark_metrics.py
       - scripts/benchmark_fixtures.py
       - .github/checks/project/test_benchmark_runtime.py
+      - .github/checks/project/test_benchmark_runner.py
       - .github/checks/project/test_benchmark_metrics.py
       - .github/checks/project/test_benchmark_fixtures.py
       - benchmarks/cases.json

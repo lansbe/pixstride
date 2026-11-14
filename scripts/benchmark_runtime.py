@@ -120,6 +120,30 @@ class Docker:
                            if key.startswith('org.opencontainers.image.') and key.rsplit('.', 1)[-1] in
                            {'version', 'revision', 'source', 'created'}}}
 
+    def probe(self, reference, arguments, owner, product):
+        name = f'pixstride-bench-{owner}-probe-{product}'
+        try:
+            return self.run('run', '--rm', '--name', name, '--network=none',
+                            '--label', 'io.pixstride.benchmark.run=' + owner, reference, *arguments)
+        finally:
+            cleanup_container(self, name, owner)
+
+
+def cleanup_container(docker, name, owner, diagnostics=False):
+    try:
+        info = docker.inspect(name)
+    except RuntimeError:
+        return  # --rm already removed a completed probe, or creation never succeeded.
+    labels = info.get('Config', {}).get('Labels') or {}
+    if labels.get('io.pixstride.benchmark.run') != owner:
+        raise RuntimeError('Refuse to clean a container owned by another run')
+    if diagnostics:
+        try:
+            print(docker.run('logs', '--tail', '20', name), flush=True)
+        except RuntimeError:
+            pass
+    docker.run('rm', '-f', name)
+
 
 class Server:
     def __init__(self, docker, engine, image, fixtures, cpus, owner, index):
@@ -153,7 +177,7 @@ class Server:
         try:
             self.docker.run(*command, self.image)
             inspected = self.docker.inspect(self.name)
-            self.group = cgroup_location(inspected['State']['Pid'])
+            self.group = cgroup_location(inspected['State']['Pid'], container_id=inspected['Id'])
             host = inspected['HostConfig']
             if host['Memory'] != MEMORY_BYTES or host['NanoCpus'] != 2_000_000_000 or host['PidsLimit'] != 128:
                 raise ValueError('Docker did not apply the benchmark limits')
@@ -174,16 +198,4 @@ class Server:
             raise
 
     def __exit__(self, kind, value, traceback):
-        try:
-            info = self.docker.inspect(self.name)
-        except RuntimeError:
-            return
-        labels = info.get('Config', {}).get('Labels') or {}
-        if labels.get('io.pixstride.benchmark.run') != self.owner:
-            raise RuntimeError('Refuse to clean a container owned by another run')
-        if kind is not None:
-            try:
-                print(self.docker.run('logs', '--tail', '20', self.name), flush=True)
-            except RuntimeError:
-                pass
-        self.docker.run('rm', '-f', self.name)
+        cleanup_container(self.docker, self.name, self.owner, diagnostics=kind is not None)

@@ -67,6 +67,22 @@ class BenchmarkMetricsTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     cgroup_location(123, root / 'proc', root / 'groups')
 
+    def test_existing_foreign_pid_cgroup_cannot_be_attributed_to_container(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'proc/123').mkdir(parents=True)
+            foreign = root / 'groups/system.slice/docker-foreign.scope'
+            foreign.mkdir(parents=True)
+            entry = root / 'proc/123/cgroup'
+            entry.write_text('0::/system.slice/docker-foreign.scope\n')
+            container = 'a' * 64
+            with self.assertRaises(ValueError):
+                cgroup_location(123, root / 'proc', root / 'groups', container_id=container)
+            owned = root / 'groups/system.slice' / ('docker-' + container + '.scope')
+            owned.mkdir()
+            entry.write_text('0::/system.slice/docker-' + container + '.scope\n')
+            self.assertEqual(cgroup_location(123, root / 'proc', root / 'groups', container_id=container), owned.resolve())
+
     def test_pixel_error_histogram_has_hand_calculated_mae_rmse_and_zero_case(self):
         histogram = [0] * 256
         histogram[0], histogram[2] = 3, 1

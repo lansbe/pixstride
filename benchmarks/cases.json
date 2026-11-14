@@ -49,11 +49,11 @@
       "id": "05-jpeg-retina",
       "label": "Photo JPEG DPR 2",
       "source": "landscape.jpg",
-      "options": "rs:fit:640:400/dpr:2/q:85",
+      "options": "rs:fit:480:320/dpr:2/q:85",
       "format": "jpg",
       "dimensions": [
-        1280,
-        575
+        960,
+        431
       ]
     },
     {

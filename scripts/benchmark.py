@@ -43,27 +43,41 @@ def host_metadata(cpus):
             'runner_label': os.environ.get('BENCHMARK_RUNNER', 'unspecified native Linux host')}
 
 
-def case_measurement(case, docker, images, fixtures, cpus, owner, index, protocol):
-    result = {'id': case['id'], 'label': case['label'], 'source': case['source'],
+@contextlib.contextmanager
+def preserve_case_failure(result):
+    try:
+        yield
+    except BaseException as error:
+        result['status'] = 'failed'
+        result['failure'] = {**result.get('active', {}), 'type': type(error).__name__, 'message': str(error)[:4000]}
+        raise
+
+
+def case_measurement(case, docker, images, fixtures, cpus, owner, index, protocol, progress=None):
+    result = progress if progress is not None else {}
+    result.update({'id': case['id'], 'label': case['label'], 'source': case['source'],
               'options': case['options'], 'format': case['format'], 'dimensions': case['dimensions'],
-              'status': 'running', 'engines': {}}
+              'status': 'running', 'engines': {}})
     path = signed_path(case)
     bodies = {}
-    with contextlib.ExitStack() as stack:
+    with preserve_case_failure(result), contextlib.ExitStack() as stack:
         servers = {}
         for engine in ENGINES:
+            result['active'] = {'phase': 'preflight', 'engine': engine, 'batch': None}
             image = images['imgproxy' if engine == 'imgproxy' else 'pixstride']['reference']
             servers[engine] = stack.enter_context(Server(docker, engine, image, fixtures, cpus, owner, index))
             status, headers, body, _ = request(servers[engine].port, path)
             metadata = validate_response(case, status, headers, body)
             result['engines'][engine] = {'output': metadata, 'batches': []}
             bodies[engine] = body
+            result['active'] = {'phase': 'warmup', 'engine': engine, 'batch': None}
             for _ in range(protocol['warmups']):
                 status, headers, body, _ = request(servers[engine].port, path)
                 validate_response(case, status, headers, body, metadata['sha256'])
         time.sleep(protocol['cpu_tail_seconds'])
         for batch, order in enumerate(balanced_orders(ENGINES, protocol['batches'])):
             for position, engine in enumerate(order):
+                result['active'] = {'phase': 'measure', 'engine': engine, 'batch': batch}
                 server, entry = servers[engine], result['engines'][engine]
                 before = read_counters(server.group)
                 latencies = []
@@ -80,6 +94,7 @@ def case_measurement(case, docker, images, fixtures, cpus, owner, index, protoco
                                 wall_elapsed_ns=time.perf_counter_ns() - started)
                 entry['batches'].append(counters)
         for engine, server in servers.items():
+            result['active'] = {'phase': 'accounting', 'engine': engine, 'batch': None}
             entry = result['engines'][engine]
             counters = read_counters(server.group)
             if counters['oom_kill']:
@@ -92,7 +107,10 @@ def case_measurement(case, docker, images, fixtures, cpus, owner, index, protoco
             memory = dict(line.split() for line in (server.group / 'memory.stat').read_text().splitlines())
             entry['memory_at_end'] = {key: int(memory.get(key, 0)) for key in ['anon', 'file', 'kernel']}
         for engine in ENGINES[:-1]:
+            result['active'] = {'phase': 'pixels', 'engine': engine, 'batch': None}
             result['engines'][engine]['pixels_vs_imgproxy'] = pixel_agreement(bodies[engine], bodies['imgproxy'])
+        result['active'] = {'phase': 'cleanup', 'engine': None, 'batch': None}
+    result.pop('active', None)
     result['status'] = 'success'
     return result
 
@@ -122,22 +140,21 @@ def run(args):
                 'cpu_tail_seconds': .05, 'case_order_seed': 0x504958,
                 'engine_schedule': 'all six permutations, repeated', 'http_connection': 'fresh per request',
                 'source_cache': 'warm OS page cache, no application result cache',
-                'cpu_scope': 'server cgroup including descendants; client excluded',
+                'cpu_scope': 'container-ID-verified local cgroup including descendants; client excluded',
                 'memory_scope': 'fresh per-case container lifetime peak, including startup, cache and kernel; not RSS'}
     versions = json.loads(args.versions.read_text())
     docker = Docker(args.docker)
+    owner = uuid.uuid4().hex[:12]
     images = {}
     for product, override in [('pixstride', args.pixstride_image), ('imgproxy', args.imgproxy_image)]:
         images[product] = docker.image(override or versions[product]['image'])
     # Probe metadata in separate containers so CLI startup cannot inflate measured peaks.
-    images['pixstride']['capabilities'] = json.loads(docker.run('run', '--rm', '--network=none',
-                                                    images['pixstride']['reference'], 'capabilities'))
-    images['imgproxy']['version'] = docker.run('run', '--rm', '--network=none', images['imgproxy']['reference'], 'imgproxy', 'version')
+    images['pixstride']['capabilities'] = json.loads(docker.probe(images['pixstride']['reference'], ['capabilities'], owner, 'pixstride'))
+    images['imgproxy']['version'] = docker.probe(images['imgproxy']['reference'], ['imgproxy', 'version'], owner, 'imgproxy')
     if not args.pixstride_image and images['pixstride']['capabilities'].get('version') != versions['pixstride']['version']:
         raise ValueError('Pixstride image version differs from the pinned version')
     if not args.imgproxy_image and versions['imgproxy']['version'] not in images['imgproxy']['version']:
         raise ValueError('imgproxy image version differs from the pinned version')
-    owner = uuid.uuid4().hex[:12]
     revision = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
     dirty = subprocess.run(['git', '-C', str(ROOT), 'diff', '--quiet', 'HEAD']).returncode != 0
     report = {'schema_version': 1, 'status': 'running', 'profile': 'full' if full else 'preflight-or-partial',
@@ -159,13 +176,16 @@ def run(args):
     try:
         for index, case in enumerate(cases):
             print(f'{index + 1}/{len(cases)} {case["id"]}', flush=True)
-            result = case_measurement(case, docker, images, args.fixtures, cpus, owner, index, protocol)
+            result = {'id': case['id'], 'status': 'running', 'engines': {}}
             report['cases'].append(result)
+            write_report(args.output, report)
+            case_measurement(case, docker, images, args.fixtures, cpus, owner, index, protocol, progress=result)
             write_report(args.output, report)
         report['status'] = 'success'
     except BaseException as error:
         report['status'] = 'failed'
-        report['failure'] = {'case': case['id'], 'type': type(error).__name__, 'message': str(error)[:4000]}
+        report['failure'] = {'case': case['id'], **result.get('failure', {}),
+                             'type': type(error).__name__, 'message': str(error)[:4000]}
         raise
     finally:
         report['finished_at'] = dt.datetime.now(dt.timezone.utc).isoformat()
