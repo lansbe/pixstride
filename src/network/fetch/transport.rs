@@ -46,16 +46,17 @@ impl LazyPool {
         Ok(pool)
     }
     pub fn fetch(&self, url: &str, max: usize) -> Result<Download> {
-        self.fetch_with_cookies(url, max, None)
+        self.fetch_with_cookies(url, max, None, &|_| true)
     }
     pub fn fetch_with_cookies(
         &self,
         url: &str,
         max: usize,
         jar: Option<&mut crate::network::cookies::Jar>,
+        allows_source: &dyn Fn(&str) -> bool,
     ) -> Result<Download> {
         match self.0.get_or_init(Pool::new) {
-            Ok(pool) => pool.fetch(url, max, jar),
+            Ok(pool) => pool.fetch(url, max, jar, allows_source),
             Err(error) => Err(error.clone()),
         }
     }
@@ -198,6 +199,20 @@ pub(crate) struct Transfer {
     new_connections: u64,
     bytes: u64,
 }
+fn resolve_redirect(
+    url: &Url,
+    location: &str,
+    allows_source: &dyn Fn(&str) -> bool,
+) -> Result<Url> {
+    let next = url.redirect(location)?;
+    if url.scheme == "https" && next.scheme != "https" {
+        return Err("HTTPS downgrade refused".into());
+    }
+    if !allows_source(&next.full) {
+        return Err("source does not match allowed patterns".into());
+    }
+    Ok(next)
+}
 impl Client {
     fn long(&self, option: c_int, value: c_long) -> Result<()> {
         check(unsafe { curl_easy_setopt(self.0, option, value) })
@@ -306,10 +321,14 @@ impl Client {
         raw: &str,
         max: usize,
         mut jar: Option<&mut crate::network::cookies::Jar>,
+        allows_source: &dyn Fn(&str) -> bool,
     ) -> Result<Download> {
         let policy = policy::settings();
         let deadline = std::time::Instant::now() + std::time::Duration::from_secs(policy.timeout);
         let mut url = Url::parse(raw)?;
+        if !allows_source(&url.full) {
+            return Err("source does not match allowed patterns".into());
+        }
         let mut connects = 0;
         let mut bytes = 0;
         for hop in 0..=policy.redirects {
@@ -345,16 +364,14 @@ impl Client {
                 });
             }
             if matches!(r.status, 301 | 302 | 303 | 307 | 308) && hop < policy.redirects {
-                let next = url.redirect(
+                url = resolve_redirect(
+                    &url,
                     r.response
                         .location
                         .as_deref()
                         .ok_or("redirect has no location")?,
+                    allows_source,
                 )?;
-                if url.scheme == "https" && next.scheme != "https" {
-                    return Err("HTTPS downgrade refused".into());
-                }
-                url = next;
                 continue;
             }
             return Err(format!(
@@ -415,6 +432,7 @@ impl Pool {
         url: &str,
         max: usize,
         jar: Option<&mut crate::network::cookies::Jar>,
+        allows_source: &dyn Fn(&str) -> bool,
     ) -> Result<Download> {
         let mut available = self.available.lock().map_err(|_| "Transport unavailable")?;
         while available.is_empty() {
@@ -428,7 +446,11 @@ impl Pool {
             client: available.pop(),
         };
         drop(available);
-        lease.client.as_mut().unwrap().fetch(url, max, jar)
+        lease
+            .client
+            .as_mut()
+            .unwrap()
+            .fetch(url, max, jar, allows_source)
     }
 }
 

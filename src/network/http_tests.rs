@@ -282,6 +282,47 @@ fn authorization_precedes_routes_and_metrics_remain_bounded() {
 }
 
 #[test]
+fn bearer_protected_images_partition_shared_cache_entries_by_authorization() {
+    let fixture = Fixture::new();
+    let settings = || crate::network::settings::Settings {
+        secret: Some("example".into()),
+        ttl: 3600,
+        ..Default::default()
+    };
+    let target = "/unsafe/plain/local:///sample.ppm@png";
+    let authorized = exchange_bytes(
+        request::Config::unsafe_local(),
+        settings(),
+        fixture.root(),
+        |port| {
+            format!(
+                "GET {target} HTTP/1.1\r\nHost: localhost:{port}\r\nAuthorization: Bearer example\r\n\r\n"
+            )
+        },
+    );
+    let (headers, body) = parts(&authorized);
+    assert!(headers.starts_with("HTTP/1.1 200 "), "{headers}");
+    assert!(body.starts_with(b"\x89PNG"));
+    assert!(headers.contains("Cache-Control: public, max-age=3600\r\n"));
+    assert!(headers.contains("Vary: Authorization\r\n"));
+
+    for authorization in ["", "Authorization: Bearer wrong\r\n"] {
+        let denied = exchange_bytes(
+            request::Config::unsafe_local(),
+            settings(),
+            fixture.root(),
+            |port| {
+                format!("GET {target} HTTP/1.1\r\nHost: localhost:{port}\r\n{authorization}\r\n")
+            },
+        );
+        let (headers, body) = parts(&denied);
+        assert!(headers.starts_with("HTTP/1.1 403 "), "{headers}");
+        assert_eq!(field(headers, "Cache-Control:"), "no-store");
+        assert_eq!(body, b"Forbidden");
+    }
+}
+
+#[test]
 fn image_head_validators_cache_expiry_and_disposition_work_end_to_end() {
     let fixture = Fixture::new();
     let settings = || crate::network::settings::Settings {

@@ -190,6 +190,7 @@ pub(super) fn handle(
                             &request.source,
                             MAX_SOURCE.min(request.extra.max_source_bytes),
                             jar.as_mut(),
+                            &|source| config.allows_source(source),
                         )
                     })
             };
@@ -266,6 +267,11 @@ pub(super) fn handle(
                 ));
             }
             let mut varies = Vec::new();
+            if settings.secret.is_some() {
+                // Public authenticated responses are cacheable, so bind shared-cache
+                // reuse to the credential that passed this request.
+                varies.push("Authorization");
+            }
             if cookie_sensitive {
                 varies.push("Cookie");
             }
