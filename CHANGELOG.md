@@ -4,6 +4,10 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Security
+
+- Require `PIXSTRIDE_SIGNATURE_SIZE` to be 16–32 bytes (default 32), preventing practical exhaustive forgery of short HMAC signatures. Configurations using 1–15 bytes now fail server startup and the `sign` command. Before upgrading, configure every signer and server to use the same supported size and regenerate signed URLs; existing short signatures are no longer accepted.
+
 ## [0.2.0] - 2026-11-14
 
 ### Added
