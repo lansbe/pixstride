@@ -19,6 +19,7 @@
 !/benchmarks/versions.json
 !/benchmarks/results/
 !/benchmarks/results/*.json
+!/benchmarks/results/*.json.gz
 !/scripts/
 !/scripts/*.py
 !/vendor/

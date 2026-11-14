@@ -51,6 +51,12 @@ The optional `native-codecs`, `cloud-sources`, `cloud-config`, `s3-decryption`, 
 
 The container builds/checks both feature configurations and includes all optional features. Its native round-trip check runs during the build; runtime smoke tests/scans continue to use the exact image manifest. The workflow also checks native macOS ARM64 and Intel, builds the pinned reference, compares decoded outputs, runs HTTP/Unix/keep-alive/framing/OTLP, secret-manager bootstrap and real TLS S3/KMS tests, and bounded mutation/soak smoke. macOS installs OpenSSL 3 explicitly and exports its pkg-config path; the fixture generator uses the installed C API. These jobs gate tagged promotion; they do not publish from branch pushes. Keep generated reports, corpora, temporary certificates/keys and logs untracked. See the compatibility guide for reproducible commands and the limits of this evidence.
 
+## Performance benchmarks
+
+Use the reusable [25-case Linux benchmark](BENCHMARKS.md) for performance comparisons. Its shared public corpus, immutable image pins, signed HTTP requests, balanced batches, child-inclusive cgroup CPU and peak-memory accounting are separate from compatibility qualification. Compare the complete case set and include pixel differences/output sizes; do not turn a fast error or different-quality output into a win. Run the same prepared inputs on native AMD64 and ARM64 hosts. The standalone workflow retains raw measurements and does not impose noisy timing thresholds on ordinary PRs.
+
+Regenerate Markdown tables with `python3 scripts/benchmark_report.py --update-docs` after installing reviewed raw evidence in `benchmarks/results`. Run `python3 scripts/benchmark_report.py --check` to verify their consistency. Commit only public sanitized JSON summaries and losslessly compressed raw evidence, with image/corpus/harness identities and workflow provenance. Keep downloaded media, caches, logs and personal host paths untracked. See the guide for setup, all 25 cases and full rerun/publication commands.
+
 ## Releases
 
 1. Keep human-written notes in `Unreleased`. For a stable release after betas, include all changes since the previous stable version, not only changes since the last beta.

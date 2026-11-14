@@ -4,6 +4,10 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Added
+
+- Reusable 25-case image-processing benchmarks for native Linux AMD64 and ARM64, comparing immutable Pixstride default/native and imgproxy images with one shared public corpus, balanced repeated HTTP measurements, child-inclusive CPU, peak cgroup memory, output sizes and decoded-pixel differences. Preserve raw samples and generate checked documentation tables from the measured evidence.
+
 ## [0.3.0] - 2026-11-14
 
 ### Changed

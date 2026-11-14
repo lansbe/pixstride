@@ -60,17 +60,22 @@ Version 0.1.1 introduced work limits that can reject expensive valid inputs. The
 
 ## Benchmarks
 
-Historical engine baseline before the Linux port and deployment hardening: native macOS, Apple M5, imgproxy 4.0.21 / libvips 8.18.7, November 2026. Values below are **Rust / imgproxy**. These do not measure the published container.
+The reusable suite compares Pixstride (default routing and forced native) with imgproxy, using immutable published images and the same 25 cases on native Linux AMD64 and ARM64. It covers public photos, transparency, flat graphics, JPEG/PNG/WebP/BMP, progressive JPEG, grayscale, TIFF and SVG. See [BENCHMARKS.md](BENCHMARKS.md) for all cases, CPU/HTTP/memory/output measurements, pixel differences, hardware, raw evidence and rerun commands.
 
-| Scenario | CPU ms/request | HTTP p50 ms | Peak RSS MiB |
-|---|---:|---:|---:|
-| Large PNG to BMP | 11.660 / 18.871 | 12.160 / 18.145 | 12.828 / 115.672 |
-| Medium JPEG to BMP | 5.160 / 5.964 | 5.463 / 5.713 | 9.016 / 60.844 |
-| Large PNG to JPEG | 26.751 / 21.169 | 26.729 / 18.685 | 12.422 / 111.125 |
+<!-- benchmark:summary:start -->
+Images: Pixstride **0.3.0** / imgproxy **4.0.24**. Per case/mode: 6 balanced batches × 24 timed requests (144 total), after 5 warmups.
 
-Across 20 scenarios: lower CPU in 17, lower HTTP median in 16, lower peak RSS in 20 (83-89% less). Six alternating batches of 24 sequential requests per engine, five warmups per batch; CPU is the median of batch averages (process user + system time), HTTP includes the complete loopback response, RSS includes startup. No application image cache; OS page cache was uncontrolled. Internet download time is excluded.
+| Linux | Pixstride mode | Lower CPU | Lower HTTP p50 | Median CPU ratio | Median p50 ratio | Median peak cgroup ratio | Exact visible pixels |
+|---|---|---:|---:|---:|---:|---:|---:|
+| amd64 | Pixstride default | 2/25 | 2/25 | 2.468× | 2.629× | 0.377× | 4/25 |
+| amd64 | Pixstride native | 0/25 | 0/25 | 2.390× | 2.861× | 0.628× | 14/25 |
+| arm64 | Pixstride default | 3/25 | 2/25 | 1.987× | 2.237× | 0.327× | 4/25 |
+| arm64 | Pixstride native | 0/25 | 0/25 | 2.803× | 3.173× | 0.548× | 14/25 |
+<!-- benchmark:summary:end -->
 
-Only 3/20 outputs were pixel-identical across engines. Filters, JPEG chroma sampling and WebP modes differ, so these results do **not** establish an equal-quality speed advantage. The private benchmark corpus and harness are not distributed. No universal latency or memory guarantee is claimed.
+Ratios are Pixstride / imgproxy; below 1 means less observed CPU, lower HTTP p50 or a lower peak cgroup charge. Counts describe these cases, with equal weight per case. Batch order is balanced across modes. CPU includes native child processes. Peak cgroup memory includes startup, file cache and kernel memory and differs from RSS.
+
+Outputs can differ in pixels, compression and size even at the same quality setting. These observations do **not** establish an equal-quality speed advantage, a universal memory/latency guarantee, or an AMD64-versus-ARM64 performance claim. The two architectures use different runner CPUs. This public, reproducible suite replaces the previous private 20-case macOS baseline.
 
 ## Versions
 

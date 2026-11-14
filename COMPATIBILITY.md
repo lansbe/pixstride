@@ -142,6 +142,10 @@ CI adds macOS ARM64/Intel checks, native round trips, HTTP/Unix/OTLP integration
 
 The mutation runner uses a fixed seed and bounded malformed PNG/GIF/SVG inputs. It catches parent crashes, native crash signals and harness deadlines. It is not a coverage-guided fuzzing campaign. Longer runs use `--cases`/`--requests` up to 10000. Synthetic soak results are correctness evidence, not an equal-quality performance benchmark. The historical README benchmark does not measure this native engine.
 
+## Performance measurements
+
+The reusable [25-case Linux benchmark](BENCHMARKS.md) initially measures shipped Pixstride 0.3.0 default/native modes against imgproxy 4.0.24 on native AMD64 and ARM64. Its newer performance baseline does not change this guide's pinned imgproxy 4.0.21 compatibility target. HTTP timing, CPU including child processes, peak cgroup memory, encoded sizes and decoded-pixel agreement are reported separately. Different filters, libraries and encoders can change pixels or compression; timing results are not proof of equal-quality performance or complete compatibility.
+
 ## Deliberate differences and remaining limits
 
 - The complete imgproxy environment-variable surface, vendor agent instrumentation and credential chains are not drop-in compatible. The explicit mappings and exceptions above are the supported migration contract.

@@ -94,14 +94,19 @@ def overview(report, engine):
 
 
 def render_overview(reports):
-    text = '| Linux | Pixstride mode | Lower CPU | Lower HTTP p50 | Median CPU ratio | Median p50 ratio | Exact visible pixels |\n'
-    text += '|---|---|---:|---:|---:|---:|---:|\n'
+    protocol = reports[0]['protocol']
+    images = reports[0]['images']
+    text = (f'Images: Pixstride **{images["pixstride"]["capabilities"]["version"]}** / imgproxy **{images["imgproxy"]["version"]}**. '
+            f'Per case/mode: {protocol["batches"]} balanced batches × {protocol["requests_per_batch"]} timed requests '
+            f'({protocol["batches"] * protocol["requests_per_batch"]} total), after {protocol["warmups"]} warmups.\n\n')
+    text += '| Linux | Pixstride mode | Lower CPU | Lower HTTP p50 | Median CPU ratio | Median p50 ratio | Median peak cgroup ratio | Exact visible pixels |\n'
+    text += '|---|---|---:|---:|---:|---:|---:|---:|\n'
     for report in sorted(reports, key=lambda r: r['host']['architecture']):
         for engine in ENGINES[:-1]:
             row = overview(report, engine)
             text += (f'| {report["host"]["architecture"]} | {LABELS[engine]} | {row["lower_cpu_cases"]}/25 | '
                      f'{row["lower_p50_cases"]}/25 | {row["median_cpu_ratio"]:.3f}× | '
-                     f'{row["median_p50_ratio"]:.3f}× | {row["exact_pixel_cases"]}/25 |\n')
+                     f'{row["median_p50_ratio"]:.3f}× | {row["median_memory_ratio"]:.3f}× | {row["exact_pixel_cases"]}/25 |\n')
     return text
 
 
@@ -111,9 +116,12 @@ def render_tables(reports):
         host = report['host']
         cpu = ', '.join(host['cpu_model']).replace('|', '\\|')
         text += f'### Linux {host["architecture"]}\n\n'
-        text += f'{cpu}; {host["logical_cpus"]} logical CPUs, two selected; {host["os_release"]["PRETTY_NAME"]}, kernel {host["kernel"]}. '
+        text += f'CPU identifiers: {cpu}; {host["logical_cpus"]} logical CPUs, two selected; {host["os_release"]["PRETTY_NAME"]}, kernel {host["kernel"]}. '
         text += (f'[Measurement run]({report["workflow_url"]}).\n\n'
                  if report.get('workflow_url') else 'Local measurement run.\n\n')
+        protocol = report['protocol']
+        text += f'{protocol["batches"]} batches × {protocol["requests_per_batch"]} timed requests per case/mode, after {protocol["warmups"]} warmups.\n\n'
+        text += f'Harness `{report["harness_revision"]}`; corpus SHA-256 `{report["fixtures"]["corpus_sha256"]}`.\n\n'
         text += 'Each triple is **Pixstride default / Pixstride native / imgproxy**. Pixel MAE is **default / native**, taking the larger black/white composite error against imgproxy. Memory is the fresh container lifetime cgroup peak, including startup, warmups, file cache and kernel memory.\n\n'
         text += '| Case | CPU ms/request | HTTP p50 ms | HTTP p95 ms | Peak cgroup MiB | Output KiB | Pixel MAE |\n'
         text += '|---|---:|---:|---:|---:|---:|---:|\n'
