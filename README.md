@@ -12,7 +12,7 @@ docker run --rm --name pixstride -p 127.0.0.1:8080:8080 \
   --read-only --cap-drop=ALL --security-opt=no-new-privileges \
   --memory=512m --pids-limit=64 --cpus=2 \
   -e PIXSTRIDE_ALLOW_UNSAFE=1 -e PIXSTRIDE_ALLOWED_HOSTS=upload.wikimedia.org \
-  ghcr.io/lansbe/pixstride:0.2.0
+  ghcr.io/lansbe/pixstride:0.3.0
 ```
 <!-- generated:run:end -->
 
@@ -24,7 +24,7 @@ http://localhost:8080/unsafe/rs:fit:128:128/plain/https://upload.wikimedia.org/w
 
 In unsigned mode, every request, including `/health`, must use `localhost`, `127.0.0.1` or `[::1]` in the `Host` header with the service port (`PIXSTRIDE_PORT`, default 8080). The port may be omitted only when the service port is 80. A Host check does not authenticate clients: loopback port publishing alone does not isolate other containers on the same network.
 
-`/health` is the health endpoint. Every image request reads its source again. Local files require an explicit read-only mount and `PIXSTRIDE_LOCAL_ROOT`; nested relative regular files are accepted in Unreleased builds; each path component is opened without following symlinks. Released 0.1.1 accepts flat names only.
+`/health` is the health endpoint. Every image request reads its source again. Local files require an explicit read-only mount and `PIXSTRIDE_LOCAL_ROOT`; nested relative regular files are accepted, and each path component is opened without following symlinks.
 
 For deployment, omit `PIXSTRIDE_ALLOW_UNSAFE`, configure independent random hexadecimal `PIXSTRIDE_KEY` (at least 32 bytes) and `PIXSTRIDE_SALT` (at least 16 bytes), and keep an exact `PIXSTRIDE_ALLOWED_HOSTS` allowlist. Secrets also accept `_FILE` variables for mounted secret files. Place the service behind a TLS reverse proxy with rate limits. See [SECURITY.md](SECURITY.md).
 
@@ -42,7 +42,7 @@ Configuration names: `PIXSTRIDE_ABS_ALLOWED_CONTAINERS`, `PIXSTRIDE_ABS_DENIED_C
 
 ## Scope
 
-The stable container example above runs the released 0.1.1 behavior. The following additions are **Unreleased** and require building this source; no new image or release has been published.
+The stable container includes the following features. Optional build features are enabled in the published image; source builds select them with Cargo features.
 
 - Built-in input/output codecs and bounded transforms remain available without libvips.
 - Optional native engine: PNG/JPEG/WebP/GIF/TIFF/AVIF/HEIC/JPEG XL, BMP/ICO bridges, broader static SVG, 16-bit gray/RGB/alpha, ICC/metadata handling and bounded GIF/WebP animation.
@@ -56,7 +56,7 @@ See [COMPATIBILITY.md](COMPATIBILITY.md) for the complete option/configuration m
 
 Bearer and signed URL failures now use OSS status 403; malformed or disabled processing URLs use 404. HTTP framing errors remain 400.
 
-Version 0.1.1 introduced work limits that can reject expensive valid inputs. The new native path adds process/animation/output bounds; see [SECURITY.md](SECURITY.md).
+Version 0.1.1 introduced work limits that can reject expensive valid inputs. The native path also has process/animation/output bounds; see [SECURITY.md](SECURITY.md).
 
 ## Benchmarks
 
@@ -76,10 +76,14 @@ Only 3/20 outputs were pixel-identical across engines. Filters, JPEG chroma samp
 
 `master` is the stable line; `develop` integrates upcoming work. Docker `latest` follows stable releases; `alpha`, `beta` and `rc` are separate testing channels, available after their first successful tagged release. Pin a version or digest for deployment. See the [changelog](CHANGELOG.md) and [release workflow](CONTRIBUTING.md#releases).
 
+Version 0.3.0 integrates the tested `develop` changes into `master`. Before upgrading from 0.2.x, set `PIXSTRIDE_SIGNATURE_SIZE` to the same 16–32-byte size on every signer and server and regenerate any shorter signed URLs. Source patterns now apply to normalized initial HTTP URLs and every redirect destination. Bearer-protected responses add `Authorization` to `Vary`; purge previously cached protected responses and configure caches to honor this header. Failed response writes close keep-alive connections. See [SECURITY.md](SECURITY.md) for deployment details.
+
+The native PNG palette fallback uses color_quant 2.0.0. Its corrected quantizer can change output pixels, bytes and ETags compared with 1.1.0; change the signed cachebuster or invalidate transformed-image caches on upgrade. See the [dependency migration audit](COMPATIBILITY.md#dependency-upgrade-audit) for scope and validation.
+
 ## Build
 
 <!-- generated:build:start -->
-Linux and macOS, ARM64 or x86-64; Rust 1.99 and libcurl development files.
+Linux and macOS, ARM64 or x86-64; Rust 1.100 and libcurl development files.
 <!-- generated:build:end -->
 
 ```sh

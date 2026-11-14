@@ -1,11 +1,69 @@
 use super::handle;
 use crate::{fetch, request, signature, watermark};
 use std::{
-    io::{Read, Write},
+    io::{self, Cursor, Read, Write},
     net::{Shutdown, TcpListener, TcpStream},
     sync::OnceLock,
     time::Duration,
 };
+
+struct TruncatedResponse {
+    request: Cursor<Vec<u8>>,
+    response: Vec<u8>,
+    body_started: bool,
+    body_bytes: usize,
+}
+
+impl Read for TruncatedResponse {
+    fn read(&mut self, bytes: &mut [u8]) -> io::Result<usize> {
+        self.request.read(bytes)
+    }
+}
+
+impl Write for TruncatedResponse {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        if !self.body_started {
+            self.response.extend_from_slice(bytes);
+            self.body_started = self.response.ends_with(b"\r\n\r\n");
+            return Ok(bytes.len());
+        }
+        if self.body_bytes == 0 && !bytes.is_empty() {
+            self.response.push(bytes[0]);
+            self.body_bytes = 1;
+            return Ok(1);
+        }
+        Err(io::Error::new(
+            io::ErrorKind::TimedOut,
+            "simulated response timeout",
+        ))
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+impl crate::network::socket::Socket for TruncatedResponse {
+    fn set_read_timeout(&self, _: Option<Duration>) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn set_write_timeout(&self, _: Option<Duration>) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn write_timeout(&self) -> io::Result<Option<Duration>> {
+        Ok(None)
+    }
+
+    fn shutdown(&self, _: Shutdown) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn set_nodelay(&self, _: bool) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 fn exchange(config: request::Config, build_request: impl FnOnce(u16) -> String) -> String {
     String::from_utf8(exchange_bytes(
@@ -40,7 +98,8 @@ fn exchange_bytes(
             pool,
             &crate::network::engine::Engine::new(1),
             &settings,
-        );
+        )
+        .unwrap();
     });
     let mut client = TcpStream::connect(("127.0.0.1", port)).unwrap();
     client
@@ -56,6 +115,36 @@ fn exchange_bytes(
 
 fn signed_config() -> request::Config {
     request::Config::signed(vec![0x42; 32], vec![0x37; 16]).unwrap()
+}
+
+#[test]
+fn truncated_response_write_is_reported() {
+    let mut socket = TruncatedResponse {
+        request: Cursor::new(b"GET /health HTTP/1.1\r\nHost: localhost:8080\r\n\r\n".to_vec()),
+        response: Vec::new(),
+        body_started: false,
+        body_bytes: 0,
+    };
+    let pool = fetch::Pool::new().unwrap();
+    let watermark = watermark::Config::from_path(None, 1.0).unwrap();
+    crate::network::protocol::allow_keep_alive(true);
+    let result = handle(
+        &mut socket,
+        8080,
+        &None,
+        &request::Config::unsafe_local(),
+        &watermark,
+        &pool,
+        &crate::network::engine::Engine::new(1),
+        &Default::default(),
+    );
+
+    assert_eq!(result.unwrap_err().kind(), io::ErrorKind::TimedOut);
+    assert!(socket
+        .response
+        .windows(19)
+        .any(|w| w == b"Content-Length: 3\r\n"));
+    assert!(socket.response.ends_with(b"\r\n\r\no"));
 }
 
 #[test]
@@ -189,6 +278,47 @@ fn authorization_precedes_routes_and_metrics_remain_bounded() {
                     .contains("pixstride_requests_total"));
             }
         }
+    }
+}
+
+#[test]
+fn bearer_protected_images_partition_shared_cache_entries_by_authorization() {
+    let fixture = Fixture::new();
+    let settings = || crate::network::settings::Settings {
+        secret: Some("example".into()),
+        ttl: 3600,
+        ..Default::default()
+    };
+    let target = "/unsafe/plain/local:///sample.ppm@png";
+    let authorized = exchange_bytes(
+        request::Config::unsafe_local(),
+        settings(),
+        fixture.root(),
+        |port| {
+            format!(
+                "GET {target} HTTP/1.1\r\nHost: localhost:{port}\r\nAuthorization: Bearer example\r\n\r\n"
+            )
+        },
+    );
+    let (headers, body) = parts(&authorized);
+    assert!(headers.starts_with("HTTP/1.1 200 "), "{headers}");
+    assert!(body.starts_with(b"\x89PNG"));
+    assert!(headers.contains("Cache-Control: public, max-age=3600\r\n"));
+    assert!(headers.contains("Vary: Authorization\r\n"));
+
+    for authorization in ["", "Authorization: Bearer wrong\r\n"] {
+        let denied = exchange_bytes(
+            request::Config::unsafe_local(),
+            settings(),
+            fixture.root(),
+            |port| {
+                format!("GET {target} HTTP/1.1\r\nHost: localhost:{port}\r\n{authorization}\r\n")
+            },
+        );
+        let (headers, body) = parts(&denied);
+        assert!(headers.starts_with("HTTP/1.1 403 "), "{headers}");
+        assert_eq!(field(headers, "Cache-Control:"), "no-store");
+        assert_eq!(body, b"Forbidden");
     }
 }
 

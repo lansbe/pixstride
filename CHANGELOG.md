@@ -4,6 +4,20 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-14
+
+### Changed
+
+- Upgrade the native PNG palette fallback to color_quant 2.0.0 and use its separate RGB/alpha palette APIs. Corrected palette lookup and training can change quantized PNG bytes, pixels and ETags. Change the signed cachebuster or invalidate transformed-image caches when deploying; native imagequant output and GIF's separately locked quantizer are unaffected.
+- Require Rust 1.100 and use Rust 1.100.0 for the pinned Alpine builder and native CI. This includes the Rust 1.99.1 FFI/linker regression fixes; the runtime Alpine release and image-processing contract are unchanged.
+
+### Security
+
+- Enforce `PIXSTRIDE_ALLOWED_SOURCES` on initial HTTP sources and every redirect destination after removing literal dot path segments. Previously allowed sources can now fail when they redirect outside the configured source patterns; update those patterns only for intended destinations.
+- Add `Authorization` to `Vary` on Bearer-protected image responses so shared caches cannot reuse an authorized response for requests with missing or different credentials. Configured public cache TTLs remain available to authorized requests.
+- Close keep-alive connections after a failed or truncated response write, preventing later pipelined requests from being processed after an incomplete response.
+- Require `PIXSTRIDE_SIGNATURE_SIZE` to be 16–32 bytes (default 32), preventing practical exhaustive forgery of short HMAC signatures. Configurations using 1–15 bytes now fail server startup and the `sign` command. Before upgrading, configure every signer and server to use the same supported size and regenerate signed URLs; existing short signatures are no longer accepted.
+
 ## [0.2.0] - 2026-11-14
 
 ### Added
@@ -62,6 +76,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Security
 
+- Enforce allowed-source patterns on every HTTP redirect and on normalized initial HTTP paths, preventing literal `.` and `..` segments from escaping an allowed path prefix. Relative redirects that stay within the allowed prefix remain supported.
+
 - Reject active foreign XML namespaces in SVG passthrough and remove them during sanitization; include an XHTML object regression alongside scripts/styles/external references.
 
 - Bound native child lifetime, pipes, frame totals and encoding attempts; remove secrets from child environments and reject external/active SVG resources.
@@ -85,7 +101,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Linux AMD64/ARM64 Docker images, MIT licensing and deployment documentation.
 - Historical CPU, loopback HTTP and RAM comparisons with their quality and environment limitations. This is not full imgproxy compatibility.
 
-[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/lansbe/pixstride/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lansbe/pixstride/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/lansbe/pixstride/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/lansbe/pixstride/releases/tag/v0.1.0

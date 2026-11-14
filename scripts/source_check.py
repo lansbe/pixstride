@@ -15,6 +15,24 @@ def check(binary, root, server, request, capabilities):
     class Origin(BaseHTTPRequestHandler):
         def do_GET(self):
             captured.append((self.path, dict(self.headers)))
+            source = f'http://127.0.0.1:{self.server.server_port}'
+            redirects = {
+                '/public/relative': (302, '../private/image'),
+                '/public/root': (303, '/public/../private/image'),
+                '/public/absolute': (307, source + '/public/../private/image'),
+                '/public/authority': (308, f'//127.0.0.1:{self.server.server_port}/public/../private/image'),
+                '/public/chain': (301, 'step'),
+                '/public/step': (302, '../../private/image'),
+                '/public/allowed': (302, 'nested/../image'),
+                '/public/query': (302, '?next=/../private'),
+            }
+            if self.path in redirects:
+                status, location = redirects[self.path]
+                self.send_response(status)
+                self.send_header('Location', location)
+                self.send_header('Content-Length', '0')
+                self.end_headers()
+                return
             if self.path == '/start':
                 self.send_response(302)
                 self.send_header('Location', '/dir/image')
@@ -70,6 +88,20 @@ def check(binary, root, server, request, capabilities):
         with server(binary, root, {**policy, 'PIXSTRIDE_MAX_REDIRECTS': '0'}) as (port, _, _):
             assert request(port, f'/unsafe/plain/{source}/start@png')[0] == 502
             assert len(captured) == 1
+        with server(binary, root, {**policy, 'PIXSTRIDE_ALLOWED_SOURCES': source + '/public/'}) as (port, _, _):
+            for path in ('relative', 'root', 'absolute', 'authority', 'chain'):
+                captured.clear()
+                assert request(port, f'/unsafe/plain/{source}/public/{path}@png')[0] == 502
+                expected = [f'/public/{path}'] + (['/public/step'] if path == 'chain' else [])
+                assert [p for p, _ in captured] == expected, captured
+            captured.clear()
+            assert request(port, f'/unsafe/plain/{source}/public/../private/image@png')[0] == 502
+            assert not captured, 'Normalized initial source escaped its allowed prefix'
+            for path, destination in (('allowed', '/public/image'),
+                                      ('query', '/public/query?next=/../private')):
+                captured.clear()
+                assert request(port, f'/unsafe/plain/{source}/public/{path}@png')[0] == 200
+                assert [p for p, _ in captured] == [f'/public/{path}', destination], captured
         with server(binary, root, {**policy, 'PIXSTRIDE_CACHE_CONTROL_PASSTHROUGH': '1', 'PIXSTRIDE_TTL': '30'}) as (port, _, _):
             inherited = request(port, f'/unsafe/plain/{source}/image@png')
             assert inherited[0] == 200 and inherited[1]['cache-control'] == 'public, max-age=120'
@@ -115,5 +147,6 @@ def check(binary, root, server, request, capabilities):
         origin6.server_close()
         thread6.join()
     return ['source-ipv4-ipv6-opt-ins-redirects-user-agent-and-cookie-isolation',
+            'allowed-source-prefix-enforcement-on-normalized-initial-urls-and-every-redirect',
             'origin-cache-passthrough-expiration-and-content-security-policy',
             'bounded-source-gzip-decoding-wire-accounting-and-corrupt-trailer-rejection']
