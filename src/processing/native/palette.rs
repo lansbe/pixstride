@@ -196,21 +196,30 @@ mod tests {
     #[test]
     fn quantized_palette_bounds_and_alpha_survive_interlacing() {
         let source = image(33, 17, |i| {
-            [i as u8, (i * 37) as u8, (i * 73) as u8, (i * 17) as u8]
+            [
+                i as u8,
+                ((i >> 8) * 97) as u8,
+                (i * 73) as u8,
+                (i * 17) as u8,
+            ]
         });
-        let mut flat = Vec::new();
-        for interlace in [false, true] {
-            let bytes = encode_raster(&source, &[], 75, 16, interlace).unwrap();
-            assert_eq!(png_chunk(&bytes, b"PLTE").len(), 16 * 3);
-            let alpha = png_chunk(&bytes, b"tRNS");
-            assert_eq!(alpha.len(), 16);
-            assert!(alpha.iter().any(|&a| a > 0 && a < 255));
-            let decoded = decode(&bytes);
-            assert_eq!((decoded.width, decoded.height), (33, 17));
-            if interlace {
-                assert_eq!(decoded.pixels.as_slice(), flat);
-            } else {
-                flat.extend_from_slice(decoded.pixels.as_slice());
+        for colors in [2, 16, 256] {
+            for quality in [1, 100] {
+                let mut flat = Vec::new();
+                for interlace in [false, true] {
+                    let bytes = encode_raster(&source, &[], quality, colors, interlace).unwrap();
+                    assert_eq!(png_chunk(&bytes, b"PLTE").len(), colors * 3);
+                    let alpha = png_chunk(&bytes, b"tRNS");
+                    assert_eq!(alpha.len(), colors);
+                    assert!(alpha.iter().any(|&a| a > 0 && a < 255));
+                    let decoded = decode(&bytes);
+                    assert_eq!((decoded.width, decoded.height), (33, 17));
+                    if interlace {
+                        assert_eq!(decoded.pixels.as_slice(), flat);
+                    } else {
+                        flat.extend_from_slice(decoded.pixels.as_slice());
+                    }
+                }
             }
         }
     }
