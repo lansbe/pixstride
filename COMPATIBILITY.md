@@ -140,7 +140,7 @@ Build the reference from the exact source commit in reference.json (`go build -o
 
 CI adds macOS ARM64/Intel checks, native round trips, HTTP/Unix/OTLP integration, a 100-request concurrent soak and deterministic mutation smoke. The Linux AMD64/ARM64 Docker builds run both feature configurations and real native codec checks before release promotion; `python3 scripts/container_check.py --image pixstride:check` also checks the restricted runtime, modern encoders, authorization, SSRF refusal, health and metrics. Its optional `--remote-url` checks a public HTTPS fixture outside mandatory CI. The macOS jobs install Go explicitly to build the pinned reference. A configured workflow is not evidence that remote jobs have run successfully. Docker and the other three platform combinations must pass their own jobs before a release is approved.
 
-The mutation runner uses a fixed seed and bounded malformed PNG/GIF/SVG inputs. It catches parent crashes, native crash signals and harness deadlines. It is not a coverage-guided fuzzing campaign. Longer runs use `--cases`/`--requests` up to 10000. Synthetic soak results are correctness evidence, not an equal-quality performance benchmark. The historical README benchmark does not measure this native engine.
+The mutation runner uses a fixed seed and bounded malformed PNG/GIF/SVG inputs. It catches parent crashes, native crash signals and harness deadlines. It is not a coverage-guided fuzzing campaign. Longer runs use `--cases`/`--requests` up to 10000. Synthetic soak results are correctness evidence, not an equal-quality performance benchmark.
 
 ## Performance measurements
 
