@@ -4,6 +4,10 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrade the native PNG palette fallback to color_quant 2.0.0 and use its separate RGB/alpha palette APIs. Corrected palette lookup and training can change quantized PNG bytes, pixels and ETags. Change the signed cachebuster or invalidate transformed-image caches when deploying; native imagequant output and GIF's separately locked quantizer are unaffected.
+
 ### Security
 
 - Close keep-alive connections after a failed or truncated response write, preventing later pipelined requests from being processed after an incomplete response.

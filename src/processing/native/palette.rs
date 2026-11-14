@@ -24,7 +24,22 @@ pub(super) fn encode(
     colors: usize,
     interlace: bool,
 ) -> Result<Vec<u8>, Error> {
-    let raster = super::encode::raster(image)?;
+    encode_raster(
+        &super::encode::raster(image)?,
+        original,
+        quality,
+        colors,
+        interlace,
+    )
+}
+
+fn encode_raster(
+    raster: &crate::Image,
+    original: &[u8],
+    quality: u8,
+    colors: usize,
+    interlace: bool,
+) -> Result<Vec<u8>, Error> {
     let pixels = raster.pixels.as_slice();
     let speed = ((101 - i32::from(quality)) / 4).clamp(1, 30);
     let mut exact = std::collections::BTreeMap::<[u8; 4], u8>::new();
@@ -45,15 +60,17 @@ pub(super) fn encode(
     } else {
         None
     };
-    if let Some(q) = &quantizer {
-        palette = q.color_map_rgba();
-    }
-    let mut rgb = Vec::with_capacity(768);
-    let mut alpha = Vec::with_capacity(256);
-    for color in palette.chunks_exact(4) {
-        rgb.extend_from_slice(&color[..3]);
-        alpha.push(color[3]);
-    }
+    let (rgb, alpha) = if let Some(q) = &quantizer {
+        (q.color_map_rgb(), q.color_map_alpha())
+    } else {
+        let mut rgb = Vec::with_capacity(768);
+        let mut alpha = Vec::with_capacity(256);
+        for color in palette.chunks_exact(4) {
+            rgb.extend_from_slice(&color[..3]);
+            alpha.push(color[3]);
+        }
+        (rgb, alpha)
+    };
     let mut raw = Vec::new();
     let length = (raster.width + 7)
         .checked_mul(raster.height)
@@ -123,4 +140,86 @@ pub(super) fn encode(
     chunk(&mut out, b"IDAT", &compressed)?;
     chunk(&mut out, b"IEND", &[])?;
     Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{Buffer, Image};
+
+    fn image(width: usize, height: usize, pixel: impl Fn(usize) -> [u8; 4]) -> Image {
+        let mut pixels = Buffer::new(width * height * 4).unwrap();
+        for (i, rgba) in pixels.as_mut_slice().chunks_exact_mut(4).enumerate() {
+            rgba.copy_from_slice(&pixel(i));
+        }
+        Image {
+            width,
+            height,
+            pixels,
+        }
+    }
+
+    fn decode(bytes: &[u8]) -> Image {
+        static INIT: std::sync::Once = std::sync::Once::new();
+        INIT.call_once(|| libvips::Vips::init("pixstride-palette-test").unwrap());
+        let image = VipsImage::new_from_buffer(bytes, "").unwrap();
+        super::super::encode::raster(&image).unwrap()
+    }
+
+    fn png_chunk<'a>(bytes: &'a [u8], wanted: &[u8; 4]) -> &'a [u8] {
+        let mut at = 8;
+        while at < bytes.len() {
+            let len = u32::from_be_bytes(bytes[at..at + 4].try_into().unwrap()) as usize;
+            if &bytes[at + 4..at + 8] == wanted {
+                return &bytes[at + 8..at + 8 + len];
+            }
+            at += 12 + len;
+        }
+        panic!("missing PNG chunk");
+    }
+
+    #[test]
+    fn exact_palette_preserves_partial_alpha_in_both_png_layouts() {
+        let colors = [[255, 0, 0, 0], [0, 255, 0, 127], [0, 0, 255, 255]];
+        let source = image(3, 5, |i| colors[i % colors.len()]);
+        for interlace in [false, true] {
+            let bytes = encode_raster(&source, &[], 75, 3, interlace).unwrap();
+            assert_eq!(bytes[25], 3);
+            assert_eq!(bytes[28], u8::from(interlace));
+            assert_eq!(png_chunk(&bytes, b"tRNS"), [0, 127, 255]);
+            let decoded = decode(&bytes);
+            assert_eq!((decoded.width, decoded.height), (3, 5));
+            assert_eq!(decoded.pixels.as_slice(), source.pixels.as_slice());
+        }
+    }
+
+    #[test]
+    fn quantized_palette_bounds_and_alpha_survive_interlacing() {
+        let source = image(33, 17, |i| {
+            [i as u8, (i * 37) as u8, (i * 73) as u8, (i * 17) as u8]
+        });
+        let mut flat = Vec::new();
+        for interlace in [false, true] {
+            let bytes = encode_raster(&source, &[], 75, 16, interlace).unwrap();
+            assert_eq!(png_chunk(&bytes, b"PLTE").len(), 16 * 3);
+            let alpha = png_chunk(&bytes, b"tRNS");
+            assert_eq!(alpha.len(), 16);
+            assert!(alpha.iter().any(|&a| a > 0 && a < 255));
+            let decoded = decode(&bytes);
+            assert_eq!((decoded.width, decoded.height), (33, 17));
+            if interlace {
+                assert_eq!(decoded.pixels.as_slice(), flat);
+            } else {
+                flat.extend_from_slice(decoded.pixels.as_slice());
+            }
+        }
+    }
+
+    #[test]
+    fn quantizer_can_select_palette_index_zero() {
+        let source = image(32, 32, |i| [i as u8, (i * 37) as u8, (i * 73) as u8, 255]);
+        let quantizer = color_quant::NeuQuant::new(1, 64, source.pixels.as_slice());
+        let first = quantizer.lookup(0).unwrap();
+        assert_eq!(quantizer.index_of(&first), 0);
+    }
 }
