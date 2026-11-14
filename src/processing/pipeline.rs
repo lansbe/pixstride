@@ -7,6 +7,7 @@ pub struct Processed {
     pub mime: &'static str,
     pub width: usize,
     pub height: usize,
+    pub origin: [usize; 2],
 }
 
 fn jpeg_frame(data: &[u8]) -> Result<Option<(u8, usize, usize, usize)>, Error> {
@@ -314,6 +315,7 @@ pub fn process(
                     },
                     width,
                     height,
+                    origin: [sw, sh],
                 });
             }
         }
@@ -378,12 +380,14 @@ pub fn process(
                         mime,
                         width,
                         height,
+                        origin: [source_width, source_height],
                     });
                 }
             }
         }
     }
     let mut decoded = decode(data)?;
+    let origin = [decoded.width, decoded.height];
     if request.strip_color_profile {
         if let Some(icc) = profile.take() {
             crate::metadata::convert_to_srgb(&mut decoded, &icc)?;
@@ -444,5 +448,6 @@ pub fn process(
         mime,
         width,
         height,
+        origin,
     })
 }

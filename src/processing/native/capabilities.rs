@@ -2,7 +2,7 @@
 use crate::Error;
 
 pub fn report() -> Result<serde_json::Value, Error> {
-    let mut report = serde_json::json!({"version":env!("CARGO_PKG_VERSION"),"builtin":true,"native_codecs":cfg!(feature="native-codecs"),"source_cookies":cfg!(feature="source-cookies"), "cloud_sources":cfg!(feature="cloud-sources"),"cloud_config":cfg!(feature="cloud-config"),"telemetry":cfg!(feature="telemetry")});
+    let mut report = serde_json::json!({"version":env!("CARGO_PKG_VERSION"),"builtin":true,"native_codecs":cfg!(feature="native-codecs"),"source_cookies":cfg!(feature="source-cookies"), "cloud_sources":cfg!(feature="cloud-sources"),"cloud_config":cfg!(feature="cloud-config"),"s3_decryption":cfg!(feature="s3-decryption"),"telemetry":cfg!(feature="telemetry")});
     #[cfg(feature = "native-codecs")]
     {
         libvips::Vips::init("pixstride-capabilities")

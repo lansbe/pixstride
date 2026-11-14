@@ -25,6 +25,7 @@ def server(binary, root, extra=None):
     variables.update(PIXSTRIDE_BIND='127.0.0.1', PIXSTRIDE_PORT=str(port), PIXSTRIDE_ALLOW_UNSAFE='1',
                      PIXSTRIDE_LOCAL_ROOT=str(root), PIXSTRIDE_ENGINE='native')
     variables.update(extra or {})
+    variables = {k:v for k,v in variables.items() if v is not None}
     with (root / 'server.log').open('wb') as log:
         process = subprocess.Popen([str(binary)], env=variables, stdout=log, stderr=log)
         try:
@@ -91,6 +92,7 @@ def check(args):
             (root / 'nested').mkdir()
             (root / 'nested' / 'sample.png').write_bytes(png(32, 24, channels=4))
             settings = dict(PIXSTRIDE_SECRET='synthetic-secret', PIXSTRIDE_USE_ETAG='1',
+                            PIXSTRIDE_ENABLE_DEBUG_HEADERS='1',
                             PIXSTRIDE_USE_LAST_MODIFIED='1', PIXSTRIDE_TTL='3600', PIXSTRIDE_AUTO_WEBP='1',
                             PIXSTRIDE_PRESETS='thumb=rs:fit:16:12', PIXSTRIDE_ALLOW_ORIGIN='https://example.test')
             if capabilities.get('telemetry'):
@@ -106,6 +108,10 @@ def check(args):
                 image = request(port, target, headers={**auth, 'Accept': 'image/webp'})
                 assert image[0] == 200 and image[1]['content-type'] == 'image/webp', image[:2]
                 assert image[1]['vary'] == 'Accept' and image[1]['x-image-width'] == '16'
+                assert image[1]['x-origin-width']=='32' and image[1]['x-origin-height']=='24'
+                assert image[1]['x-result-width']=='16' and image[1]['x-result-height']=='12'
+                assert int(image[1]['x-origin-content-length'])==(root/'nested'/'sample.png').stat().st_size
+                passed.append('oss-origin-result-debug-headers')
                 assert image[1]['access-control-allow-origin'] == 'https://example.test'
                 assert request(port, target, headers={**auth, 'Accept': 'image/webp;q=0'})[1]['content-type'] == 'image/png'
                 etag = image[1]['etag']

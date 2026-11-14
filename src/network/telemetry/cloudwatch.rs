@@ -81,19 +81,32 @@ impl CloudWatch {
             service,
         }))
     }
-    pub fn request(
+    pub async fn request(
         &self,
         client: &reqwest::Client,
         event: &Event,
     ) -> Result<reqwest::RequestBuilder, Error> {
-        let key = credential("PIXSTRIDE_CLOUD_WATCH_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID")?
-            .ok_or("CloudWatch access key is required")?;
+        let key = credential("PIXSTRIDE_CLOUD_WATCH_ACCESS_KEY_ID", "AWS_ACCESS_KEY_ID")?;
         let secret = credential(
             "PIXSTRIDE_CLOUD_WATCH_SECRET_ACCESS_KEY",
             "AWS_SECRET_ACCESS_KEY",
-        )?
-        .ok_or("CloudWatch secret key is required")?;
+        )?;
         let token = credential("PIXSTRIDE_CLOUD_WATCH_SESSION_TOKEN", "AWS_SESSION_TOKEN")?;
+        let (key, secret, token) = match (key, secret) {
+            (Some(key), Some(secret)) => (key, secret, token),
+            (None, None) => {
+                #[cfg(feature = "cloud-sources")]
+                {
+                    let c = crate::network::aws_identity::load(&self.region, false).await?;
+                    (c.access_key_id, c.secret_access_key, c.session_token)
+                }
+                #[cfg(not(feature = "cloud-sources"))]
+                {
+                    return Err("CloudWatch SDK credentials require cloud-sources");
+                }
+            }
+            _ => return Err("CloudWatch credentials must include key and secret"),
+        };
         let date = httpdate::fmt_http_date(std::time::SystemTime::now());
         let fields = date.split_whitespace().collect::<Vec<_>>();
         let months = [

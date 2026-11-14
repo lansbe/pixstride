@@ -22,6 +22,7 @@ pub(crate) struct Settings {
     pub keep_alive: u64,
     pub cookies: super::cookies::Policy,
     pub cache_passthrough: bool,
+    pub debug_headers: bool,
 }
 
 impl Settings {
@@ -68,6 +69,13 @@ impl Settings {
                 .map_err(|_| "invalid HTTP configuration number")
         };
         let ttl = number("PIXSTRIDE_TTL")?;
+        #[cfg(feature = "cloud-sources")]
+        if std::env::var_os("PIXSTRIDE_S3_BUCKET_REGIONS").is_some() {
+            super::aws_identity::region("")?;
+        }
+        if flag("PIXSTRIDE_S3_USE_DECRYPTION_CLIENT")? && !cfg!(feature = "s3-decryption") {
+            return Err("S3 decryption requires s3-decryption");
+        }
         if std::env::var_os("PIXSTRIDE_S3_ENDPOINT_USE_PATH_STYLE").is_some() {
             flag("PIXSTRIDE_S3_ENDPOINT_USE_PATH_STYLE")?;
         }
@@ -178,6 +186,7 @@ impl Settings {
             keep_alive,
             cookies: super::cookies::Policy::from_env()?,
             cache_passthrough: flag("PIXSTRIDE_CACHE_CONTROL_PASSTHROUGH")?,
+            debug_headers: flag("PIXSTRIDE_ENABLE_DEBUG_HEADERS")?,
         })
     }
 }

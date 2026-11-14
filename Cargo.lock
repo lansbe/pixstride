@@ -1278,6 +1278,7 @@ dependencies = [
  "httpdate",
  "libc",
  "opendal",
+ "openssl",
  "psl",
  "regex",
  "reqsign-aws-v4",

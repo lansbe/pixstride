@@ -7,12 +7,14 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 from pathlib import Path
 import re
+import subprocess
 import tempfile
 import threading
 import time
 from urllib.parse import parse_qs, urlsplit
 from image_fixtures import png
 from server_check import request, server
+from compatibility import environment
 
 
 def verify_cloudwatch(path, headers, body):
@@ -93,7 +95,7 @@ def check(binary):
                     PIXSTRIDE_HONEYBADGER_KEY='synthetic-honeybadger', PIXSTRIDE_HONEYBADGER_ENDPOINT=base+'/honeybadger',
                     PIXSTRIDE_BUGSNAG_KEY='synthetic-bugsnag', PIXSTRIDE_BUGSNAG_ENDPOINT=base+'/bugsnag',
                     PIXSTRIDE_AIRBRAKE_PROJECT_ID='123', PIXSTRIDE_AIRBRAKE_PROJECT_KEY='synthetic-airbrake', PIXSTRIDE_AIRBRAKE_ENDPOINT=base+'/airbrake',
-                    PIXSTRIDE_CLOUD_WATCH_SERVICE_NAME='synthetic-service', PIXSTRIDE_CLOUD_WATCH_NAMESPACE='synthetic',
+                    PIXSTRIDE_CLOUD_WATCH_SERVICE_NAME='synthetic-service', PIXSTRIDE_CLOUD_WATCH_NAMESPACE='synthetic',PIXSTRIDE_CLOUD_WATCH_REGION='us-west-1',
                     PIXSTRIDE_CLOUD_WATCH_ENDPOINT=base+'/cloudwatch', PIXSTRIDE_CLOUD_WATCH_ACCESS_KEY_ID='synthetic-access',
                     PIXSTRIDE_CLOUD_WATCH_SECRET_ACCESS_KEY='synthetic-cloudwatch-secret')
     expected={'/v1/traces','/v1/metrics','/v1/logs','/nr/v1/traces','/nr/v1/metrics','/nr/v1/logs',
@@ -120,7 +122,22 @@ def check(binary):
                 assert any(s['traceId']==sampled and s['parentSpanId']=='0123456789abcdef' for s in traces)
                 assert all(s['traceId']!=unsampled for s in traces), 'Unsampled parent exported a trace'
                 assert request(port,'/metrics',headers=auth)[2].find(b'pixstride_telemetry_failed_total 0')>=0
-        print('OTLP traces/metrics/logs, parent sampling, four notice APIs, Datadog/New Relic and CloudWatch SigV4 passed')
+            capabilities=json.loads(subprocess.check_output([str(binary.resolve()),'capabilities'],env=environment()))
+            if capabilities.get('cloud_sources'):
+                credentials=root/'credentials'
+                credentials.write_text('[synthetic]\naws_access_key_id=synthetic-access\naws_secret_access_key=synthetic-cloudwatch-secret\n')
+                config=root/'config';config.write_text('')
+                profile={k:v for k,v in settings.items() if k.startswith('PIXSTRIDE_CLOUD_WATCH_') and not k.endswith(('ACCESS_KEY_ID','SECRET_ACCESS_KEY'))}
+                profile.update(AWS_PROFILE='synthetic',AWS_SHARED_CREDENTIALS_FILE=str(credentials),AWS_CONFIG_FILE=str(config))
+                for name in ('AWS_ACCESS_KEY_ID','AWS_SECRET_ACCESS_KEY','AWS_SESSION_TOKEN'):
+                    profile[name]=None;profile[name+'_FILE']=None
+                previous=sum(path=='/cloudwatch' for path,_ in received)
+                with server(binary.resolve(),root,profile) as (port,_,_):
+                    assert request(port,'/unsafe/plain/local:///sample.png@png')[0]==200
+                    deadline=time.monotonic()+8
+                    while time.monotonic()<deadline and sum(path=='/cloudwatch' for path,_ in received)<=previous:time.sleep(0.05)
+                    assert not errors and sum(path=='/cloudwatch' for path,_ in received)>previous,errors
+        print('OTLP traces/metrics/logs, parent sampling, four notice APIs, Datadog/New Relic and CloudWatch SigV4/SDK profiles passed')
     finally:
         collector.shutdown()
         collector.server_close()

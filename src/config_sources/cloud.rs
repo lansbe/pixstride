@@ -163,7 +163,7 @@ pub(super) async fn load(values: &mut Values) -> Result<(), Error> {
     }
     Ok(())
 }
-async fn aws(
+pub(super) async fn aws(
     values: &Values,
     transport: &Transport,
     service: &str,
@@ -175,6 +175,8 @@ async fn aws(
             "PIXSTRIDE_ENV_AWS_SSM_PARAMETERS_REGION",
             "PIXSTRIDE_ENV_AWS_SSM_PARAMETERS_ENDPOINT",
         )
+    } else if service == "kms" {
+        ("PIXSTRIDE_S3_KMS_REGION", "PIXSTRIDE_S3_KMS_ENDPOINT")
     } else {
         (
             "PIXSTRIDE_ENV_AWS_SECRET_REGION",
@@ -183,9 +185,22 @@ async fn aws(
     };
     let region = values
         .get(region_name)
+        .or_else(|| {
+            if service == "kms" {
+                values.get("PIXSTRIDE_S3_REGION")
+            } else {
+                None
+            }
+        })
         .or_else(|| values.get("AWS_REGION"))
         .or_else(|| values.get("AWS_DEFAULT_REGION"))
-        .unwrap_or_else(|| "us-west-1".into());
+        .unwrap_or_else(|| {
+            if service == "kms" {
+                "us-east-1".into()
+            } else {
+                "us-west-1".into()
+            }
+        });
     if region.is_empty()
         || region.len() > 64
         || !region
@@ -218,25 +233,35 @@ async fn aws(
         .map_err(|_| "invalid AWS configuration request")?
         .into_parts();
     let ctx = transport.context(values);
-    let key = values.secret("AWS_ACCESS_KEY_ID")?;
-    let secret = values.secret("AWS_SECRET_ACCESS_KEY")?;
-    let credential = match (key, secret) {
-        (Some(key), Some(secret)) => {
-            let mut provider = reqsign_aws_v4::StaticCredentialProvider::new(&key, &secret);
-            if let Some(token) = values.secret("AWS_SESSION_TOKEN")? {
-                provider = provider.with_session_token(&token);
+    let credential = if service == "kms" {
+        crate::network::aws_identity::load(&region, true).await?
+    } else {
+        let (key, secret, token) = {
+            (
+                values.secret("AWS_ACCESS_KEY_ID")?,
+                values.secret("AWS_SECRET_ACCESS_KEY")?,
+                values.secret("AWS_SESSION_TOKEN")?,
+            )
+        };
+        let credential = match (key, secret) {
+            (Some(key), Some(secret)) => {
+                let mut provider = reqsign_aws_v4::StaticCredentialProvider::new(&key, &secret);
+                if let Some(token) = token {
+                    provider = provider.with_session_token(&token);
+                }
+                provider.provide_credential(&ctx).await
             }
-            provider.provide_credential(&ctx).await
+            (None, None) => {
+                reqsign_aws_v4::DefaultCredentialProvider::new()
+                    .provide_credential(&ctx)
+                    .await
+            }
+            _ => return Err("incomplete AWS configuration credentials"),
         }
-        (None, None) => {
-            reqsign_aws_v4::DefaultCredentialProvider::new()
-                .provide_credential(&ctx)
-                .await
-        }
-        _ => return Err("incomplete AWS configuration credentials"),
-    }
-    .map_err(|_| "AWS credentials unavailable")?
-    .ok_or("AWS credentials unavailable")?;
+        .map_err(|_| "AWS credentials unavailable")?
+        .ok_or("AWS credentials unavailable")?;
+        credential
+    };
     reqsign_aws_v4::RequestSigner::new(service, &region)
         .sign_request(&ctx, &mut parts, Some(&credential), None)
         .await

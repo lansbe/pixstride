@@ -78,7 +78,7 @@ fn identity(host: &str) -> bool {
 }
 impl Transport {
     pub fn new(max: usize) -> opendal::Result<Self> {
-        let client = reqwest::Client::builder()
+        let mut client = reqwest::Client::builder()
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(5))
@@ -86,7 +86,16 @@ impl Transport {
             .http1_only()
             .http1_max_headers(128)
             .pool_max_idle_per_host(4)
-            .dns_resolver(Arc::new(Resolver))
+            .dns_resolver(Arc::new(Resolver));
+        if let Ok(path) = std::env::var("PIXSTRIDE_CLOUD_ROOT_CA_FILE") {
+            let data = crate::config::read_regular_file(&path, 65536)
+                .map_err(|_| error("cannot read cloud root CA"))?;
+            client = client.add_root_certificate(
+                reqwest::Certificate::from_pem(&data)
+                    .map_err(|_| error("invalid cloud root CA"))?,
+            );
+        }
+        let client = client
             .build()
             .map_err(|_| error("cloud transport initialization failed"))?;
         Ok(Self { client, max })

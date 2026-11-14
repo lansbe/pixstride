@@ -110,12 +110,18 @@ mod exporter {
                             }
                         }
                         if let Some(cloudwatch) = &cloudwatch {
-                            let success = match cloudwatch.request(&client, &event) {
-                                Ok(request) => {
-                                    request.send().await.is_ok_and(|r| r.status().is_success())
-                                }
-                                Err(_) => false,
-                            };
+                            let success =
+                                tokio::time::timeout(std::time::Duration::from_secs(1), async {
+                                    match cloudwatch.request(&client, &event).await {
+                                        Ok(request) => request
+                                            .send()
+                                            .await
+                                            .is_ok_and(|r| r.status().is_success()),
+                                        Err(_) => false,
+                                    }
+                                })
+                                .await
+                                .unwrap_or(false);
                             if !success {
                                 FAILED.fetch_add(1, Ordering::Relaxed);
                             }

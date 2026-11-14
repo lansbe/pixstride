@@ -9,6 +9,12 @@ use libvips::{
     voption::{Setter, VOption},
     Vips, VipsImage,
 };
+pub(super) struct NativeResult {
+    pub body: Vec<u8>,
+    pub dimensions: [usize; 2],
+    pub origin: [usize; 2],
+    pub format: OutputFormat,
+}
 
 pub(super) fn checked(width: i32, height: i32) -> Result<(), Error> {
     if width <= 0
@@ -160,11 +166,7 @@ fn effects(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
     Ok(image)
 }
 
-pub(super) fn process(
-    data: &[u8],
-    r: &Request,
-    mark: &[u8],
-) -> Result<(Vec<u8>, usize, usize, OutputFormat), Error> {
+pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeResult, Error> {
     Vips::init("pixstride-native").map_err(|_| "cannot initialize native engine")?;
     Vips::cache_set_max(0);
     Vips::cache_set_max_mem(0);
@@ -179,6 +181,7 @@ pub(super) fn process(
     };
     let head = load(data, 1, r.extra.enforce_thumbnail)?;
     let frame_height = head.get_page_height().max(1);
+    let origin = [head.get_width() as usize, frame_height as usize];
     checked(head.get_width(), frame_height)?;
     let total = head.get_n_pages().max(1) as usize;
     let count = total.min(r.extra.max_frames).min(256);
@@ -240,12 +243,12 @@ pub(super) fn process(
             return Err("SVG output requires an SVG source");
         }
         head.copy_memory().map_err(|_| "native validation failed")?;
-        return Ok((
-            data.to_vec(),
-            head.get_width() as usize,
-            frame_height as usize,
-            source_format,
-        ));
+        return Ok(NativeResult {
+            body: data.to_vec(),
+            dimensions: origin,
+            origin,
+            format: source_format,
+        });
     }
     let animated = count > 1
         && matches!(
@@ -330,5 +333,10 @@ pub(super) fn process(
         };
     }
     let bytes = encode::save(&image, r, format, height as i32)?;
-    Ok((bytes, width, height, format))
+    Ok(NativeResult {
+        body: bytes,
+        dimensions: [width, height],
+        origin,
+        format,
+    })
 }

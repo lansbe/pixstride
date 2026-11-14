@@ -1,6 +1,7 @@
 """Exercise real loopback transports using explicit administrator opt-ins."""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from email.utils import formatdate
+import gzip
 import socket
 import threading
 import time
@@ -28,15 +29,18 @@ def check(binary, root, server, request, capabilities):
                 self.send_header('Content-Length', '0')
                 self.end_headers()
                 return
+            wire=gzip.compress(data) if self.path.startswith('/gzip') else data
+            if self.path=='/gzip-bad':wire=wire[:-1]+bytes([wire[-1]^1])
             self.send_response(200)
             self.send_header('Content-Type', 'image/png')
-            self.send_header('Content-Length', str(len(data)))
+            self.send_header('Content-Length', str(len(wire)))
+            if self.path.startswith('/gzip'):self.send_header('Content-Encoding','gzip')
             if self.path == '/expires':
                 self.send_header('Expires', formatdate(time.time() + 300, usegmt=True))
             else:
                 self.send_header('Cache-Control', 'public, max-age=120')
             self.end_headers()
-            self.wfile.write(data)
+            self.wfile.write(wire)
 
         def log_message(self, *_):
             pass
@@ -58,6 +62,10 @@ def check(binary, root, server, request, capabilities):
             assert len(captured) == 2
             assert all(v['User-Agent'].startswith('synthetic/') for _, v in captured)
             assert all('Authorization' not in v and 'Cookie' not in v for _, v in captured)
+            decoded=request(port,f'/unsafe/raw:1/plain/{source}/gzip@png')
+            assert decoded[0]==200 and decoded[2]==data
+            assert int(decoded[1]['x-upstream-bytes'])==len(gzip.compress(data))
+            assert request(port,f'/unsafe/raw:1/plain/{source}/gzip-bad@png')[0]==502
         captured.clear()
         with server(binary, root, {**policy, 'PIXSTRIDE_MAX_REDIRECTS': '0'}) as (port, _, _):
             assert request(port, f'/unsafe/plain/{source}/start@png')[0] == 502
@@ -107,4 +115,5 @@ def check(binary, root, server, request, capabilities):
         origin6.server_close()
         thread6.join()
     return ['source-ipv4-ipv6-opt-ins-redirects-user-agent-and-cookie-isolation',
-            'origin-cache-passthrough-expiration-and-content-security-policy']
+            'origin-cache-passthrough-expiration-and-content-security-policy',
+            'bounded-source-gzip-decoding-wire-accounting-and-corrupt-trailer-rejection']

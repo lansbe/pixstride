@@ -32,7 +32,7 @@ inside && /curl_easy_setopt\(/ {
     emit(value)
 }
 END {
-    if (failed || !finished || count != 22) {
+    if (failed || !finished || count != 23) {
         print "could not extract all curl options from transport.rs" > "/dev/stderr"; exit 1
     }
     print "]"

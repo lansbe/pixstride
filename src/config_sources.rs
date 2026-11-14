@@ -43,10 +43,7 @@ pub fn load() -> Result<(), Error> {
 }
 #[cfg(feature = "cloud-config")]
 fn read(path: &str) -> Result<Vec<u8>, Error> {
-    crate::os::InputFile::open(path.as_bytes())?
-        .read_limited(65536)
-        .map(|b| b.as_slice().to_vec())
-        .map_err(|_| "cannot read bounded configuration file")
+    crate::config::read_regular_file(path, 65536)
 }
 #[cfg(feature = "cloud-config")]
 #[derive(Default)]
@@ -105,6 +102,27 @@ impl Values {
         }
         Ok(())
     }
+}
+#[cfg(feature = "s3-decryption")]
+pub(crate) async fn kms(
+    document: serde_json::Value,
+    region: &str,
+) -> Result<serde_json::Value, Error> {
+    let mut values = Values::default();
+    values
+        .loaded
+        .insert("PIXSTRIDE_S3_REGION".into(), region.into());
+    values.loaded.insert(
+        "PIXSTRIDE_ENV_ALLOW_METADATA_CREDENTIALS".into(),
+        std::env::var("PIXSTRIDE_ALLOW_METADATA_CREDENTIALS").unwrap_or_else(|_| "0".into()),
+    );
+    if let Ok(path) = std::env::var("PIXSTRIDE_CLOUD_ROOT_CA_FILE") {
+        values
+            .loaded
+            .insert("PIXSTRIDE_ENV_ROOT_CA_FILE".into(), path);
+    }
+    let transport = transport::Transport::new(&values)?;
+    cloud::aws(&values, &transport, "kms", "TrentService.Decrypt", document).await
 }
 #[cfg(all(test, feature = "cloud-config"))]
 mod tests {

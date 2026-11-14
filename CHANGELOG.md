@@ -6,8 +6,11 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- Optional S3 client-side KMS decryption for authenticated V2 AES-GCM and V3 committing HKDF-SHA512 envelopes, bounded in-place payload authentication and MIME/Unicode context handling. Real TLS S3/KMS tests cover independent envelopes, SigV4 and tamper/downgrade rejection.
+- CloudWatch SDK/profile credentials under the existing one-second export deadline; shared source identity transport for S3 roles and KMS. Optional cloud root CAs retain certificate/hostname verification.
+- OSS origin/result debug headers from both engines and bounded gzip/deflate HTTP source decoding with separate wire-byte accounting.
 - Optional staged startup configuration from AWS Secrets Manager, paginated decrypted SSM parameters, Google Secret Manager with CRC32C and local environment files. SDK OAuth/ADC and credential files are covered by synthetic protocol checks; native workers never load these sources.
-- SDK metadata credentials behind a separate explicit opt-in; S3 roles/external IDs/path style, S3/GCS object versions, per-provider bucket deny lists and Swift v1/v2/v3 authentication with public regional catalog discovery and independent user/project domains.
+- SDK metadata credentials behind a separate explicit opt-in; S3 roles/external IDs/path style and per-bucket regions, S3/GCS object versions, per-provider bucket deny lists and Swift v1/v2/v3 authentication with public regional catalog discovery and independent user/project domains.
 
 - IPv4/IPv6 source fetching, explicit loopback/private/link-local and port policies, bounded download/redirect settings and configurable User-Agent/TLS verification. Real loopback IPv4/IPv6 checks cover redirects and per-request cookie isolation.
 - Opt-in origin Cache-Control/Expires passthrough, subordinate to signed URL expiration, fallback policy and private cookie caching. Send an explicit restrictive Content-Security-Policy on responses.
@@ -40,6 +43,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Fixed
 
+- Read exactly the bounded stat size for SDK object bodies, avoiding short-read rejection when the server returns fewer bytes than the prior maximum-sized request.
+- Keep credential/configuration/certificate reads nonblocking and limited to regular targets while supporting rotating mounted symlinks; image-source confinement remains unchanged.
 - Wait for listener readiness in the nonblocking acceptance regression, avoiding a scheduling race after TCP connect.
 
 - Match OSS HTTP error statuses for Bearer authorization, invalid signatures, processing URLs, expiration and source pixel limits; add seven negative differential cases.

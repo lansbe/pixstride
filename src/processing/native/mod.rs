@@ -152,7 +152,7 @@ pub fn process(
             .spawn_scoped(scope, move || {
                 let mut bytes = Vec::new();
                 stdout
-                    .take((crate::MAX_FILE + 33) as u64)
+                    .take((crate::MAX_FILE + 49) as u64)
                     .read_to_end(&mut bytes)
                     .map(|_| bytes)
             })
@@ -201,13 +201,18 @@ pub fn process(
 
 #[cfg(feature = "native-codecs")]
 fn parse_output(bytes: &[u8]) -> Result<Processed, Error> {
-    if bytes.len() < 25 || &bytes[..4] != b"PXN1" {
+    if bytes.len() < 41 || &bytes[..4] != b"PXN2" {
         return Err("invalid native output");
     }
     let width = u64::from_le_bytes(bytes[4..12].try_into().unwrap()) as usize;
     let height = u64::from_le_bytes(bytes[12..20].try_into().unwrap()) as usize;
     crate::image::dimensions(width, height)?;
-    let format = match bytes[20] {
+    let origin = [
+        u64::from_le_bytes(bytes[20..28].try_into().unwrap()) as usize,
+        u64::from_le_bytes(bytes[28..36].try_into().unwrap()) as usize,
+    ];
+    crate::image::dimensions(origin[0], origin[1])?;
+    let format = match bytes[36] {
         0 => OutputFormat::Png,
         1 => OutputFormat::Jpeg,
         2 => OutputFormat::Webp,
@@ -221,16 +226,17 @@ fn parse_output(bytes: &[u8]) -> Result<Processed, Error> {
         10 => OutputFormat::Svg,
         _ => return Err("invalid native output format"),
     };
-    if bytes.len() - 21 > crate::MAX_FILE {
+    if bytes.len() - 37 > crate::MAX_FILE {
         return Err("native output exceeds limit");
     }
-    let mut body = Buffer::new(bytes.len() - 21)?;
-    body.as_mut_slice().copy_from_slice(&bytes[21..]);
+    let mut body = Buffer::new(bytes.len() - 37)?;
+    body.as_mut_slice().copy_from_slice(&bytes[37..]);
     Ok(Processed {
         body,
         mime: format.mime(),
         width,
         height,
+        origin,
     })
 }
 
@@ -260,7 +266,12 @@ pub fn worker() -> Result<(), Error> {
             .map_err(|_| "invalid native request")?;
         let source = frame(&mut input, crate::MAX_FILE)?;
         let mark = frame(&mut input, 16 * 1024 * 1024)?;
-        let (bytes, width, height, format) = engine::process(&source, &request, &mark)?;
+        let engine::NativeResult {
+            body: bytes,
+            dimensions: [width, height],
+            origin,
+            format,
+        } = engine::process(&source, &request, &mark)?;
         let id = match format {
             OutputFormat::Png => 0,
             OutputFormat::Jpeg => 1,
@@ -275,9 +286,11 @@ pub fn worker() -> Result<(), Error> {
             OutputFormat::Svg => 10,
         };
         let mut out = std::io::stdout().lock();
-        out.write_all(b"PXN1")
+        out.write_all(b"PXN2")
             .and_then(|_| out.write_all(&(width as u64).to_le_bytes()))
             .and_then(|_| out.write_all(&(height as u64).to_le_bytes()))
+            .and_then(|_| out.write_all(&(origin[0] as u64).to_le_bytes()))
+            .and_then(|_| out.write_all(&(origin[1] as u64).to_le_bytes()))
             .and_then(|_| out.write_all(&[id]))
             .and_then(|_| out.write_all(&bytes))
             .map_err(|_| "native output write failed")

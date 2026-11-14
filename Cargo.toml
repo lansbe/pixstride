@@ -28,6 +28,7 @@ httpdate = "1.0.3"
 libc = "0.2.191"
 libvips = { version = "=0.7.0", package = "rs-vips", optional = true }
 opendal = { version = "=0.59.5", default-features = false, features = ["services-s3", "services-gcs", "services-azblob", "services-swift", "executors-tokio"], optional = true }
+openssl = { version = "0.10.82", optional = true }
 psl = { version = "2.1.253", optional = true }
 regex = { version = "1.13.1", default-features = false, features = ["std", "perf", "unicode"] }
 reqsign-aws-v4 = { version = "3.3.1", optional = true }
@@ -42,10 +43,11 @@ url = { version = "2.5.8", optional = true }
 
 [features]
 native-codecs = ["dep:libvips", "dep:color_quant", "dep:gif", "dep:roxmltree"]
-cloud-sources = ["dep:opendal", "dep:tokio", "dep:reqwest", "dep:http", "dep:futures-util"]
+cloud-sources = ["dep:opendal", "dep:tokio", "dep:reqwest", "dep:http", "dep:futures-util", "dep:bytes", "dep:reqsign-core", "dep:reqsign-aws-v4"]
 telemetry = ["dep:reqwest", "dep:tokio"]
 source-cookies = ["dep:cookie_store", "dep:psl", "dep:url"]
-cloud-config = ["cloud-sources", "dep:bytes", "dep:reqsign-core", "dep:reqsign-aws-v4", "dep:reqsign-google", "dep:dotenvy"]
+cloud-config = ["cloud-sources", "dep:reqsign-google", "dep:dotenvy"]
+s3-decryption = ["cloud-config", "dep:openssl"]
 
 [patch.crates-io]
 rs-vips = { path = "vendor/rs-vips" }

@@ -167,19 +167,35 @@ pub fn secret(name: &str) -> Result<Option<String>, Error> {
     }
     match file {
         Some(path) => {
-            let mut f = std::fs::File::open(path).map_err(|_| "cannot open secret file")?;
-            let mut bytes = Vec::new();
-            std::io::Read::by_ref(&mut f)
-                .take(8193)
-                .read_to_end(&mut bytes)
-                .map_err(|_| "cannot read secret file")?;
-            if bytes.len() > 8192 {
-                return Err("secret file too large");
-            }
+            let bytes = read_regular_file(&path, 8192)?;
             String::from_utf8(bytes)
                 .map(|v| Some(v.trim().into()))
                 .map_err(|_| "invalid secret file")
         }
         None => Ok(value),
     }
+}
+/// Administrator-selected credentials/configuration may use rotating mount links.
+/// Open nonblocking, then require a regular target and a bounded read.
+pub(crate) fn read_regular_file(path: impl AsRef<Path>, limit: usize) -> Result<Vec<u8>, Error> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let file = std::fs::OpenOptions::new()
+        .read(true)
+        .custom_flags(crate::local::O_NONBLOCK)
+        .open(path)
+        .map_err(|_| "cannot open configuration file")?;
+    let meta = file
+        .metadata()
+        .map_err(|_| "cannot inspect configuration file")?;
+    if !meta.is_file() || meta.len() > limit as u64 {
+        return Err("invalid or oversized configuration file");
+    }
+    let mut bytes = Vec::new();
+    file.take(limit as u64 + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|_| "cannot read configuration file")?;
+    if bytes.len() > limit {
+        return Err("configuration file exceeds limit");
+    }
+    Ok(bytes)
 }

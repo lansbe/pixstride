@@ -6,6 +6,8 @@ pub(crate) mod protocol;
 pub(crate) mod request;
 pub(crate) mod server;
 
+#[cfg(feature = "cloud-sources")]
+pub(crate) mod aws_identity;
 pub(crate) mod cloud;
 #[cfg(feature = "cloud-sources")]
 mod cloud_transport;
@@ -13,6 +15,10 @@ mod cloud_transport;
 mod credential_metadata;
 pub(crate) mod headers;
 pub(crate) mod metrics;
+#[cfg(feature = "s3-decryption")]
+mod s3_decryption;
+#[cfg(feature = "s3-decryption")]
+mod s3_metadata;
 pub(crate) mod settings;
 #[cfg(feature = "cloud-sources")]
 mod swift_auth;

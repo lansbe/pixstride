@@ -83,20 +83,12 @@ pub(super) fn endpoints() -> Result<Vec<Endpoint>, Error> {
     Ok(result)
 }
 fn file(name: &str) -> Result<Option<Vec<u8>>, Error> {
-    use std::io::Read;
     let Some(path) = std::env::var_os(name) else {
         return Ok(None);
     };
-    let mut file = std::fs::File::open(path).map_err(|_| "cannot read telemetry certificate")?;
-    let mut data = Vec::new();
-    file.by_ref()
-        .take(65537)
-        .read_to_end(&mut data)
-        .map_err(|_| "cannot read telemetry certificate")?;
-    if data.len() > 65536 {
-        return Err("telemetry certificate exceeds limit");
-    }
-    Ok(Some(data))
+    crate::config::read_regular_file(path, 65536)
+        .map(Some)
+        .map_err(|_| "cannot read bounded telemetry certificate")
 }
 pub(super) fn client() -> Result<reqwest::Client, Error> {
     let mut builder = reqwest::Client::builder()

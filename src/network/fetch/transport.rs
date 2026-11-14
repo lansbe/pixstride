@@ -250,6 +250,7 @@ impl Client {
         check(unsafe { curl_easy_setopt(self.0, 10004, c"".as_ptr()) })?;
         check(unsafe { curl_easy_setopt(self.0, 10002, target.as_ptr()) })?;
         check(unsafe { curl_easy_setopt(self.0, 10018, agent.as_ptr()) })?;
+        check(unsafe { curl_easy_setopt(self.0, 10102, c"gzip, deflate".as_ptr()) })?;
         if let Some(cookie) = &cookie {
             // CURLOPT_COOKIE borrows this per-transfer string until Reset clears it.
             // No libcurl cookie engine or shared cookie jar is enabled.
@@ -286,7 +287,7 @@ impl Client {
         let connects = self.info(0x20001a)?;
         let mut bytes: i64 = 0;
         check(unsafe { curl_easy_getinfo(self.0, 0x600008, &mut bytes) })?;
-        if bytes < 0 || connects < 0 || bytes as usize != sink.body.len() {
+        if bytes < 0 || connects < 0 {
             return Err("Inconsistent transfer accounting".into());
         }
         let response = Response::parse(&sink.headers, capture_cookies)?;

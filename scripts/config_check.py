@@ -6,6 +6,7 @@ import hashlib
 import hmac
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
@@ -115,6 +116,7 @@ def check(binary):
             local.write_text('PIXSTRIDE_KEY='+'45'*32+'\n')
             base = f'http://127.0.0.1:{origin.server_port}'
             variables = {**environment(), 'PIXSTRIDE_ENV_AWS_SECRET_ID':'synthetic-config',
+                         'PIXSTRIDE_ENV_AWS_SECRET_REGION':'us-west-1','PIXSTRIDE_ENV_AWS_SSM_PARAMETERS_REGION':'us-west-1',
                          'PIXSTRIDE_ENV_AWS_SECRET_VERSION_STAGE':'AWSCURRENT', 'PIXSTRIDE_ENV_AWS_SECRET_ENDPOINT':base+'/aws',
                          'PIXSTRIDE_ENV_AWS_SSM_PARAMETERS_ENDPOINT':base+'/ssm', 'PIXSTRIDE_ENV_GCP_ENDPOINT':base+'/gcp/',
                          'PIXSTRIDE_ENV_GCP_ACCESS_TOKEN':'synthetic-google-bootstrap', 'AWS_ACCESS_KEY_ID':'synthetic-bootstrap-access',
@@ -142,7 +144,10 @@ def check(binary):
             assert result.returncode == 0 and result.stdout.decode().strip() == expected('44'), result.stderr.decode()
             result = run({'GOOGLE_APPLICATION_CREDENTIALS':str(google)})
             assert result.returncode == 0 and result.stdout.decode().strip() == expected('44'), result.stderr.decode()
-            assert sum(path == '/oauth' for path, _ in seen) == 2
+            linked=root/'mounted-google.json';linked.symlink_to(google)
+            result = run({'PIXSTRIDE_ENV_GCP_KEY_FILE':str(linked)})
+            assert result.returncode == 0 and result.stdout.decode().strip() == expected('44'), result.stderr.decode()
+            assert sum(path == '/oauth' for path, _ in seen) == 3
             variables['PIXSTRIDE_ENV_GCP_ACCESS_TOKEN'] = saved_token
             corrupt = True
             assert run().returncode != 0, 'Corrupt GCP secret checksum was accepted'
@@ -151,6 +156,8 @@ def check(binary):
             assert run({'PIXSTRIDE_ENV_LOCAL_FILE_PATH':str(local)}).returncode != 0
             local.write_bytes(b'x'*65537)
             assert run({'PIXSTRIDE_ENV_LOCAL_FILE_PATH':str(local)}).returncode != 0
+            fifo=root/'invalid-fifo';os.mkfifo(fifo)
+            assert run({'PIXSTRIDE_ENV_LOCAL_FILE_PATH':str(fifo)}).returncode != 0
             assert not errors, errors
     finally:
         origin.shutdown()

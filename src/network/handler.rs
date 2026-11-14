@@ -268,6 +268,7 @@ pub(super) fn handle(
     };
     let queue_ms = queued.elapsed().as_secs_f64() * 1000.0;
     let processing = Instant::now();
+    let origin_length = source.bytes_mut().len();
     let output = pipeline::process(source.bytes_mut(), &request, watermark);
     let process_ms = processing.elapsed().as_secs_f64() * 1000.0;
     drop(lock);
@@ -275,6 +276,9 @@ pub(super) fn handle(
     match output {
         Ok(out) => {
             let mut extra=format!("Server-Timing: fetch;dur={fetch_ms:.3}, queue;dur={queue_ms:.3}, engine;dur={process_ms:.3}\r\nX-Image-Engine: pixstride\r\nX-Upstream-Transfers: {transfers}\r\nX-Upstream-Bytes: {upstream}\r\nX-Image-Width: {}\r\nX-Image-Height: {}\r\n",out.width,out.height);
+            if settings.debug_headers {
+                extra.push_str(&format!("X-Origin-Width: {}\r\nX-Origin-Height: {}\r\nX-Result-Width: {}\r\nX-Result-Height: {}\r\nX-Origin-Content-Length: {origin_length}\r\n",out.origin[0],out.origin[1],out.width,out.height));
+            }
             if request.source.starts_with("local:///")
                 || request.source.starts_with("http://")
                 || request.source.starts_with("https://")

@@ -27,14 +27,20 @@ impl Transport {
             Some("1" | "true") => true,
             _ => return Err("invalid metadata credential flag"),
         };
-        let client = reqwest::Client::builder()
+        let mut client = reqwest::Client::builder()
             .no_proxy()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(5))
             .timeout(Duration::from_secs(15))
             .http1_only()
             .http1_max_headers(128)
-            .pool_max_idle_per_host(2)
+            .pool_max_idle_per_host(2);
+        if let Some(path) = values.get("PIXSTRIDE_ENV_ROOT_CA_FILE") {
+            let cert = reqwest::Certificate::from_pem(&read(&path)?)
+                .map_err(|_| "invalid configuration root CA")?;
+            client = client.add_root_certificate(cert);
+        }
+        let client = client
             .build()
             .map_err(|_| "configuration TLS unavailable")?;
         Ok(Self {
