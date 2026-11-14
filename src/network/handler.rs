@@ -209,6 +209,7 @@ pub(super) fn handle(
                             &request.source,
                             MAX_SOURCE.min(request.extra.max_source_bytes),
                             jar.as_mut(),
+                            &|source| config.allows_source(source),
                         )
                     })
             };

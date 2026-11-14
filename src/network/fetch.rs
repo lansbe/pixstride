@@ -86,12 +86,11 @@ impl Url {
         if location.contains("://") {
             return Self::parse(location);
         }
-        let host = if self.host.contains(':') {
-            format!("[{}]", self.host)
-        } else {
-            self.host.clone()
-        };
-        let authority = format!("{}://{}:{}", self.scheme, host, self.port);
+        let scheme_end = self.full.find("://").unwrap() + 3;
+        let authority_end = self.full[scheme_end..]
+            .find(['/', '?'])
+            .map_or(self.full.len(), |end| scheme_end + end);
+        let authority = &self.full[..authority_end];
         let next = if location.starts_with("//") {
             format!("{}:{location}", self.scheme)
         } else if location.starts_with('/') {

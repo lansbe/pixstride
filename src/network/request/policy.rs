@@ -191,12 +191,19 @@ impl Policy {
             source = result;
         }
         validate_source(&source)?;
-        if !self.allowed_sources.is_empty()
-            && !self.allowed_sources.iter().any(|p| p.is_match(&source))
-        {
+        if !self.allows_source(&source) {
             return Err("source does not match allowed patterns");
         }
         Ok(source)
+    }
+    fn allows_source(&self, source: &str) -> bool {
+        self.allowed_sources.is_empty()
+            || self.allowed_sources.iter().any(|p| p.is_match(source))
+    }
+}
+impl Config {
+    pub(crate) fn allows_source(&self, source: &str) -> bool {
+        self.policy.allows_source(source)
     }
 }
 #[cfg(test)]
@@ -218,6 +225,9 @@ mod tests {
             .source("alias://example.test/private/a.png".into())
             .is_err());
         assert!(p.source("alias://other.test/public/a.png".into()).is_err());
+        assert!(p.allows_source("https://example.test/public/redirect.png"));
+        assert!(!p.allows_source("https://example.test/private/redirect.png"));
+        assert!(Policy::default().allows_source("https://unrestricted.test/image.png"));
         let p = Policy {
             replacements: vec![(pattern("*").unwrap(), "${1}${1}".repeat(100))],
             ..Default::default()
