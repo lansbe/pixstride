@@ -132,7 +132,7 @@ def run(args):
     # Probe metadata in separate containers so CLI startup cannot inflate measured peaks.
     images['pixstride']['capabilities'] = json.loads(docker.run('run', '--rm', '--network=none',
                                                     images['pixstride']['reference'], 'capabilities'))
-    images['imgproxy']['version'] = docker.run('run', '--rm', '--network=none', images['imgproxy']['reference'], 'version')
+    images['imgproxy']['version'] = docker.run('run', '--rm', '--network=none', images['imgproxy']['reference'], 'imgproxy', 'version')
     if not args.pixstride_image and images['pixstride']['capabilities'].get('version') != versions['pixstride']['version']:
         raise ValueError('Pixstride image version differs from the pinned version')
     if not args.imgproxy_image and versions['imgproxy']['version'] not in images['imgproxy']['version']:
