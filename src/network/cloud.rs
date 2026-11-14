@@ -157,6 +157,11 @@ pub fn fetch(source: &str, max: usize) -> Result<fetch::Download, Error> {
                     body,
                     new_connections: 0,
                     transfers: 2,
+                    cache_control: stat
+                        .cache_control()
+                        .filter(|v| v.len() <= 2048 && v.bytes().all(|b| (32..127).contains(&b)))
+                        .map(str::to_owned),
+                    expires: None,
                     last_modified: stat
                         .last_modified()
                         .map(std::time::SystemTime::from)

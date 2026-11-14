@@ -165,12 +165,12 @@ def check(args):
             svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">'+content+'</svg>')
             raster=read_png(run(binary,root,svg))
             assert raster[0][:2]==(32,24) and any(raster[1]), 'Static SVG feature rendered empty'
-        for content in ('<?xml-stylesheet href="https://example.invalid/x.css"?>', '<script/>', '<image href="file:///etc/passwd"/>', '<style>@import "https://example.invalid/x.css";</style>', '<style>rect{}<!--split-->@import "https://example.invalid/x.css";</style>'):
+        for content in ('<?xml-stylesheet href="https://example.invalid/x.css"?>', '<script/>', '<object xmlns="http://www.w3.org/1999/xhtml" data="data:text/html,active"/>', '<image href="file:///etc/passwd"/>', '<style>@import "https://example.invalid/x.css";</style>', '<style>rect{}<!--split-->@import "https://example.invalid/x.css";</style>'):
             svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">' + content + '</svg>')
             run(binary, root, svg, success=False)
-        svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24" onload="bad()"><script>bad()</script><image href="https://example.invalid/a.png"/><rect width="32" height="24" fill="blue"/></svg>')
+        svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24" onload="bad()"><script>bad()</script><object xmlns="http://www.w3.org/1999/xhtml" data="data:text/html,active"/><image href="https://example.invalid/a.png"/><rect width="32" height="24" fill="blue"/></svg>')
         sanitized=run(binary,root,svg,output='svg',env={'PIXSTRIDE_SANITIZE_SVG':'1'})
-        assert all(value not in sanitized for value in (b'onload',b'script',b'https://example.invalid')), 'SVG sanitization retained active content'
+        assert all(value not in sanitized for value in (b'onload',b'script',b'object',b'https://example.invalid')), 'SVG sanitization retained active content'
         assert b'rect' in sanitized
         assert read_png(run(binary,root,svg,env={'PIXSTRIDE_SANITIZE_SVG':'1'}))[0][:2]==(32,24)
         embedded=base64.b64encode(logo.read_bytes()).decode()

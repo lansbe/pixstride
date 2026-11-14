@@ -18,6 +18,10 @@ pub(crate) struct Context {
     pub hints: [String; 4],
     pub traceparent: String,
     pub connection: String,
+    pub cookie: String,
+    pub host: String,
+    pub range: String,
+    pub if_range: String,
 }
 
 impl Context {
@@ -36,6 +40,10 @@ impl Context {
                 "dpr" => &mut result.hints[1],
                 "sec-ch-width" => &mut result.hints[2],
                 "width" => &mut result.hints[3],
+                "host" => &mut result.host,
+                "cookie" => &mut result.cookie,
+                "range" => &mut result.range,
+                "if-range" => &mut result.if_range,
                 "connection" => &mut result.connection,
                 "traceparent" => &mut result.traceparent,
                 "accept" => &mut result.accept,
@@ -89,13 +97,15 @@ impl Context {
                         "if-none-match",
                         "if-modified-since",
                         "accept",
+                        "range",
+                        "if-range",
                     ]
                     .contains(&h.trim().to_ascii_lowercase().as_str())
                 })
         {
             return Err("CORS method or headers are not allowed");
         }
-        Ok(format!("Access-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Authorization, If-None-Match, If-Modified-Since, Accept\r\nAccess-Control-Max-Age: 3600\r\nVary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers\r\n"))
+        Ok(format!("Access-Control-Allow-Origin: {origin}\r\nAccess-Control-Allow-Methods: GET, HEAD, OPTIONS\r\nAccess-Control-Allow-Headers: Authorization, If-None-Match, If-Modified-Since, Accept, Range, If-Range\r\nAccess-Control-Max-Age: 3600\r\nVary: Origin, Access-Control-Request-Method, Access-Control-Request-Headers\r\n"))
     }
 
     pub fn hint_defaults(&self) -> (Option<usize>, Option<f64>) {

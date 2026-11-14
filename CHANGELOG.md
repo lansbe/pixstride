@@ -6,6 +6,12 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- IPv4/IPv6 source fetching, explicit loopback/private/link-local and port policies, bounded download/redirect settings and configurable User-Agent/TLS verification. Real loopback IPv4/IPv6 checks cover redirects and per-request cookie isolation.
+- Opt-in origin Cache-Control/Expires passthrough, subordinate to signed URL expiration, fallback policy and private cookie caching. Send an explicit restrictive Content-Security-Policy on responses.
+- Bounded single byte ranges for admitted raw images, strong/date If-Range, conditional-response precedence, suffix/open-ended ranges and 206/416 responses without a second body allocation.
+
+- Optional per-source cookie passthrough with RFC6265 rules, a pinned public suffix list, bounded per-request storage and no cookie state in pooled transports. Cookie-dependent image responses always disable shared caching.
+
 - Opt-in HTTP keep-alive and pipelining with a 32-request connection limit, fixed pending-input buffer, idle expiry and signal-aware shutdown; verify reuse, request framing and shutdown on all CI platforms.
 
 - Bounded URL rewriting/source patterns, preset-only policy, Client Hints, enforced formats, configurable HTTP routes, authenticated separate Prometheus listener and processed fallback images.
@@ -31,6 +37,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Fixed
 
+- Wait for listener readiness in the nonblocking acceptance regression, avoiding a scheduling race after TCP connect.
+
 - Match OSS HTTP error statuses for Bearer authorization, invalid signatures, processing URLs, expiration and source pixel limits; add seven negative differential cases.
 
 - Read startup entropy through the OS random device on glibc, musl and macOS; qualify JPEG XL animation input with the installed encoder API and allow configured watermark/fallback cloud sources.
@@ -43,6 +51,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Use the platform C character type and GLib allocation cleanup in the locally patched libvips binding, including unsigned C char on Linux ARM64.
 
 ### Security
+
+- Reject active foreign XML namespaces in SVG passthrough and remove them during sanitization; include an XHTML object regression alongside scripts/styles/external references.
 
 - Bound native child lifetime, pipes, frame totals and encoding attempts; remove secrets from child environments and reject external/active SVG resources.
 - Preserve host/public-address checks in cloud SDK transport, use conditional object reads and reject symlinks throughout nested local paths.

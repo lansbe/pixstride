@@ -153,6 +153,8 @@ pub(super) fn handle(
     };
     let vary = context.negotiate(&mut request, &settings.auto_formats)
         | context.enforce(&mut request, &settings.forced_formats);
+    let cookie_sensitive = settings.cookies.enabled()
+        && (request.source.starts_with("http://") || request.source.starts_with("https://"));
     let mut fallback_status = None;
     if request
         .watermark
@@ -169,14 +171,14 @@ pub(super) fn handle(
         return;
     }
     let started = Instant::now();
-    let (mut source, transfers, upstream, new_connections, modified) =
+    let (mut source, transfers, upstream, new_connections, modified, origin_cache) =
         if request.source.starts_with("local:///") {
             match root
                 .as_ref()
                 .ok_or_else(|| "local sources are disabled".to_string())
                 .and_then(|root| root.read_with_modified(&request.source))
             {
-                Ok((b, modified)) => (Source::Local(b), 0, 0, 0, modified),
+                Ok((b, modified)) => (Source::Local(b), 0, 0, 0, modified, None),
                 Err(e) => {
                     if let Some((loaded, code)) = fallback(settings, 422) {
                         fallback_status = Some(code);
@@ -198,10 +200,17 @@ pub(super) fn handle(
                 )
                 .map_err(str::to_owned)
             } else {
-                pool.fetch(
-                    &request.source,
-                    MAX_SOURCE.min(request.extra.max_source_bytes),
-                )
+                settings
+                    .cookies
+                    .jar(&context.cookie, &context.host)
+                    .map_err(str::to_owned)
+                    .and_then(|mut jar| {
+                        pool.fetch_with_cookies(
+                            &request.source,
+                            MAX_SOURCE.min(request.extra.max_source_bytes),
+                            jar.as_mut(),
+                        )
+                    })
             };
             match download {
                 Ok(d) => (
@@ -211,6 +220,17 @@ pub(super) fn handle(
                     d.new_connections,
                     d.last_modified
                         .and_then(|s| httpdate::parse_http_date(&s).ok()),
+                    d.cache_control.or_else(|| {
+                        d.expires
+                            .and_then(|s| httpdate::parse_http_date(&s).ok())
+                            .map(|t| {
+                                let age = t
+                                    .duration_since(std::time::SystemTime::now())
+                                    .unwrap_or_default()
+                                    .as_secs();
+                                format!("public, max-age={age}")
+                            })
+                    }),
                 ),
                 Err(_) => {
                     if let Some((loaded, code)) = fallback(settings, 502) {
@@ -221,7 +241,7 @@ pub(super) fn handle(
                             socket,
                             context.head,
                             502,
-                            "Unable to retrieve the complete public HTTP(S) source",
+                            "Unable to retrieve the complete permitted source",
                         );
                         return;
                     }
@@ -264,6 +284,9 @@ pub(super) fn handle(
                 ));
             }
             let mut varies = Vec::new();
+            if cookie_sensitive {
+                varies.push("Cookie");
+            }
             if vary {
                 varies.push("Accept");
             }
@@ -287,6 +310,7 @@ pub(super) fn handle(
             }
             extra.push_str(&super::headers::disposition(&request, out.mime));
             let mut status = fallback_status.unwrap_or(200);
+            let mut validator = None;
             if settings.etag {
                 let etag =
                     super::headers::etag_with_buster(out.body.as_slice(), &settings.etag_buster);
@@ -294,6 +318,7 @@ pub(super) fn handle(
                 if status == 200 && super::headers::matches_etag(&context.if_none_match, &etag) {
                     status = 304;
                 }
+                validator = Some(etag);
             }
             if settings.last_modified && fallback_status.is_none() {
                 if let Some(modified) = modified.filter(|t| {
@@ -337,23 +362,67 @@ pub(super) fn handle(
                     .as_secs();
                 ttl = ttl.min(expiry.saturating_sub(now));
             }
-            let cache = if ttl == 0 {
+            let cache = if cookie_sensitive {
+                "private, no-store".into()
+            } else if settings.cache_passthrough
+                && fallback_status.is_none()
+                && request.extra.expires.is_none()
+                && origin_cache.is_some()
+            {
+                origin_cache.unwrap()
+            } else if ttl == 0 {
                 "no-store".into()
             } else {
                 format!("public, max-age={ttl}")
             };
-            let body = if status == 304 {
+            let mut body = if status == 304 {
                 &[][..]
             } else {
                 out.body.as_slice()
             };
+            if request.extra.raw {
+                extra.push_str("Accept-Ranges: bytes\r\n");
+                if status == 200
+                    && !context.head
+                    && !context.range.is_empty()
+                    && super::range::permitted(
+                        &context.if_range,
+                        validator.as_deref(),
+                        modified.map(|t| {
+                            t.max(
+                                std::time::UNIX_EPOCH
+                                    + Duration::from_secs(settings.modified_buster),
+                            )
+                        }),
+                    )
+                {
+                    match super::range::select(&context.range, body.len()) {
+                        Ok(Some(range)) => {
+                            extra.push_str(&format!(
+                                "Content-Range: bytes {}-{}/{}\r\n",
+                                range.start,
+                                range.end - 1,
+                                body.len()
+                            ));
+                            status = 206;
+                            body = &body[range];
+                        }
+                        Err(()) => {
+                            extra.push_str(&format!("Content-Range: bytes */{}\r\n", body.len()));
+                            status = 416;
+                            body = &[];
+                        }
+                        Ok(None) => {}
+                    }
+                }
+            }
             let _ = protocol::image_response(
                 socket,
                 status,
                 out.mime,
                 &extra,
                 body,
-                &cache,
+                if status == 416 { "no-store" } else { &cache },
                 context.head,
             );
         }
@@ -363,11 +432,18 @@ pub(super) fn handle(
     }
 }
 
-type Loaded = (Source, u32, u64, u64, Option<std::time::SystemTime>);
+type Loaded = (
+    Source,
+    u32,
+    u64,
+    u64,
+    Option<std::time::SystemTime>,
+    Option<String>,
+);
 fn fallback(settings: &super::settings::Settings, error: u16) -> Option<(Loaded, u16)> {
     let data = settings.fallback.as_ref()?.encoded().ok()?;
     Some((
-        (Source::Remote(data), 0, 0, 0, None),
+        (Source::Remote(data), 0, 0, 0, None, None),
         if settings.fallback_code == 0 {
             error
         } else {

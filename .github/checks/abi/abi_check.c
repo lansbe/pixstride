@@ -40,7 +40,7 @@ static const int options[] = {
     CURLOPT_PROTOCOLS, CURLOPT_FOLLOWLOCATION, CURLOPT_REDIR_PROTOCOLS,
     CURLOPT_SSL_VERIFYPEER, CURLOPT_SSL_VERIFYHOST, CURLOPT_IPRESOLVE,
     CURLOPT_MAXCONNECTS, CURLOPT_HTTP_VERSION, CURLOPT_TCP_KEEPALIVE,
-    CURLOPT_PROXY, CURLOPT_URL, CURLOPT_USERAGENT, CURLOPT_MAXFILESIZE_LARGE,
+    CURLOPT_PROXY, CURLOPT_URL, CURLOPT_USERAGENT, CURLOPT_COOKIE, CURLOPT_MAXFILESIZE_LARGE,
     CURLOPT_WRITEFUNCTION, CURLOPT_HEADERFUNCTION, CURLOPT_WRITEDATA,
     CURLOPT_HEADERDATA, CURLOPT_OPENSOCKETFUNCTION
 };
@@ -84,4 +84,20 @@ int abi_socket_flags(void) {
 #else
     return 0;
 #endif
+}
+int abi_make_sockaddr_v6(unsigned char *out) {
+    struct sockaddr_in6 address = {0};
+#ifdef __APPLE__
+    address.sin6_len = sizeof(address);
+#endif
+    address.sin6_family = AF_INET6;
+    address.sin6_port = htons(443);
+    address.sin6_addr.s6_addr[0] = 0x26;
+    address.sin6_addr.s6_addr[1] = 0x06;
+    address.sin6_addr.s6_addr[2] = 0x47;
+    address.sin6_addr.s6_addr[3] = 0x00;
+    address.sin6_addr.s6_addr[15] = 1;
+    _Static_assert(sizeof(address) == 28, "IPv6 address width");
+    memcpy(out, &address, sizeof(address));
+    return AF_INET6;
 }

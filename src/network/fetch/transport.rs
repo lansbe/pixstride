@@ -1,9 +1,10 @@
 //! System libcurl is transport only. Handles keep connections, never response bodies.
-use super::{public, Url};
+use super::response::Response;
+use super::{policy, Url};
 use crate::Result;
 use std::{
     ffi::{c_char, c_int, c_long, c_uint, c_void, CString},
-    net::Ipv4Addr,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
     sync::{Condvar, Mutex, OnceLock},
 };
 #[link(name = "curl")]
@@ -45,8 +46,16 @@ impl LazyPool {
         Ok(pool)
     }
     pub fn fetch(&self, url: &str, max: usize) -> Result<Download> {
+        self.fetch_with_cookies(url, max, None)
+    }
+    pub fn fetch_with_cookies(
+        &self,
+        url: &str,
+        max: usize,
+        jar: Option<&mut crate::network::cookies::Jar>,
+    ) -> Result<Download> {
         match self.0.get_or_init(Pool::new) {
-            Ok(pool) => pool.fetch(url, max),
+            Ok(pool) => pool.fetch(url, max, jar),
             Err(error) => Err(error.clone()),
         }
     }
@@ -123,24 +132,41 @@ unsafe extern "C" fn open_socket(_: *mut c_void, purpose: c_int, address: *mut A
     let socket_flags = 0x80000 | 0x800;
     #[cfg(target_os = "macos")]
     let socket_flags = 0;
-    // Both supported ABIs put the IPv4 octets at offset four.
-    if a.family != 2
-        || a.kind & !socket_flags != 1
-        || !matches!(a.protocol, 0 | 6)
-        || a.length != 16
-        || !valid_family(&a.address)
+    if a.kind & !socket_flags != 1 || !matches!(a.protocol, 0 | 6) {
+        return -1;
+    }
+    if !policy::allows_port(u16::from_be_bytes([a.address[2], a.address[3]]))
+        || !unsafe { destination(address) }.is_some_and(policy::allows_ip)
     {
         return -1;
     }
-    if !public(Ipv4Addr::new(
-        a.address[4],
-        a.address[5],
-        a.address[6],
-        a.address[7],
-    )) {
-        return -1;
-    }
     unsafe { socket(a.family, a.kind, a.protocol) }
+}
+// libcurl's opensocket ABI supplies addrlen bytes at addr, extending the
+// nominal sockaddr field for IPv6. Validate its family/size before reading it.
+unsafe fn destination(address: *const Address) -> Option<IpAddr> {
+    let a = unsafe { &*address };
+    if a.family == 2 && a.length == 16 && valid_family(&a.address) {
+        return Some(Ipv4Addr::new(a.address[4], a.address[5], a.address[6], a.address[7]).into());
+    }
+    #[cfg(target_os = "linux")]
+    let ipv6 = 10;
+    #[cfg(target_os = "macos")]
+    let ipv6 = 30;
+    if a.family != ipv6 || a.length != 28 {
+        return None;
+    }
+    #[cfg(target_os = "linux")]
+    let valid = u16::from_ne_bytes([a.address[0], a.address[1]]) == ipv6 as u16;
+    #[cfg(target_os = "macos")]
+    let valid = a.address[0] == 28 && a.address[1] == ipv6 as u8;
+    if !valid {
+        return None;
+    }
+    let bytes = unsafe {
+        std::slice::from_raw_parts(std::ptr::addr_of!((*address).address).cast::<u8>(), 28)
+    };
+    Some(Ipv6Addr::from(<[u8; 16]>::try_from(&bytes[8..24]).ok()?).into())
 }
 pub(crate) struct Client(*mut c_void);
 // Each easy handle has one exclusive Lease. It may move threads, never run concurrently.
@@ -162,11 +188,12 @@ pub struct Download {
     pub upstream_bytes: u64,
     pub transfers: u32,
     pub last_modified: Option<String>,
+    pub cache_control: Option<String>,
+    pub expires: Option<String>,
 }
 pub(crate) struct Transfer {
     body: Vec<u8>,
-    location: Option<String>,
-    last_modified: Option<String>,
+    response: Response,
     status: c_long,
     new_connections: u64,
     bytes: u64,
@@ -180,15 +207,26 @@ impl Client {
         check(unsafe { curl_easy_getinfo(self.0, kind, &mut out) })?;
         Ok(out)
     }
-    fn one(&mut self, url: &Url, max: usize, remaining: std::time::Duration) -> Result<Transfer> {
-        if !super::policy::allows(&url.host) {
+    fn one(
+        &mut self,
+        url: &Url,
+        max: usize,
+        remaining: std::time::Duration,
+        cookie: Option<&str>,
+        capture_cookies: bool,
+    ) -> Result<Transfer> {
+        if !policy::allows(&url.host) || !policy::allows_port(url.port) {
             return Err("source host is not allowed".into());
         }
         if remaining.is_zero() {
             return Err("upstream deadline exceeded".into());
         }
         let target = CString::new(url.full.as_str()).map_err(|_| "Invalid URL")?;
-        let agent = CString::new("pixstride/0.1").unwrap();
+        let cookie = cookie
+            .map(CString::new)
+            .transpose()
+            .map_err(|_| "invalid source cookie")?;
+        let agent = CString::new(policy::settings().user_agent.as_str()).unwrap();
         let mut sink = Sink {
             body: Vec::new(),
             headers: Vec::new(),
@@ -198,20 +236,25 @@ impl Client {
         unsafe { curl_easy_reset(self.0) };
         let reset = Reset(self.0);
         self.long(99, 1)?;
-        self.long(155, remaining.as_millis().clamp(1, 15000) as c_long)?;
+        self.long(155, remaining.as_millis().clamp(1, 120000) as c_long)?;
         self.long(156, 5000)?;
         self.long(181, 3)?;
         self.long(52, 0)?;
         self.long(182, 3)?; // HTTP(S) protocols only.
-        self.long(64, 1)?;
-        self.long(81, 2)?;
-        self.long(113, 1)?;
+        self.long(64, c_long::from(policy::settings().verify_tls))?;
+        self.long(81, if policy::settings().verify_tls { 2 } else { 0 })?;
+        self.long(113, 0)?; // Both IP families; the socket callback enforces policy.
         self.long(71, 4)?;
         self.long(84, 4)?;
         self.long(213, 1)?;
         check(unsafe { curl_easy_setopt(self.0, 10004, c"".as_ptr()) })?;
         check(unsafe { curl_easy_setopt(self.0, 10002, target.as_ptr()) })?;
         check(unsafe { curl_easy_setopt(self.0, 10018, agent.as_ptr()) })?;
+        if let Some(cookie) = &cookie {
+            // CURLOPT_COOKIE borrows this per-transfer string until Reset clears it.
+            // No libcurl cookie engine or shared cookie jar is enabled.
+            check(unsafe { curl_easy_setopt(self.0, 10022, cookie.as_ptr()) })?;
+        }
         check(unsafe { curl_easy_setopt(self.0, 30117, max as i64) })?;
         check(unsafe {
             curl_easy_setopt(
@@ -246,55 +289,47 @@ impl Client {
         if bytes < 0 || connects < 0 || bytes as usize != sink.body.len() {
             return Err("Inconsistent transfer accounting".into());
         }
-        let mut location = None;
-        let mut last_modified = None;
-        for line in sink.headers.split(|b| *b == b'\n') {
-            if line.starts_with(b"HTTP/") {
-                location = None;
-                last_modified = None;
-            }
-            if let Some(colon) = line.iter().position(|b| *b == b':') {
-                if line[..colon].eq_ignore_ascii_case(b"last-modified") {
-                    let value = std::str::from_utf8(&line[colon + 1..])
-                        .map_err(|_| "invalid upstream date")?
-                        .trim();
-                    if value.len() <= 64 && value.bytes().all(|b| (32..127).contains(&b)) {
-                        last_modified = Some(value.to_owned());
-                    }
-                }
-                if line[..colon].eq_ignore_ascii_case(b"location") {
-                    let value = std::str::from_utf8(&line[colon + 1..])
-                        .map_err(|_| "Invalid redirect")?
-                        .trim();
-                    if value.len() > 12000 {
-                        return Err("Redirect too long".into());
-                    }
-                    location = Some(value.to_string());
-                }
-            }
-        }
+        let response = Response::parse(&sink.headers, capture_cookies)?;
         // Clear callback pointers while the complete Sink is still in scope.
         drop(reset);
         Ok(Transfer {
             body: sink.body,
-            location,
-            last_modified,
+            response,
             status,
             new_connections: connects as u64,
             bytes: bytes as u64,
         })
     }
-    fn fetch(&mut self, raw: &str, max: usize) -> Result<Download> {
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    fn fetch(
+        &mut self,
+        raw: &str,
+        max: usize,
+        mut jar: Option<&mut crate::network::cookies::Jar>,
+    ) -> Result<Download> {
+        let policy = policy::settings();
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(policy.timeout);
         let mut url = Url::parse(raw)?;
         let mut connects = 0;
         let mut bytes = 0;
-        for hop in 0..=4 {
+        for hop in 0..=policy.redirects {
+            let cookie = jar
+                .as_ref()
+                .map(|j| j.header(&url.full))
+                .transpose()
+                .map_err(str::to_owned)?
+                .flatten();
             let r = self.one(
                 &url,
                 max,
                 deadline.saturating_duration_since(std::time::Instant::now()),
+                cookie.as_deref(),
+                jar.is_some(),
             )?;
+            if let Some(jar) = jar.as_mut() {
+                for value in &r.response.cookies {
+                    jar.response(&url.full, value).map_err(str::to_owned)?;
+                }
+            }
             connects += r.new_connections;
             bytes += r.bytes;
             if r.status == 200 {
@@ -303,12 +338,18 @@ impl Client {
                     new_connections: connects,
                     upstream_bytes: bytes,
                     transfers: hop + 1,
-                    last_modified: r.last_modified,
+                    last_modified: r.response.last_modified,
+                    cache_control: r.response.cache_control,
+                    expires: r.response.expires,
                 });
             }
-            if matches!(r.status, 301 | 302 | 303 | 307 | 308) && hop < 4 {
-                let next =
-                    url.redirect(r.location.as_deref().ok_or("redirect has no location")?)?;
+            if matches!(r.status, 301 | 302 | 303 | 307 | 308) && hop < policy.redirects {
+                let next = url.redirect(
+                    r.response
+                        .location
+                        .as_deref()
+                        .ok_or("redirect has no location")?,
+                )?;
                 if url.scheme == "https" && next.scheme != "https" {
                     return Err("HTTPS downgrade refused".into());
                 }
@@ -368,7 +409,12 @@ impl Pool {
             ready: Condvar::new(),
         })
     }
-    pub fn fetch(&self, url: &str, max: usize) -> Result<Download> {
+    pub fn fetch(
+        &self,
+        url: &str,
+        max: usize,
+        jar: Option<&mut crate::network::cookies::Jar>,
+    ) -> Result<Download> {
         let mut available = self.available.lock().map_err(|_| "Transport unavailable")?;
         while available.is_empty() {
             available = self
@@ -381,7 +427,7 @@ impl Pool {
             client: available.pop(),
         };
         drop(available);
-        lease.client.as_mut().unwrap().fetch(url, max)
+        lease.client.as_mut().unwrap().fetch(url, max, jar)
     }
 }
 

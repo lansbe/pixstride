@@ -1,4 +1,4 @@
-//! SDK transport: no proxies/redirects, checked IPv4 addresses, bounded bodies.
+//! SDK transport: no proxies/redirects, checked addresses, bounded bodies.
 use opendal::{Buffer, Error, ErrorKind, HttpBody, HttpTransport};
 use reqwest::dns::{Addrs, Name, Resolve, Resolving};
 use std::{
@@ -18,11 +18,11 @@ impl Resolve for Resolver {
         Box::pin(async move {
             let addrs = tokio::net::lookup_host((name.as_str(), 0)).await?;
             let addrs = addrs
-                .filter(|a| matches!(a.ip(),IpAddr::V4(ip) if super::fetch::public(ip)))
+                .filter(|a| super::fetch::policy::allows_ip(a.ip()))
                 .collect::<Vec<SocketAddr>>();
             if addrs.is_empty() {
                 return Err(
-                    Box::new(std::io::Error::other("public IPv4 destination required"))
+                    Box::new(std::io::Error::other("permitted destination required"))
                         as Box<dyn std::error::Error + Send + Sync>,
                 );
             }
@@ -70,8 +70,11 @@ impl HttpTransport for Transport {
         if url.scheme != "https" {
             return Err(error("cloud endpoints require HTTPS"));
         }
-        if let Ok(ip) = url.host.parse::<std::net::Ipv4Addr>() {
-            if !super::fetch::public(ip) {
+        if !super::fetch::policy::allows_port(url.port) {
+            return Err(error("cloud endpoint port refused"));
+        }
+        if let Ok(ip) = url.host.parse::<IpAddr>() {
+            if !super::fetch::policy::allows_ip(ip) {
                 return Err(error("private cloud endpoint refused"));
             }
         }

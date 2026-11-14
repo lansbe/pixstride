@@ -20,6 +20,8 @@ pub(crate) struct Settings {
     pub canonical: bool,
     pub etag_buster: String,
     pub keep_alive: u64,
+    pub cookies: super::cookies::Policy,
+    pub cache_passthrough: bool,
 }
 
 impl Settings {
@@ -158,6 +160,8 @@ impl Settings {
             canonical: flag("PIXSTRIDE_SET_CANONICAL_HEADER")?,
             etag_buster,
             keep_alive,
+            cookies: super::cookies::Policy::from_env()?,
+            cache_passthrough: flag("PIXSTRIDE_CACHE_CONTROL_PASSTHROUGH")?,
         })
     }
 }

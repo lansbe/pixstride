@@ -122,6 +122,7 @@ mod tests {
         let mut client = TcpStream::connect(tcp.local_addr().unwrap()).unwrap();
         let listener = Listener::Tcp(tcp);
         listener.set_nonblocking(true).unwrap();
+        assert!(crate::network::lifecycle::wait(&listener).unwrap());
         let mut socket = listener.accept().unwrap();
         socket
             .set_read_timeout(Some(Duration::from_secs(1)))

@@ -15,6 +15,7 @@ import threading
 import time
 from image_fixtures import png
 from compatibility import environment, free_port
+import source_check
 
 
 @contextmanager
@@ -118,6 +119,22 @@ def check(args):
                 result = subprocess.run([str(binary), 'healthcheck'], env=variables, capture_output=True, timeout=5)
                 assert result.returncode == 0, result.stderr.decode(errors='replace')
                 passed.append('http-auth-negotiation-validators-presets-expiry-head-health')
+                raw_target = '/unsafe/raw:1/plain/local:///nested/sample.png@png'
+                raw = request(port, raw_target, headers=auth)
+                assert raw[0] == 200 and raw[2] == (root/'nested'/'sample.png').read_bytes()
+                partial = request(port, raw_target, headers={**auth, 'Range': 'bytes=8-23', 'If-Range': raw[1]['etag']})
+                assert partial[0] == 206 and partial[2] == raw[2][8:24]
+                assert partial[1]['content-range'] == f'bytes 8-23/{len(raw[2])}'
+                assert request(port, raw_target, headers={**auth, 'Range': 'bytes=-8'})[2] == raw[2][-8:]
+                assert request(port, raw_target, headers={**auth, 'Range': 'bytes=1-', 'If-Range': '"stale"'})[0] == 200
+                assert request(port, raw_target, headers={**auth, 'Range': 'bytes=1-', 'If-Range': raw[1]['last-modified']})[0] == 206
+                assert request(port, raw_target, headers={**auth, 'Range': 'bytes=1-', 'If-None-Match': raw[1]['etag']})[0] == 304
+                impossible = request(port, raw_target, headers={**auth, 'Range': f'bytes={len(raw[2])}-'})
+                assert impossible[0] == 416 and impossible[1]['content-range'] == f'bytes */{len(raw[2])}'
+                raw_head = request(port, raw_target, 'HEAD', {**auth, 'Range': 'bytes=1-'})
+                assert raw_head[0] == 200 and raw_head[2] == b'' and int(raw_head[1]['content-length']) == len(raw[2])
+                assert request(port, target, headers={**auth, 'Range':'bytes=1-'})[0] == 200
+                passed.append('raw-ranges-if-range-conditional-head-and-unsatisfiable-responses')
                 with ThreadPoolExecutor(max_workers=4) as workers:
                     results = list(workers.map(lambda _: request(port, target, headers={**auth, 'Accept': 'image/webp'}), range(args.requests)))
                 assert all(r[0] in (200, 503) for r in results)
@@ -197,6 +214,13 @@ def check(args):
                 assert metric[0]==200 and b'synthetic_requests_total' in metric[2]
                 assert request(metrics_port,'/health',headers=auth)[0]==404
             passed.append('fallback-auth-client-hints-enforced-format-prefix-health-and-separate-metrics')
+            if capabilities.get('source_cookies'):
+                with server(binary,root,{'PIXSTRIDE_COOKIE_PASSTHROUGH':'1','PIXSTRIDE_COOKIE_BASE_URL':'https://images.example.com/',
+                                         'PIXSTRIDE_TTL':'3600','PIXSTRIDE_FALLBACK_IMAGE_PATH':str(fallback),'PIXSTRIDE_FALLBACK_IMAGE_TTL':'30'}) as (port,_,_):
+                    personalized=request(port,'/unsafe/plain/http://127.0.0.1/missing.png@png',headers={'Cookie':'session=synthetic-session'})
+                    assert personalized[0]==200 and personalized[1]['cache-control']=='private, no-store'
+                    assert 'Cookie' in personalized[1]['vary'] and b'synthetic-session' not in personalized[2]
+                passed.append('cookie-dependent-images-never-enter-shared-caches')
             unix = root / 'service.sock'
             with server(binary, root, {'PIXSTRIDE_UNIX_SOCKET': str(unix)}) as (port, _, variables):
                 assert request(port, '/health', unix=str(unix))[0] == 200
@@ -209,10 +233,11 @@ def check(args):
                 assert all(r[0]==200 for r in parallel)
                 assert len({r[2] for r in parallel})==1
             passed.append('native-concurrency-with-explicit-memory-reservations')
-            for extra in ({'PIXSTRIDE_ENGINE': 'invalid'}, {'PIXSTRIDE_CONCURRENCY': '2'}, {'PIXSTRIDE_PROCESS_TIMEOUT': '0'}, {'PIXSTRIDE_ENGINE':'native','PIXSTRIDE_CONCURRENCY':'2','PIXSTRIDE_MEMORY_BUDGET_MIB':'3327'}, {'PIXSTRIDE_MAX_CLIENTS':'17'}, {'PIXSTRIDE_MAX_CLIENTS':'5'}):
+            for extra in ({'PIXSTRIDE_ENGINE': 'invalid'}, {'PIXSTRIDE_CONCURRENCY': '2'}, {'PIXSTRIDE_PROCESS_TIMEOUT': '0'}, {'PIXSTRIDE_ENGINE':'native','PIXSTRIDE_CONCURRENCY':'2','PIXSTRIDE_MEMORY_BUDGET_MIB':'3327'}, {'PIXSTRIDE_MAX_CLIENTS':'17'}, {'PIXSTRIDE_MAX_CLIENTS':'5'}, {'PIXSTRIDE_ALLOWED_SOURCE_PORTS':'0'}, {'PIXSTRIDE_DOWNLOAD_TIMEOUT':'0'}, {'PIXSTRIDE_MAX_REDIRECTS':'17'}, {'PIXSTRIDE_ALLOW_PRIVATE_SOURCE_ADDRESSES':'invalid'}):
                 variables = {**environment(), 'PIXSTRIDE_ALLOW_UNSAFE': '1', **extra}
                 assert subprocess.run([str(binary)], env=variables, capture_output=True, timeout=5).returncode != 0
             passed.append('invalid-policy-fails-before-listening')
+            passed.extend(source_check.check(binary, root, server, request, capabilities))
         if capabilities.get('telemetry'):
             assert spans, 'OTLP exporter sent no spans'
             for payload in spans:

@@ -178,6 +178,7 @@ impl std::fmt::Write for HeaderBuffer {
 fn reason(status: u16) -> &'static str {
     match status {
         200 => "OK",
+        206 => "Partial Content",
         304 => "Not Modified",
         401 => "Unauthorized",
         403 => "Forbidden",
@@ -185,6 +186,7 @@ fn reason(status: u16) -> &'static str {
         400 => "Bad Request",
         404 => "Not Found",
         415 => "Unsupported Media Type",
+        416 => "Range Not Satisfiable",
         422 => "Unprocessable Content",
         503 => "Service Unavailable",
         _ => "Bad Gateway",
@@ -202,7 +204,7 @@ fn formatted_header(
         bytes: [0; 1024],
         used: 0,
     };
-    let formatted = std::fmt::write(&mut header, format_args!("HTTP/1.1 {status} {reason}\r\nContent-Type: {mime}\r\nContent-Length: {len}\r\nConnection: {connection}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{extra}\r\n"));
+    let formatted = std::fmt::write(&mut header, format_args!("HTTP/1.1 {status} {reason}\r\nContent-Type: {mime}\r\nContent-Length: {len}\r\nConnection: {connection}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox\r\n{extra}\r\n"));
     if formatted.is_ok() {
         Some(header)
     } else {
@@ -219,7 +221,7 @@ fn long_header_to<W: Write>(
     let reason = reason(status);
     let connection = connection_header();
     // Preserve the existing fallback for internal values exceeding 1024 bytes.
-    write!(s,"HTTP/1.1 {status} {reason}\r\nContent-Type: {mime}\r\nContent-Length: {len}\r\nConnection: {connection}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{extra}\r\n")
+    write!(s,"HTTP/1.1 {status} {reason}\r\nContent-Type: {mime}\r\nContent-Length: {len}\r\nConnection: {connection}\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox\r\n{extra}\r\n")
 }
 
 fn write_all_pair<W: Write>(s: &mut W, mut head: &[u8], mut body: &[u8]) -> io::Result<()> {
@@ -353,7 +355,7 @@ pub fn image_response(
         write!(writer, "Content-Length: {}\r\n", body.len())?;
     }
     let connection = connection_header();
-    write!(writer,"Connection: {connection}\r\nCache-Control: {}\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\n{}\r\n",cache,extra)?;
+    write!(writer,"Connection: {connection}\r\nCache-Control: {}\r\nX-Content-Type-Options: nosniff\r\nReferrer-Policy: no-referrer\r\nContent-Security-Policy: default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox\r\n{}\r\n",cache,extra)?;
     if !head {
         writer.write_all(body)?;
     }

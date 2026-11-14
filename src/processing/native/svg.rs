@@ -60,6 +60,27 @@ fn reference(value: &str) -> bool {
         .is_ok_and(|i| super::engine::checked(i.get_width(), i.get_height()).is_ok())
 }
 
+fn safe_element(node: roxmltree::Node<'_, '_>) -> bool {
+    match node.tag_name().namespace() {
+        None | Some("http://www.w3.org/2000/svg") => true,
+        Some(
+            "http://www.inkscape.org/namespaces/inkscape"
+            | "http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd",
+        ) => true,
+        Some(ns) => {
+            node.ancestors()
+                .skip(1)
+                .any(|parent| parent.is_element() && parent.tag_name().name() == "metadata")
+                && (matches!(
+                    ns,
+                    "http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+                        | "http://purl.org/dc/elements/1.1/"
+                        | "http://creativecommons.org/ns#"
+                ) || ns.starts_with("http://ns.adobe.com/"))
+        }
+    }
+}
+
 pub(super) fn validate(data: &[u8]) -> Result<(), Error> {
     if data.len() > 10 * 1024 * 1024 {
         return Err("SVG exceeds native limit");
@@ -77,6 +98,9 @@ pub(super) fn validate(data: &[u8]) -> Result<(), Error> {
         }
         if node.pi().is_some_and(|pi| pi.target != "xpacket") {
             return Err("SVG processing instructions unsupported");
+        }
+        if node.is_element() && !safe_element(node) {
+            return Err("active foreign SVG namespace unsupported");
         }
         if node.is_element() && active(node.tag_name().name()) {
             return Err("active SVG content unsupported");
@@ -146,7 +170,7 @@ fn emit(node: roxmltree::Node<'_, '_>, out: &mut String) -> Result<(), Error> {
     if node.is_text() {
         return text(out, node.text().unwrap_or(""));
     }
-    if !node.is_element() || active(node.tag_name().name()) {
+    if !node.is_element() || !safe_element(node) || active(node.tag_name().name()) {
         return Ok(());
     }
     if node.tag_name().name() == "style"
