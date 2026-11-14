@@ -4,6 +4,10 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Security
+
+- Close keep-alive connections after a failed or truncated response write, preventing later pipelined requests from being processed after an incomplete response.
+
 ## [0.2.0] - 2026-11-14
 
 ### Added
