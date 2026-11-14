@@ -1,6 +1,14 @@
 //! Immutable signing configuration; key rotation never enables unsigned URLs.
 use super::*;
 
+fn signature_size(value: &str) -> Result<usize, Error> {
+    let size = value.parse().map_err(|_| "invalid signature size")?;
+    if !(16..=32).contains(&size) {
+        return Err("signature size must be 16..32");
+    }
+    Ok(size)
+}
+
 impl Config {
     #[cfg(test)]
     pub fn signed(key: Vec<u8>, salt: Vec<u8>) -> Result<Self, Error> {
@@ -113,10 +121,7 @@ impl Config {
 impl Config {
     fn with_signature_environment(mut self) -> Result<Self, Error> {
         if let Ok(value) = std::env::var("PIXSTRIDE_SIGNATURE_SIZE") {
-            self.signature_size = value.parse().map_err(|_| "invalid signature size")?;
-            if !(1..=32).contains(&self.signature_size) {
-                return Err("signature size must be 1..32");
-            }
+            self.signature_size = signature_size(&value)?;
         }
         if let Some(value) = crate::config::secret("PIXSTRIDE_TRUSTED_SIGNATURES")? {
             self.trusted = value.split(',').map(|s| s.trim().to_owned()).collect();
@@ -148,5 +153,20 @@ impl Config {
             signature::sign_imgproxy_size(path, key, salt, self.signature_size),
             path.trim_start_matches('/')
         ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::signature_size;
+
+    #[test]
+    fn signature_size_requires_cryptographic_minimum() {
+        for value in ["0", "1", "15", "33", "invalid"] {
+            assert!(signature_size(value).is_err(), "{value}");
+        }
+        for size in 16..=32 {
+            assert_eq!(signature_size(&size.to_string()), Ok(size));
+        }
     }
 }

@@ -95,7 +95,7 @@ fn expiration_and_filenames_are_validated_before_source_access() {
 #[test]
 fn truncated_rotated_signatures_and_explicit_trust_do_not_change_path_binding() {
     let path = "/rs:fit:3:2/plain/local:///test.png@png";
-    for size in [1, 16, 17, 31, 32] {
+    for size in [16, 17, 31, 32] {
         let mut config = Config::signed(vec![1; 32], vec![2; 16]).unwrap();
         config.signature_size = size;
         let signed = config.sign(path).unwrap();
