@@ -14,6 +14,8 @@ Use signed URLs and an exact source-host allowlist. Generate independent secrets
 
 Terminate inbound TLS and apply rate, connection and request limits at a reverse proxy. Restrict outbound traffic with a network policy as well as the application's allowlist. Mount only the credentials and source directories required by the enabled providers. Do not log full request URLs at the proxy. Keep container limits enabled: read-only root filesystem, no Linux capabilities, no new privileges, bounded memory/CPU/processes, and a dedicated non-root user. For managed deployments, configure restart policy and a finite shutdown grace period.
 
+Unreleased builds require `PIXSTRIDE_SIGNATURE_SIZE` to be 16–32 bytes, with a default of 32. Values below 16 bytes fail server startup and the `sign` command. Before upgrading a deployment using 1–15 bytes, configure every URL signer and server to use the same supported size and regenerate signed URLs; existing short signatures will be rejected. The 32-byte default and key rotation are unchanged. Explicit `PIXSTRIDE_TRUSTED_SIGNATURES` tokens still bypass path binding and must be protected as bearer credentials.
+
 ## Implemented controls
 
 - Signing is required unless unsigned mode is explicitly enabled; partial or malformed secret configuration fails startup. Decoded HMAC-SHA256 signatures are compared without an early-exit byte comparison.
