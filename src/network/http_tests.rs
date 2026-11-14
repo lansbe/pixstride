@@ -223,9 +223,7 @@ fn bearer_protected_images_partition_shared_cache_entries_by_authorization() {
             settings(),
             fixture.root(),
             |port| {
-                format!(
-                    "GET {target} HTTP/1.1\r\nHost: localhost:{port}\r\n{authorization}\r\n"
-                )
+                format!("GET {target} HTTP/1.1\r\nHost: localhost:{port}\r\n{authorization}\r\n")
             },
         );
         let (headers, body) = parts(&denied);
