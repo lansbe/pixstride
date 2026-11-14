@@ -57,8 +57,8 @@ jobs:
         run: |
           brew install vips pkgconf go openssl@3
           echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt,clippy
-          rustup override set 1.99.0
+          rustup toolchain install 1.100.0 --profile minimal --component rustfmt,clippy
+          rustup override set 1.100.0
           cargo fetch --locked
       - name: Check both engines and native interoperability
         run: |

@@ -4,6 +4,11 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+### Changed
+
+- Upgrade the native PNG palette fallback to color_quant 2.0.0 and use its separate RGB/alpha palette APIs. Corrected palette lookup and training can change quantized PNG bytes, pixels and ETags. Change the signed cachebuster or invalidate transformed-image caches when deploying; native imagequant output and GIF's separately locked quantizer are unaffected.
+- Require Rust 1.100 and use Rust 1.100.0 for the pinned Alpine builder and native CI. This includes the Rust 1.99.1 FFI/linker regression fixes; the runtime Alpine release and image-processing contract are unchanged.
+
 ### Security
 
 - Add `Authorization` to `Vary` on Bearer-protected image responses so shared caches cannot reuse an authorized response for requests with missing or different credentials. Configured public cache TTLs remain available to authorized requests.

@@ -76,10 +76,12 @@ Only 3/20 outputs were pixel-identical across engines. Filters, JPEG chroma samp
 
 `master` is the stable line; `develop` integrates upcoming work. Docker `latest` follows stable releases; `alpha`, `beta` and `rc` are separate testing channels, available after their first successful tagged release. Pin a version or digest for deployment. See the [changelog](CHANGELOG.md) and [release workflow](CONTRIBUTING.md#releases).
 
+The native PNG palette fallback uses color_quant 2.0.0. Its corrected quantizer can change output pixels, bytes and ETags compared with 1.1.0; change the signed cachebuster or invalidate transformed-image caches on upgrade. See the [dependency migration audit](COMPATIBILITY.md#dependency-upgrade-audit) for scope and validation.
+
 ## Build
 
 <!-- generated:build:start -->
-Linux and macOS, ARM64 or x86-64; Rust 1.99 and libcurl development files.
+Linux and macOS, ARM64 or x86-64; Rust 1.100 and libcurl development files.
 <!-- generated:build:end -->
 
 ```sh
