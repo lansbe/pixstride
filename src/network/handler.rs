@@ -76,15 +76,9 @@ pub(super) fn handle(
     );
     if context.preflight {
         return match context.preflight_headers(settings.origin.as_deref()) {
-            Ok(headers) => protocol::image_response(
-                socket,
-                204,
-                "text/plain",
-                &headers,
-                b"",
-                "no-store",
-                true,
-            ),
+            Ok(headers) => {
+                protocol::image_response(socket, 204, "text/plain", &headers, b"", "no-store", true)
+            }
             Err(error) => failure(socket, false, 403, error),
         };
     }

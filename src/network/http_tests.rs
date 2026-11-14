@@ -140,7 +140,10 @@ fn truncated_response_write_is_reported() {
     );
 
     assert_eq!(result.unwrap_err().kind(), io::ErrorKind::TimedOut);
-    assert!(socket.response.windows(19).any(|w| w == b"Content-Length: 3\r\n"));
+    assert!(socket
+        .response
+        .windows(19)
+        .any(|w| w == b"Content-Length: 3\r\n"));
     assert!(socket.response.ends_with(b"\r\n\r\no"));
 }
 
