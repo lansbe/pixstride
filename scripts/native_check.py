@@ -51,6 +51,7 @@ def check(args):
         root = Path(temp)
         source = root / 'fixture.png'
         source.write_bytes(png(32, 24))
+        assert run(binary, root, source) == source.read_bytes(), 'Native worker recompressed an unchanged plain RGB PNG'
         for fmt in ('png', 'jpg', 'webp', 'avif', 'heic', 'jxl', 'gif', 'tiff', 'bmp', 'ico'):
             encoded = run(binary, root, source, output=fmt)
             intermediate = root / ('roundtrip.' + fmt)

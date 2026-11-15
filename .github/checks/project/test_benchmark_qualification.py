@@ -43,6 +43,43 @@ def evidence(repeats=2, ratio=.7):
 
 
 class QualificationTests(unittest.TestCase):
+    def test_forced_native_losses_block_an_otherwise_winning_cohort(self):
+        for metric in ('cpu', 'p50', 'p95', 'memory'):
+            reports, baseline = evidence(repeats=3)
+            entry = reports[0]['cases'][0]['engines']['pixstride_native']
+            if metric == 'memory':
+                entry['summary']['cgroup_peak_memory_bytes'] *= 4
+            else:
+                for batch in entry['batches']:
+                    if metric == 'cpu': batch['cpu_usec'] = 26400
+                    elif metric == 'p50': batch['latencies_ns'] = [5_000_000] * 24
+                    else: batch['latencies_ns'][-3:] = [5_000_000] * 3
+                entry['summary'].update(summarize_batches(entry['batches']))
+            with self.subTest(metric=metric):
+                self.assertFalse(qualify(reports, baseline)['qualified'])
+
+    def test_counts_and_repeat_requirement_are_separate_for_each_mode(self):
+        reports, baseline = evidence()
+        for report in reports:
+            for case in report['cases']:
+                entry = case['engines']['pixstride_native']
+                for batch in entry['batches']:
+                    batch['cpu_usec'] = 23520
+                entry['summary'].update(summarize_batches(entry['batches']))
+        result = qualify(reports, baseline)
+        self.assertEqual(result['architectures']['amd64']['confirmed_cases_by_mode'],
+                         {'pixstride_default': 25, 'pixstride_native': 0})
+        reports, baseline = evidence(ratio=.98)
+        result = qualify(reports, baseline)
+        self.assertFalse(result['qualified'])
+        self.assertEqual(result['criteria']['performance_modes'], ['pixstride_default', 'pixstride_native'])
+        reports, baseline = evidence(repeats=3, ratio=.98)
+        result = qualify(reports, baseline)
+        self.assertTrue(result['qualified'])
+        for arch in ('amd64', 'arm64'):
+            self.assertEqual(result['architectures'][arch]['confirmed_cases_by_mode'],
+                             {'pixstride_default': 25, 'pixstride_native': 25})
+
     def test_cli_baseline_uses_verified_raw_archives_with_samples(self):
         _, baselines = evidence()
         with tempfile.TemporaryDirectory() as temp:

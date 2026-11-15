@@ -74,3 +74,5 @@ Unreleased native PNG decoding uses png 0.18.1 for plain eight-bit input under a
 Sequential JPEG/TIFF admission checks the computed final geometry: implicit vertical crops and fill-down retain random access so discarded rows cannot hide truncated JPEG tails. Accelerated SVG PNG output retains the explicit encoded-byte ceiling.
 
 The RGBA8 PNG-to-JPEG SIMD resizer runs only after full strict decoding and original source admission, inside the isolated worker. It admits bounded scratch/coefficient estimates, uses no shared resizer/cache or Rayon pool, and keeps metadata/HDR/linear-light and complex geometry on the existing native path.
+
+The native-worker RGB8 PNG identity route completes full structural/CRC/DEFLATE/Adler/filter validation before returning the private owned source frame. Metadata, alpha/animation, trailing data and transform/encoding requests retain the existing paths; source and output limits remain active. Sharpen heap reclamation runs only after codec image roots and thread-private regions are released; glibc may return free pages while the live response allocation remains owned.

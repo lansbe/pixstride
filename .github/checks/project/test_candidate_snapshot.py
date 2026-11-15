@@ -12,6 +12,27 @@ from candidate_snapshot import check, publish
 
 
 class CandidateSnapshotTests(unittest.TestCase):
+    def test_new_publication_requires_native_performance_and_schema_two(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths, results = self.fixture(root)
+            report = json.loads(paths[0].read_text())
+            report['cases'][0]['engines']['pixstride_native']['summary']['cgroup_peak_memory_bytes'] *= 4
+            paths[0].write_text(json.dumps(report))
+            with self.assertRaises(ValueError):
+                publish(paths, root)
+            self.assertFalse((results / 'candidate-index.json').exists())
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths, results = self.fixture(root)
+            publish(paths, root)
+            self.assertEqual(json.loads((results / 'candidate-index.json').read_text())['schema_version'], 2)
+            self.assertIn('forced-native', (root / 'README.md').read_text())
+            index = json.loads((results / 'candidate-index.json').read_text())
+            index['schema_version'] = 1
+            (results / 'candidate-index.json').write_text(json.dumps(index))
+            with self.assertRaisesRegex(ValueError, 'historical'):
+                check(root)
     def fixture(self, root):
         reports, baselines = evidence(repeats=3)
         results = root / 'benchmarks/results'

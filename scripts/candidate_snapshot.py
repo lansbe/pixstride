@@ -7,10 +7,14 @@ from pathlib import Path
 import re
 
 from benchmark_fixtures import ROOT, sha256
-from benchmark_qualification import METRICS, load_baselines, markdown, qualify, samples_hash
+from benchmark_qualification import METRICS, MODES, load_baselines, markdown, qualify, samples_hash
 from benchmark_report import load
 
 INDEX = 'candidate-index.json'
+LEGACY_DEFAULT_REVISIONS = {
+    'fe350b73b7841251f99a224abe33f46acb970842',
+    '6145080e14a5e717a7a85ae9fd7174f894e08e39',
+}
 DOCS = {'README.md': ('summary', 'summary'), 'BENCHMARKS.md': ('details', 'tables')}
 
 
@@ -24,6 +28,8 @@ def span(values):
 
 
 def generated(reports, result):
+    if result["criteria"].get("performance_modes") == list(MODES):
+        return generated_both(reports, result)
     revision = result['candidate']['revision']
     source = f'[candidate `{revision[:12]}`](https://github.com/lansbe/pixstride/commit/{revision})'
     intro = f'Unreleased {source}; default routing, all retained native runs. '
@@ -56,6 +62,47 @@ def generated(reports, result):
             alpha = max(own['pixels_vs_imgproxy']['alpha']['mae'] for own, _ in pairs)
             details += f'| {arch} | {cid} | {span(sizes)} | {error("mae"):.6f} | {error("rmse"):.6f} | {alpha:.6f} |\n'
     details += '\nRaw reports, hashes, source/image identities and recomputed qualification: [candidate index](benchmarks/results/candidate-index.json).\n'
+    workflows = sorted({r.get('workflow_url', '') for r in reports} - {''})
+    if workflows:
+        details += '\nRetained workflow evidence: ' + ', '.join(f'[run {i + 1}]({url})' for i, url in enumerate(workflows)) + '.\n'
+    return {'README.md': summary, 'BENCHMARKS.md': details}
+
+
+def generated_both(reports, result):
+    revision = result['candidate']['revision']
+    intro = (f'Unreleased [candidate `{revision[:12]}`](https://github.com/lansbe/pixstride/commit/{revision}); '
+             'default and forced-native, all retained native Linux runs. The published 0.3.0 baseline below is unchanged.\n\n')
+    summary = intro + '| Linux | Mode | Confirmed cases | Runs | CPU ratio range | HTTP p50 range | HTTP p95 range | Peak cgroup range |\n'
+    summary += '|---|---|---:|---:|---:|---:|---:|---:|\n'
+    for arch, cohort in sorted(result['architectures'].items()):
+        for mode in MODES:
+            label = 'default' if mode == MODES[0] else 'forced-native'
+            cells = [span([v for c in cohort['cases'] for v in c['modes'][mode]['ratios'][metric]]) for metric in METRICS]
+            summary += f'| {arch} | {label} | {cohort["confirmed_cases_by_mode"][mode]}/25 | {cohort["runs"]} | ' + ' | '.join(cells) + ' |\n'
+    summary += ('\nRatios are Pixstride/imgproxy; lower is better. Both modes must have lower CPU, p50, p95 and '
+                'peak cgroup memory in every retained run; close/noisy timings require extra repeats. '
+                'Encoded files and pixels can differ; the published agreement envelope is checked, without certifying '
+                'perceptual equivalence. See [all cases and limits](BENCHMARKS.md) and [raw evidence](benchmarks/results/candidate-index.json).\n')
+    details = '## Unreleased candidate confirmation\n\n' + intro + markdown(result)
+    for arch in sorted(result['architectures']):
+        models = sorted({m for r in reports if r['host']['architecture'] == arch for m in r['host'].get('cpu_model', [])})
+        details += f'\n{arch} CPU: ' + ', '.join(models or ['see raw metadata']) + '. Two CPUs are assigned per service.\n'
+    details += ('\n### Encoded size and decoded-pixel agreement\n\n'
+                'Every retained run and both modes. Color MAE/RMSE are the worst black/white composite '
+                'errors in 8-bit channel units; alpha is checked separately. These are pairwise errors, not quality scores.\n\n'
+                '| Linux | Mode | Case | Encoded size ratio | Max color MAE | Max color RMSE | Max alpha MAE |\n'
+                '|---|---|---|---:|---:|---:|---:|\n')
+    for arch in sorted(result['architectures']):
+        runs = [{c['id']: c for c in r['cases']} for r in reports if r['host']['architecture'] == arch]
+        for mode in MODES:
+            label = 'default' if mode == MODES[0] else 'forced-native'
+            for cid in sorted(runs[0]):
+                pairs = [(r[cid]['engines'][mode], r[cid]['engines']['imgproxy']) for r in runs]
+                sizes = [own['output']['bytes'] / ref['output']['bytes'] for own, ref in pairs]
+                error = lambda metric: max(own['pixels_vs_imgproxy'][bg][metric] for own, _ in pairs for bg in ('black', 'white'))
+                alpha = max(own['pixels_vs_imgproxy']['alpha']['mae'] for own, _ in pairs)
+                details += f'| {arch} | {label} | {cid} | {span(sizes)} | {error("mae"):.6f} | {error("rmse"):.6f} | {alpha:.6f} |\n'
+    details += '\nRaw reports, hashes, source/image identities and recomputed both-mode qualification: [candidate index](benchmarks/results/candidate-index.json).\n'
     workflows = sorted({r.get('workflow_url', '') for r in reports} - {''})
     if workflows:
         details += '\nRetained workflow evidence: ' + ', '.join(f'[run {i + 1}]({url})' for i, url in enumerate(workflows)) + '.\n'
@@ -98,7 +145,7 @@ def publish(paths, root=ROOT):
         archives[name] = archive
         files.append({'file': name, 'sha256': sha256(archive), 'raw_sha256': sha256(raw),
                       'architecture': arch, 'samples_sha256': fingerprint})
-    index = {'schema_version': 1, 'candidate': result['candidate'], 'reports': files, 'qualification': result}
+    index = {'schema_version': 2, 'candidate': result['candidate'], 'reports': files, 'qualification': result}
     documents = {name: with_block((root / name).read_text(), *DOCS[name], body)
                  for name, body in generated(reports, result).items()}
     for name, archive in archives.items():
@@ -117,8 +164,11 @@ def check(root=ROOT):
             raise ValueError('Candidate evidence/index is missing')
         return None
     index = json.loads(path.read_text())
-    if index.get('schema_version') != 1:
+    version = index.get('schema_version')
+    if version not in (1, 2):
         raise ValueError('Unsupported candidate snapshot schema')
+    if version == 1 and index.get('candidate', {}).get('revision') not in LEGACY_DEFAULT_REVISIONS:
+        raise ValueError('Default-only evidence is restricted to historical source revisions')
     reports = []
     for entry in index['reports']:
         name = entry['file']
@@ -134,7 +184,8 @@ def check(root=ROOT):
                 or report['host']['architecture'] != entry['architecture'] or name != expected):
             raise ValueError('Candidate raw provenance mismatch')
         reports.append(report)
-    result = qualify(reports, load_baselines(directory))
+    result = qualify(reports, load_baselines(directory),
+                     performance_modes=(MODES[0],) if version == 1 else MODES)
     if (not result['qualified'] or result['candidate'] != index['candidate']
             or encoded(result) != encoded(index['qualification'])):
         raise ValueError('Stale/unqualified candidate snapshot')
