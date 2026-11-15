@@ -6,7 +6,7 @@ COPY Cargo.toml Cargo.lock build.rs ./
 COPY vendor ./vendor
 COPY src ./src
 COPY .github/checks/abi/ .github/checks/abi/
-COPY scripts/native_check.py scripts/image_fixtures.py scripts/server_check.py scripts/source_check.py scripts/compatibility.py scripts/telemetry_check.py scripts/config_check.py scripts/s3_crypto_check.py ./scripts/
+COPY scripts/native_check.py scripts/native_pool_check.py scripts/image_fixtures.py scripts/server_check.py scripts/source_check.py scripts/compatibility.py scripts/telemetry_check.py scripts/config_check.py scripts/s3_crypto_check.py ./scripts/
 ENV RUSTFLAGS="--remap-path-prefix=/build=/src -C target-feature=-crt-static"
 RUN cargo fetch --locked
 RUN --network=none sh .github/checks/abi/run-abi-check.sh . \
@@ -17,6 +17,7 @@ RUN --network=none sh .github/checks/abi/run-abi-check.sh . \
     && cargo test --all-features --locked --offline \
     && cargo build --release --all-features --locked --offline \
     && python3 scripts/native_check.py --binary target/release/pixstride \
+    && python3 scripts/native_pool_check.py --binary target/release/pixstride \
     && python3 scripts/telemetry_check.py --binary target/release/pixstride \
     && python3 scripts/config_check.py --binary target/release/pixstride \
     && python3 scripts/s3_crypto_check.py --binary target/release/pixstride \

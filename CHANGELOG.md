@@ -8,6 +8,10 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 - Reusable 25-case image-processing benchmarks for native Linux AMD64 and ARM64, comparing immutable Pixstride default/native and imgproxy images with one shared public corpus, balanced repeated HTTP measurements, child-inclusive CPU, peak cgroup memory, output sizes and decoded-pixel differences. Preserve raw samples and generate checked documentation tables from the measured evidence.
 
+### Changed
+
+- Reuse bounded isolated native workers instead of starting a process and initializing libvips for every image. Keep length-delimited pipes, per-image deadlines and renewed CPU budgets, replace failed workers, recycle after 256 successful images and reap idle workers on shutdown. Native image/operation caches remain disabled; no response cache is added. Performance qualification of this unreleased implementation is recorded separately from the published 0.3.0 baseline.
+
 ## [0.3.0] - 2026-11-14
 
 ### Changed

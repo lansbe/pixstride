@@ -166,12 +166,20 @@ fn effects(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
     Ok(image)
 }
 
+pub(super) fn initialize() -> Result<(), Error> {
+    static INITIALIZED: std::sync::OnceLock<Result<(), Error>> = std::sync::OnceLock::new();
+    *INITIALIZED.get_or_init(|| {
+        Vips::init("pixstride-native").map_err(|_| "cannot initialize native engine")?;
+        Vips::cache_set_max(0);
+        Vips::cache_set_max_mem(0);
+        Vips::cache_set_max_files(0);
+        Vips::concurrency_set(1);
+        Ok(())
+    })
+}
+
 pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeResult, Error> {
-    Vips::init("pixstride-native").map_err(|_| "cannot initialize native engine")?;
-    Vips::cache_set_max(0);
-    Vips::cache_set_max_mem(0);
-    Vips::cache_set_max_files(0);
-    Vips::concurrency_set(1);
+    initialize()?;
     let sanitized;
     let data = if r.extra.encoding.sanitize_svg && sniff(data) == Some(OutputFormat::Svg) {
         sanitized = super::svg::sanitize(data)?;

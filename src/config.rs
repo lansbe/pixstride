@@ -12,6 +12,10 @@ pub fn run() -> Result<(), Error> {
     if args.get(1).is_some_and(|s| s == "native-worker") {
         return crate::processing::native::worker();
     }
+    if args.get(1).is_some_and(|s| s == "native-worker-pool") {
+        return crate::processing::native::pooled_worker();
+    }
+    let _workers = crate::processing::native::Shutdown;
     if matches!(
         args.get(1).map(String::as_str).unwrap_or("serve"),
         "serve" | "process" | "sign" | "healthcheck"

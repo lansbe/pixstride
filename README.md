@@ -46,6 +46,7 @@ The stable container includes the following features. Optional build features ar
 
 - Built-in input/output codecs and bounded transforms remain available without libvips.
 - Optional native engine: PNG/JPEG/WebP/GIF/TIFF/AVIF/HEIC/JPEG XL, BMP/ICO bridges, broader static SVG, 16-bit gray/RGB/alpha, ICC/metadata handling and bounded GIF/WebP animation.
+- Native processing reuses isolated workers with per-image deadlines and bounded recycling; processed images and libvips operations are not cached.
 - OSS URL options include presets, expiration, key rotation, DPR/zoom/minimum dimensions, canvas extension, smart/fractional crop, repeated watermarks, quality per format and bounded size targeting.
 - GET/HEAD, opt-in bounded keep-alive/pipelining, Bearer authorization, opt-in modern format negotiation, response validators, cache TTL bounded by URL expiration, UTF-8 filenames, CORS, Prometheus and optional OTLP/HTTP traces and request-local source cookies with private response caching.
 - Optional S3/KMS V2/V3 client-side decryption with authenticated in-place processing and verified TLS roots.

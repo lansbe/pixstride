@@ -70,6 +70,7 @@ jobs:
           cargo build --all-features --locked --offline
           sh .github/checks/abi/run-abi-check.sh .
           python3 scripts/native_check.py --binary target/debug/pixstride
+          python3 scripts/native_pool_check.py --binary target/debug/pixstride
           python3 scripts/server_check.py --binary target/debug/pixstride
           python3 scripts/telemetry_check.py --binary target/debug/pixstride
           python3 scripts/config_check.py --binary target/debug/pixstride

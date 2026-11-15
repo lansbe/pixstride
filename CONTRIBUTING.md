@@ -53,6 +53,8 @@ The container builds/checks both feature configurations and includes all optiona
 
 ## Performance benchmarks
 
+Native changes must also pass `python3 scripts/native_pool_check.py --binary target/debug/pixstride`. It exercises reuse without image caching, mixed requests, invalid input, child crashes, wall-clock timeouts, bounded recycling/concurrency, cumulative CPU-budget renewal and shutdown cleanup. This check runs in native CI and the container build.
+
 Use the reusable [25-case Linux benchmark](BENCHMARKS.md) for performance comparisons. Its shared public corpus, immutable image pins, signed HTTP requests, balanced batches, child-inclusive cgroup CPU and peak-memory accounting are separate from compatibility qualification. Compare the complete case set and include pixel differences/output sizes; do not turn a fast error or different-quality output into a win. Run the same prepared inputs on native AMD64 and ARM64 hosts. The standalone workflow retains raw measurements and does not impose noisy timing thresholds on ordinary PRs.
 
 Regenerate Markdown tables with `python3 scripts/benchmark_report.py --update-docs` after installing reviewed raw evidence in `benchmarks/results`. Run `python3 scripts/benchmark_report.py --check` to verify their consistency. Commit only public sanitized JSON summaries and losslessly compressed raw evidence, with image/corpus/harness identities and workflow provenance. Keep downloaded media, caches, logs and personal host paths untracked. See the guide for setup, all 25 cases and full rerun/publication commands.
