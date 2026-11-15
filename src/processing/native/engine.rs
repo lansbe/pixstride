@@ -5,7 +5,7 @@ use crate::{
     Error,
 };
 use libvips::{
-    enums::{BandFormat, Interpretation, Kernel},
+    enums::{Access, BandFormat, Interpretation, Kernel},
     voption::{Setter, VOption},
     Vips, VipsImage,
 };
@@ -38,7 +38,7 @@ pub(super) fn checked(width: i32, height: i32) -> Result<(), Error> {
 }
 
 pub(super) fn load(data: &[u8], frames: usize, thumbnail: bool) -> Result<VipsImage, Error> {
-    load_with_owner(data, frames, thumbnail, None)
+    load_with_owner(data, frames, thumbnail, None, Access::Random)
 }
 
 fn load_with_owner(
@@ -46,6 +46,7 @@ fn load_with_owner(
     frames: usize,
     thumbnail: bool,
     owner: Option<&std::sync::Arc<Vec<u8>>>,
+    access: Access,
 ) -> Result<VipsImage, Error> {
     let format = sniff(data);
     if format == Some(OutputFormat::Svg) {
@@ -70,7 +71,7 @@ fn load_with_owner(
     }
     let mut option = VOption::new()
         .set("fail_on", libvips::enums::FailOn::Error as i32)
-        .set("access", libvips::enums::Access::Random as i32);
+        .set("access", access as i32);
     if matches!(
         format,
         Some(
@@ -226,7 +227,13 @@ pub(super) fn process(data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeR
         },
     );
     let data = encoded.as_slice();
-    let head = load_with_owner(data, 1, r.extra.enforce_thumbnail, Some(&encoded))?;
+    let head = load_with_owner(
+        data,
+        1,
+        r.extra.enforce_thumbnail,
+        Some(&encoded),
+        Access::Random,
+    )?;
     let frame_height = head.get_page_height().max(1);
     let origin = [head.get_width() as usize, frame_height as usize];
     checked(head.get_width(), frame_height)?;
@@ -308,14 +315,32 @@ pub(super) fn process(data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeR
         // source graph alive through encoding.
         let head = head;
         if animated {
-            load_with_owner(data, count, r.extra.enforce_thumbnail, Some(&encoded))?
+            load_with_owner(
+                data,
+                count,
+                r.extra.enforce_thumbnail,
+                Some(&encoded),
+                Access::Random,
+            )?
         } else if source_format == OutputFormat::Jpeg {
             if let Some((image, plan)) = super::jpeg_decode::try_load(&encoded, &head, r)? {
                 decoded_plan = Some(plan);
                 image
+            } else if let Some(image) = super::jpeg_decode::crop_input(&encoded, &head, r)? {
+                image
             } else {
                 head
             }
+        } else if super::jpeg_decode::source_access(Some(source_format), &head, r)
+            == Access::Sequential
+        {
+            load_with_owner(
+                data,
+                1,
+                r.extra.enforce_thumbnail,
+                Some(&encoded),
+                Access::Sequential,
+            )?
         } else if source_format == OutputFormat::Png
             && head.get_typeof("icc-profile-data").unwrap_or(0) == 0
             && (!r.auto_rotate || head.get_int("orientation").unwrap_or(1) == 1)

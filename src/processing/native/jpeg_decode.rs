@@ -1,4 +1,4 @@
-//! JPEG loading plans keep original dimensions while reducing decode work.
+//! Native access policy and JPEG plans reduce work without changing geometry.
 use super::scale::Plan;
 use crate::{ops::Rotation, request::Request, Error};
 use libvips::{
@@ -6,6 +6,21 @@ use libvips::{
     voption::{Setter, VOption},
     VipsImage,
 };
+
+pub(super) fn source_access(
+    format: Option<crate::request::OutputFormat>,
+    head: &VipsImage,
+    r: &Request,
+) -> Access {
+    if format == Some(crate::request::OutputFormat::Tiff)
+        && sequential(r)
+        && (!r.auto_rotate || head.get_int("orientation").unwrap_or(1) == 1)
+    {
+        Access::Sequential
+    } else {
+        Access::Random
+    }
+}
 
 fn plan(width: i32, height: i32, r: &Request) -> Result<Option<(i32, Plan)>, Error> {
     if r.options.crop.is_some()
@@ -49,6 +64,32 @@ fn sequential(r: &Request) -> bool {
         && !r.extra.extend_aspect
         && r.effects.trim.is_none()
         && r.effects.pixelate <= 1
+}
+
+pub(super) fn crop_input(
+    data: &std::sync::Arc<Vec<u8>>,
+    head: &VipsImage,
+    r: &Request,
+) -> Result<Option<VipsImage>, Error> {
+    if r.options.crop.is_none()
+        || !super::shared::fits_memory(head)
+        || !matches!(head.get_bands(), 1 | 3)
+        || !matches!(
+            head.get_interpretation(),
+            Ok(Interpretation::Srgb | Interpretation::BW)
+        )
+    {
+        return Ok(None);
+    }
+    let image = super::shared::load(
+        data,
+        VOption::new()
+            .set("access", Access::Sequential as i32)
+            .set("fail_on", FailOn::Error as i32),
+    )?;
+    // Read every source row before cropping, preserving complete-stream
+    // validation without a random-access decoder cache over the same raster.
+    super::shared::materialize(image).map(Some)
 }
 
 pub(super) fn try_load(
@@ -140,5 +181,67 @@ mod tests {
         assert!(sequential(&request("rs:fit:320:320/bl:2")));
         assert!(!sequential(&request("rs:fit:320:320/trim:10")));
         assert!(!sequential(&request("rot:90")));
+    }
+
+    #[test]
+    fn tiff_streaming_requires_one_monotonic_pass() {
+        use crate::request::OutputFormat::{Png, Tiff};
+        super::super::engine::initialize().unwrap();
+        let mut head = VipsImage::new_from_owned_u8(vec![0; 6], 2, 1, 3).unwrap();
+        assert_eq!(
+            source_access(Some(Tiff), &head, &request("rs:fit:640:640")),
+            Access::Sequential
+        );
+        for options in [
+            "rot:90",
+            "c:80:60:ce",
+            "rs:fit:640:640/mb:500",
+            "trim:10",
+            "rs:fit:640:640/g:sm",
+        ] {
+            assert_eq!(
+                source_access(Some(Tiff), &head, &request(options)),
+                Access::Random
+            );
+        }
+        assert_eq!(
+            source_access(Some(Png), &head, &request("rs:fit:640:640")),
+            Access::Random
+        );
+        head.set_int("orientation", 6).unwrap();
+        assert_eq!(
+            source_access(Some(Tiff), &head, &request("rs:fit:640:640")),
+            Access::Random
+        );
+        assert_eq!(
+            source_access(Some(Tiff), &head, &request("ar:0/rs:fit:640:640")),
+            Access::Sequential
+        );
+    }
+
+    #[test]
+    fn cropped_jpeg_materialization_keeps_pixels_and_releases_encoded_source() {
+        use std::sync::Arc;
+        super::super::engine::initialize().unwrap();
+        let pixels = (0..67 * 43 * 3).map(|n| (n * 73 + 9) as u8).collect();
+        let image = VipsImage::new_from_owned_u8(pixels, 67, 43, 3).unwrap();
+        let data = Arc::new(image.write_to_buffer(".jpg").unwrap());
+        drop(image);
+        let weak = Arc::downgrade(&data);
+        let head = super::super::shared::load(&data, VOption::new()).unwrap();
+        let expected = super::super::raster::export(&head).unwrap();
+        let r = request("c:19:13:ce/rs:fit:9:9");
+        let eager = crop_input(&data, &head, &r)
+            .unwrap()
+            .expect("bounded crop route");
+        drop(head);
+        drop(data);
+        libvips::Vips::thread_shutdown();
+        assert!(weak.upgrade().is_none(), "materialized JPEG retains source");
+        assert_eq!(&*super::super::raster::export(&eager).unwrap(), &*expected);
+        let (cropped, _) = super::super::geometry::apply(eager, &r, false, None).unwrap();
+        assert_eq!((cropped.get_width(), cropped.get_height()), (9, 6));
+        let pixels = super::super::raster::export(&cropped).unwrap();
+        assert_eq!(pixels.len(), 9 * 6 * 3);
     }
 }

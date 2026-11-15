@@ -46,6 +46,8 @@ impl Worker {
             .env("VIPS_CONCURRENCY", "1")
             .env("VIPS_DISC_THRESHOLD", "1073741824")
             .env("MALLOC_ARENA_MAX", "2")
+            .env("MALLOC_MMAP_THRESHOLD_", "131072")
+            .env("MALLOC_TRIM_THRESHOLD_", "131072")
             .env("PIXSTRIDE_PROCESS_TIMEOUT", timeout.to_string());
         let mut child = command.spawn().map_err(|_| "cannot start native worker")?;
         let (Some(input), Some(output)) = (child.stdin.take(), child.stdout.take()) else {

@@ -10,6 +10,30 @@ pub(super) fn load(bytes: &Arc<Vec<u8>>, options: VOption<'_>) -> Result<VipsIma
         .map_err(|_| "native source decode failed")
 }
 
+pub(super) fn fits_memory(image: &VipsImage) -> bool {
+    image.get_format().ok() == Some(libvips::enums::BandFormat::Uchar)
+        && matches!(image.get_bands(), 1..=4)
+        && image.get_width() > 0
+        && image.get_height() > 0
+        && i64::from(image.get_width())
+            .checked_mul(i64::from(image.get_height()))
+            .and_then(|n| n.checked_mul(i64::from(image.get_bands())))
+            .is_some_and(|n| n <= crate::MAX_FILE as i64)
+}
+
+/// Own a bounded raster independently of decoder/filter regions before reuse.
+pub(super) fn materialize(image: VipsImage) -> Result<VipsImage, Error> {
+    if !fits_memory(&image) {
+        return Err("native materialization exceeds raster budget");
+    }
+    let owned = image
+        .copy_memory()
+        .map_err(|_| "native raster materialization failed")?;
+    drop(image);
+    libvips::Vips::thread_shutdown();
+    Ok(owned)
+}
+
 #[cfg(test)]
 mod tests {
     use libvips::{

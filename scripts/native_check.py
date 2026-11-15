@@ -74,6 +74,8 @@ def check(args):
         photo.write_bytes(jpeg[:2] + b'\xff\xe1' + struct.pack('>H', len(metadata) + 2) + metadata + jpeg[2:])
         assert read_png(run(binary, root, photo, options='rs:fit:25:25'))[0][:2] == (18, 25)
         assert read_png(run(binary, root, photo, options='ar:0/rs:fit:25:25'))[0][:2] == (25, 18)
+        auto_crop = read_png(run(binary, root, photo, options='c:60:40:ce/rs:fit:25:25'))[:2]
+        assert auto_crop == read_png(run(binary, root, photo, options='ar:0/rot:90/c:60:40:ce/rs:fit:25:25'))[:2], 'Materialized JPEG crop lost EXIF orientation'
         run(binary, root, photo, options='rs:fit:25:25', success=False, env={'PIXSTRIDE_MAX_SRC_RESOLUTION':'0.0001'})
         passed.append('jpeg-reduced-decode-odd-sizes-exif-and-budgets')
         gray = root / 'gray16.png'

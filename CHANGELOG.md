@@ -11,6 +11,9 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Keep glibc mmap/trim thresholds fixed at 128 KiB in workers and the container so large per-image allocations can be released instead of raising adaptive heap retention.
+- Materialize bounded cropped JPEG input from a sequential full decode, preserving validation of unused rows while releasing decoder caches. Finish bounded JPEG blur/sharpen rasters and release filter regions before encoding.
+- Stream eligible single-pass TIFF input; keep random access for animation, row rewinds and repeated encoding.
 - Release native source graphs and thread-private regions after materializing eligible PNG output, before allocating filter/compression buffers, then release owned raster pixels before compression. Keep final raster ownership independent and retain byte limits and encoded bytes.
 - Require Adler32 and ancillary CRC validation in the optimized PNG input decoder, including late chunks and cropped requests; override the dependency's permissive defaults.
 - Move encoded inputs and eligible decoded PNG rasters into native graph ownership without redundant copies. Retain shared immutable source bytes until native finalization, use exclusive pixel ownership, and correct the vendored source wrapper's native reference counting when cloned.

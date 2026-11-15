@@ -229,7 +229,17 @@ pub(super) fn save(
     }
     let stripped = super::metadata::strip(&image, r)?;
     drop(image);
-    let image = stripped;
+    let image = if format == OutputFormat::Jpeg
+        && (r.effects.blur_sigma > 0.0 || r.effects.sharpen_sigma > 0.0)
+        && !r.extra.preserve_hdr
+        && super::shared::fits_memory(&stripped)
+    {
+        // Finish neighborhood filters and release their source/working regions
+        // before the JPEG saver allocates coefficient/entropy buffers.
+        super::shared::materialize(stripped)?
+    } else {
+        stripped
+    };
     if format == OutputFormat::Png
         && r.strip_metadata
         && r.strip_color_profile
