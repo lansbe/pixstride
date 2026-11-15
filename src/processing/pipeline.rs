@@ -248,7 +248,7 @@ pub fn process(
     // Reuse qualified banded BMP resizes and validated RGB8 PNG identities.
     // Extended operations and formats still pass through the full facade below.
     let o = &request.options;
-    if matches!(format, OutputFormat::Bmp | OutputFormat::Png)
+    if (format == OutputFormat::Png || (format == OutputFormat::Bmp && !request.extra.accelerated))
         && orientation == 1
         && profile.is_none()
         && o.crop.is_none()
@@ -319,6 +319,10 @@ pub fn process(
                 });
             }
         }
+    }
+    #[cfg(feature = "native-codecs")]
+    if request.extra.accelerated {
+        return crate::processing::native::process(data, request, watermark);
     }
     // The compressed output path must use full Lanczos arithmetic, not the
     // different x4 BMP prehalve shortcut. Keep eligibility intentionally

@@ -1,5 +1,5 @@
 //! Lossless RGB/RGBA PNG encoding for , with adaptive PNG filters and the
-//! in-tree zlib/DEFLATE encoder. No external image or compression library.
+//! bounded libdeflate zlib encoder.
 //!
 //! Input pixels are RGBA8. An entirely opaque image is encoded as RGB8;
 //! otherwise all four channels are preserved. Color metadata is not part of
@@ -304,7 +304,7 @@ fn append_best_row(raw: &mut Vec<u8>, current: &[u8], previous: &[u8], channels:
     append_filtered(raw, current, previous, channels, best);
 }
 
-/// Produce a valid, lossless PNG with a bounded in-tree compressor.
+/// Produce a valid, lossless PNG with bounded libdeflate compression.
 pub fn encode(image: &Image) -> Result<Buffer, Error> {
     let (width, height) = (image.width, image.height);
     if width == 0

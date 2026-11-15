@@ -59,6 +59,17 @@ def check(binary):
         (root / 'bad.png').write_bytes(b'\x89PNG\r\n\x1a\ntruncated')
         red = '/unsafe/plain/local:///red.png@png'
         blue = '/unsafe/plain/local:///blue.png@png'
+        with server(binary, root, {'PIXSTRIDE_ENGINE': 'auto'}) as (port, process, _):
+            identity = request(port, red)
+            assert identity[0] == 200 and identity[2] == (root / 'red.png').read_bytes()
+            assert not children(process.pid), 'Validated opaque PNG identity should keep its builtin path'
+            transformed = request(port, '/unsafe/rs:fit:16:12/plain/local:///red.png@png')
+            assert transformed[0] == 200 and read_png(transformed[2])[0][:2] == (16, 12)
+            assert len(children(process.pid)) == 1, 'Automatic routing should use the reusable native engine for transforms'
+        with server(binary, root, {'PIXSTRIDE_ENGINE': 'builtin'}) as (port, process, _):
+            result = request(port, '/unsafe/rs:fit:16:12/plain/local:///blue.png@png')
+            assert result[0] == 200 and read_png(result[2])[1][:3] == [0, 0, 255]
+            assert not children(process.pid), 'Legacy builtin routing should remain explicitly available'
         with server(binary, root, {'PIXSTRIDE_PROCESS_TIMEOUT': '1'}) as (port, process, _):
             expected = request(port, red)
             assert expected[0] == 200, expected[:2]
@@ -109,17 +120,30 @@ def check(binary):
             assert 2 <= len(seen) <= 3, 'Workers must recycle at a bounded request count'
 
         with server(binary, root, {'PIXSTRIDE_CONCURRENCY': '2', 'PIXSTRIDE_MEMORY_BUDGET_MIB': '4096'}) as (port, process, _):
+            admission_retries = []
             def image(index):
-                return request(port, red if index % 2 else blue)
+                # HTTP admission deliberately returns 503 under backpressure.
+                # Keep this test about native isolation, and fail every codec
+                # error instead of confusing an admissible 503 with corruption.
+                for _ in range(40):
+                    result = request(port, red if index % 2 else blue)
+                    if result[0] != 503:
+                        assert result[0] == 200, (index, result[0], result[2][:160])
+                        return result
+                    admission_retries.append(index)
+                    time.sleep(.01)
+                raise AssertionError('Concurrent request could not obtain bounded HTTP admission')
             with ThreadPoolExecutor(max_workers=4) as clients:
                 results = list(clients.map(image, range(40)))
             assert all(result[0] == 200 for result in results)
             for index, result in enumerate(results):
                 assert read_png(result[2])[1][:3] == ([255, 0, 0] if index % 2 else [0, 0, 255])
             assert 1 <= len(children(process.pid)) <= 2, 'Native concurrency escaped its configured bound'
+            if admission_retries:
+                print(f'Retried {len(admission_retries)} documented HTTP admission 503 responses during native concurrency check')
 
         (root / 'large.png').write_bytes(png(1280, 720, channels=3))
-        with server(binary, root, {'PIXSTRIDE_PROCESS_TIMEOUT': '1'}) as (port, process, _):
+        with server(binary, root, {'PIXSTRIDE_PROCESS_TIMEOUT': '1', 'PIXSTRIDE_PNG_INTERLACED': '1'}) as (port, process, _):
             target = '/unsafe/plain/local:///large.png@png'
             assert request(port, target)[0] == 200
             original = next(iter(children(process.pid)))

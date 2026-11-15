@@ -4,6 +4,8 @@ use super::*;
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
 pub struct Options {
     pub native: bool,
+    #[serde(default)]
+    pub accelerated: bool,
     pub encoding: defaults::Encoding,
     pub preferred: Vec<OutputFormat>,
     pub auto_formats: Vec<OutputFormat>,
@@ -47,6 +49,7 @@ impl Default for Options {
     fn default() -> Self {
         Self {
             native: false,
+            accelerated: false,
             encoding: Default::default(),
             preferred: Vec::new(),
             auto_formats: Vec::new(),

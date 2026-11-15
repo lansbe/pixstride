@@ -15,6 +15,8 @@ mod encode;
 #[cfg(feature = "native-codecs")]
 mod engine;
 #[cfg(feature = "native-codecs")]
+mod fast_svg;
+#[cfg(feature = "native-codecs")]
 mod geometry;
 #[cfg(feature = "native-codecs")]
 mod metadata;

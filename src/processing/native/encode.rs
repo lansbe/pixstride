@@ -78,6 +78,20 @@ fn attempt(
         };
         return Ok(b.as_slice().to_vec());
     }
+    if format == OutputFormat::Png
+        && r.strip_metadata
+        && r.strip_color_profile
+        && !r.extra.keep_copyright
+        && !r.extra.preserve_hdr
+        && !r.extra.encoding.png_quantize
+        && !r.extra.encoding.png_interlaced
+        && image.get_format().ok() == Some(BandFormat::Uchar)
+        && image.get_interpretation().ok() == Some(Interpretation::Srgb)
+        && i64::from(image.get_width()) * i64::from(image.get_height()) * 4
+            <= crate::MAX_FILE as i64
+    {
+        return optimized_png(&raster(image)?);
+    }
     let encoding = &r.extra.encoding;
     let keep = 31;
     let mut options = VOption::new()
@@ -206,6 +220,16 @@ fn attempt(
             );
         }
     }
+    Ok(bytes)
+}
+
+pub(super) fn optimized_png(image: &Image) -> Result<Vec<u8>, Error> {
+    let encoded = crate::png_encode::encode(image)?;
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(encoded.as_slice().len())
+        .map_err(|_| "PNG: allocation failed")?;
+    bytes.extend_from_slice(encoded.as_slice());
     Ok(bytes)
 }
 

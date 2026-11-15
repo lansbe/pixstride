@@ -179,6 +179,11 @@ pub(super) fn initialize() -> Result<(), Error> {
 }
 
 pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeResult, Error> {
+    if sniff(data) == Some(OutputFormat::Svg) {
+        if let Some(result) = super::fast_svg::try_process(data, r)? {
+            return Ok(result);
+        }
+    }
     initialize()?;
     let sanitized;
     let data = if r.extra.encoding.sanitize_svg && sniff(data) == Some(OutputFormat::Svg) {

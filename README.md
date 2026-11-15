@@ -46,12 +46,13 @@ The stable container includes the following features. Optional build features ar
 
 - Built-in input/output codecs and bounded transforms remain available without libvips.
 - Optional native engine: PNG/JPEG/WebP/GIF/TIFF/AVIF/HEIC/JPEG XL, BMP/ICO bridges, broader static SVG, 16-bit gray/RGB/alpha, ICC/metadata handling and bounded GIF/WebP animation.
-- Native processing reuses isolated workers with per-image deadlines and bounded recycling; processed images and libvips operations are not cached.
 - OSS URL options include presets, expiration, key rotation, DPR/zoom/minimum dimensions, canvas extension, smart/fractional crop, repeated watermarks, quality per format and bounded size targeting.
 - GET/HEAD, opt-in bounded keep-alive/pipelining, Bearer authorization, opt-in modern format negotiation, response validators, cache TTL bounded by URL expiration, UTF-8 filenames, CORS, Prometheus and optional OTLP/HTTP traces and request-local source cookies with private response caching.
 - Optional S3/KMS V2/V3 client-side decryption with authenticated in-place processing and verified TLS roots.
 - Optional staged AWS Secrets Manager/SSM, Google Secret Manager and local configuration files; S3/GCS versions and Swift v1/v2/v3 credentials/catalogs.
 - Optional S3/GCS/Azure/Swift readers; nested local files opened without following symlinks. Inbound IPv4/IPv6 TCP or a private Unix socket; bounded admission and optional native concurrency with explicit memory reservations.
+
+Unreleased source builds default to `PIXSTRIDE_ENGINE=auto`: validated opaque PNG identities keep their built-in path, while other eligible transforms use reusable isolated workers when `native-codecs` is enabled. `PIXSTRIDE_ENGINE=builtin` selects legacy routing; `native` forces the worker. PNG compression uses libdeflate and runtime-accelerated CRC32; eligible fontless SVG-to-PNG requests use resvg inside the bounded worker. Images and libvips operations are not cached. Codec/routing changes can change pixels, encoded bytes and ETags; change the signed cachebuster when upgrading. The published 0.3.0 images and benchmark evidence below retain their original behavior.
 
 See [COMPATIBILITY.md](COMPATIBILITY.md) for the complete option/configuration matrix, build features, tests and differences. Pixstride is **not a complete drop-in replacement for imgproxy**. Native plugins and supported high-precision combinations vary by deployment; use `pixstride capabilities` and the native checks. HTTP/cloud fetches retain exact-host and port policies, with public IPv4/IPv6 by default and explicit opt-ins for private address classes. Native deadlines do not apply to the default in-process built-in engine.
 

@@ -75,7 +75,6 @@ fn output(mut out: impl Write, image: engine::NativeResult, persistent: bool) ->
 
 pub(super) fn run(persistent: bool) -> Result<(), Error> {
     limits(persistent)?;
-    engine::initialize()?;
     let mut input = std::io::stdin().lock();
     let mut out = std::io::stdout().lock();
     while let Some(options) = frame(&mut input, 65536)? {

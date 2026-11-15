@@ -50,6 +50,19 @@ fn integer(value: &str, min: u16, max: u16) -> Result<u16, Error> {
     Ok(n)
 }
 impl Config {
+    pub fn with_engine(mut self, engine: &str) -> Result<Self, Error> {
+        match engine {
+            "auto" => self.accelerated = cfg!(feature = "native-codecs"),
+            "builtin" => self.accelerated = false,
+            "native" if cfg!(feature = "native-codecs") => {
+                self.accelerated = false;
+                self.native_defaults = true;
+            }
+            _ => return Err("engine must be auto, builtin or an enabled native engine"),
+        }
+        Ok(self)
+    }
+
     pub fn with_environment(mut self) -> Result<Self, Error> {
         for (name, option) in [
             ("PIXSTRIDE_QUALITY", "q"),
@@ -105,6 +118,8 @@ impl Config {
         }
         self.native_defaults =
             configured || !self.defaults.is_empty() || !self.preferred.is_empty();
+        self =
+            self.with_engine(&std::env::var("PIXSTRIDE_ENGINE").unwrap_or_else(|_| "auto".into()))?;
         self.policy = policy::Policy::from_env()?;
         // Validate every default now, including when no image request follows.
         let probe = Self {
@@ -114,6 +129,7 @@ impl Config {
             encoding: self.encoding.clone(),
             preferred: self.preferred.clone(),
             native_defaults: self.native_defaults,
+            accelerated: self.accelerated,
             signature_size: 32,
             trusted: Vec::new(),
             policy: Default::default(),
@@ -153,6 +169,22 @@ impl Encoding {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn engine_selection_preserves_builtin_and_uses_native_only_when_available() {
+        let auto = Config::unsafe_local().with_engine("auto").unwrap();
+        let request =
+            super::super::parse("/unsafe/rs:fit:16:12/plain/local:///fixture.png@png", &auto)
+                .unwrap();
+        assert_eq!(request.extra.accelerated, cfg!(feature = "native-codecs"));
+        let builtin = Config::unsafe_local().with_engine("builtin").unwrap();
+        assert!(!builtin.accelerated);
+        assert!(!builtin.native_defaults);
+        assert!(Config::unsafe_local().with_engine("invalid").is_err());
+        assert_eq!(
+            Config::unsafe_local().with_engine("native").is_ok(),
+            cfg!(feature = "native-codecs")
+        );
+    }
     #[test]
     fn encoder_ranges_and_flags_are_validated_without_environment_mutation() {
         let mut e = Encoding::default();

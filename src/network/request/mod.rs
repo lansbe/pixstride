@@ -62,6 +62,7 @@ pub struct Config {
     encoding: defaults::Encoding,
     preferred: Vec<OutputFormat>,
     native_defaults: bool,
+    accelerated: bool,
     signature_size: usize,
     trusted: Vec<String>,
     policy: policy::Policy,
