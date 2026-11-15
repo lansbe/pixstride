@@ -56,7 +56,15 @@ The [Benchmarks workflow](.github/workflows/benchmark.yml) shares one corpus bet
 
 The [Candidate benchmarks workflow](.github/workflows/benchmark-candidate.yml) builds the current clean checkout independently on two AMD64 and two ARM64 runners. It uses the same shared corpus, pinned imgproxy image, 25 cases, three modes and full measurement protocol. Candidate images stay local to their runners; there is no registry or release publication. Each is addressed by its inspected immutable Docker image ID and labelled with the exact Git revision. Reports retain source tree, Dockerfile and Cargo.lock hashes; cross-architecture validation requires identical source provenance while allowing platform-specific image IDs. Manual candidate runs use `--pixstride-image sha256:<local-image-id> --candidate-revision <full-clean-commit-sha>` after building with `--label org.opencontainers.image.revision=<full-clean-commit-sha>`.
 
-Candidate workflow success means the full measurements and correctness checks completed, not that every case beat imgproxy. Inspect every CPU/p50/p95/memory ratio and pixel/output-size difference. Keep both independent repetitions, including losses, and repeat near-parity results before claiming a confirmed advantage. The published 0.3.0 results below remain the release baseline until separate candidate evidence is qualified.
+The candidate workflow's final qualification job requires lower default CPU, HTTP p50/p95 and peak cgroup memory in every retained run for all 25 cases on both architectures. Wins within 5% of parity or with CPU batch CV above 10% require a third independent full run per architecture; two runs leave those cases marked `repeat-required`. Any observed loss remains a loss. Forced-native wins cannot substitute for a default loss. Both modes must stay within the worse of the two published modes' per-case composite/alpha MAE and RMSE, with 0.01 numerical tolerance; identity PNGs stay exact. This is an agreement envelope, not a perceptual quality certification. Source, corpus, options, competitor identity and raw-sample independence are checked. The final job fails until the entire target is met, while measurement artifacts retain all losses. Earlier candidate workflow successes (before this gate was added) mean only that measurements and correctness checks completed.
+
+Run the same qualification locally after retaining at least two full reports per architecture (and all additional repeats):
+
+```sh
+python3 scripts/benchmark_qualification.py --reports amd64-*/report.json arm64-*/report.json --output qualification.json --markdown qualification.md
+```
+
+The JSON and Markdown list every case, CPU/p50/p95/memory ratio range, required repeats and pixel regressions. Exit code 1 means the target is not met. Input corruption or incompatible evidence raises an error. The published 0.3.0 results below remain the release baseline until separate candidate evidence is qualified.
 
 After collecting one full raw report per architecture:
 
