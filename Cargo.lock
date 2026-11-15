@@ -1414,6 +1414,7 @@ dependencies = [
  "libdeflate-sys",
  "opendal",
  "openssl",
+ "png",
  "psl",
  "regex",
  "reqsign-aws-v4",

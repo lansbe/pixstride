@@ -19,9 +19,13 @@ mod fast_svg;
 #[cfg(feature = "native-codecs")]
 mod geometry;
 #[cfg(feature = "native-codecs")]
+mod jpeg_decode;
+#[cfg(feature = "native-codecs")]
 mod metadata;
 #[cfg(feature = "native-codecs")]
 mod palette;
+#[cfg(feature = "native-codecs")]
+mod png_decode;
 #[cfg(feature = "native-codecs")]
 mod pool;
 #[cfg(feature = "native-codecs")]

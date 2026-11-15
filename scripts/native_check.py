@@ -4,6 +4,7 @@ import argparse
 import base64
 import json
 import os
+import struct
 from pathlib import Path
 import subprocess
 import tempfile
@@ -56,6 +57,25 @@ def check(args):
             decoded = run(binary, root, intermediate)
             assert read_png(decoded)[0][:2] == (32, 24), fmt
             passed.append('roundtrip-' + fmt)
+        source.write_bytes(png(101, 71))
+        jpeg = run(binary, root, source, output='jpg')
+        photo = root / 'odd.jpg'
+        photo.write_bytes(jpeg)
+        assert read_png(run(binary, root, photo, options='rs:fit:25:25'))[0][:2] == (25, 18)
+        assert read_png(run(binary, root, photo, options='rs:fill:25:25'))[0][:2] == (25, 25)
+        assert read_png(run(binary, root, photo, options='c:60:40:ce/rs:fit:25:25'))[0][:2] == (25, 17)
+        # Repeated quality attempts must be able to rewind the JPEG pixel source.
+        largest = len(run(binary, root, photo, options='q:95', output='jpg'))
+        smallest = len(run(binary, root, photo, options='q:1', output='jpg'))
+        assert smallest < largest, 'Quality fixture does not exercise byte-target attempts'
+        target = (smallest + largest) // 2
+        assert len(run(binary, root, photo, options=f'q:95/mb:{target}', output='jpg')) <= target
+        metadata = b'Exif\0\0' + exif()
+        photo.write_bytes(jpeg[:2] + b'\xff\xe1' + struct.pack('>H', len(metadata) + 2) + metadata + jpeg[2:])
+        assert read_png(run(binary, root, photo, options='rs:fit:25:25'))[0][:2] == (18, 25)
+        assert read_png(run(binary, root, photo, options='ar:0/rs:fit:25:25'))[0][:2] == (25, 18)
+        run(binary, root, photo, options='rs:fit:25:25', success=False, env={'PIXSTRIDE_MAX_SRC_RESOLUTION':'0.0001'})
+        passed.append('jpeg-reduced-decode-odd-sizes-exif-and-budgets')
         gray = root / 'gray16.png'
         values = [x * 2053 for x in range(16)]
         gray.write_bytes(png(16, 2, channels=1, depth=16, rows=[values, values]))

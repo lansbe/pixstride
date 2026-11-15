@@ -268,8 +268,21 @@ pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeRes
             format,
             OutputFormat::Gif | OutputFormat::Webp | OutputFormat::Tiff
         );
+    let mut decoded_plan = None;
     let input = if animated {
         load(data, count, r.extra.enforce_thumbnail)?
+    } else if source_format == OutputFormat::Jpeg {
+        if let Some((image, plan)) = super::jpeg_decode::try_load(data, &head, r)? {
+            decoded_plan = Some(plan);
+            image
+        } else {
+            head
+        }
+    } else if source_format == OutputFormat::Png
+        && head.get_typeof("icc-profile-data").unwrap_or(0) == 0
+        && (!r.auto_rotate || head.get_int("orientation").unwrap_or(1) == 1)
+    {
+        super::png_decode::try_load(data, r)?.unwrap_or(head)
     } else {
         head
     };
@@ -282,11 +295,20 @@ pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeRes
                 0,
                 index as i32 * frame_height,
                 input.get_width(),
-                frame_height,
+                if animated {
+                    frame_height
+                } else {
+                    input.get_height()
+                },
             )
             .map_err(|_| "native frame extraction failed")?;
         let frame = prepare(frame, r)?;
-        let (frame, dpr) = geometry::apply(frame, r, source_format == OutputFormat::Svg)?;
+        let (frame, dpr) = geometry::apply(
+            frame,
+            r,
+            source_format == OutputFormat::Svg,
+            decoded_plan.take(),
+        )?;
         let frame = effects(frame, r)?;
         let frame = geometry::decorate(frame, r, dpr)?;
         let mut frame = super::composite::watermark(frame, mark, r, dpr)?;

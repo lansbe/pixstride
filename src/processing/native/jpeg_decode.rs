@@ -1,0 +1,145 @@
+//! JPEG loading plans keep original dimensions while reducing decode work.
+use super::scale::Plan;
+use crate::{ops::Rotation, request::Request, Error};
+use libvips::{
+    enums::{Access, BandFormat, FailOn, Interpretation},
+    voption::{Setter, VOption},
+    VipsImage,
+};
+
+fn plan(width: i32, height: i32, r: &Request) -> Result<Option<(i32, Plan)>, Error> {
+    if r.options.crop.is_some()
+        || r.options.rotation != Rotation::R0
+        || r.options.flip_horizontal
+        || r.options.flip_vertical
+        || r.effects.trim.is_some()
+        || r.extra.encoding.linear
+        || r.extra.enforce_thumbnail
+    {
+        return Ok(None);
+    }
+    let p = Plan::new(width, height, r, false)?;
+    let largest = p.scale[0].max(p.scale[1]);
+    let shrink = [8, 4, 2]
+        .into_iter()
+        .find(|n| largest <= 1.0 / f64::from(*n))
+        .unwrap_or(1);
+    Ok(Some((shrink, p)))
+}
+
+fn adjust(mut p: Plan, original: [i32; 2], decoded: [i32; 2]) -> Plan {
+    for axis in 0..2 {
+        p.scale[axis] *= f64::from(original[axis]) / f64::from(decoded[axis]);
+    }
+    p
+}
+
+fn sequential(r: &Request) -> bool {
+    r.extra.max_bytes == 0
+        && !r.extra.encoding.png_quantize
+        && !r.extra.smart
+        && r.options.crop.is_none()
+        && r.options.rotation == Rotation::R0
+        && !r.options.flip_vertical
+        && r.options.padding == Default::default()
+        && r.options.background.is_none()
+        && r.options.watermark.is_none()
+        && r.watermark.is_none()
+        && !r.extra.extend
+        && !r.extra.extend_aspect
+        && r.effects.trim.is_none()
+        && r.effects.blur_sigma == 0.0
+        && r.effects.sharpen_sigma == 0.0
+        && r.effects.pixelate <= 1
+}
+
+pub(super) fn try_load(
+    data: &[u8],
+    head: &VipsImage,
+    r: &Request,
+) -> Result<Option<(VipsImage, Plan)>, Error> {
+    if head.get_format().ok() != Some(BandFormat::Uchar)
+        || !matches!(
+            head.get_interpretation().ok(),
+            Some(Interpretation::Srgb | Interpretation::BW)
+        )
+        || !matches!(head.get_bands(), 1 | 3)
+        || (r.auto_rotate && head.get_int("orientation").unwrap_or(1) != 1)
+    {
+        return Ok(None);
+    }
+    let Some((shrink, p)) = plan(head.get_width(), head.get_height(), r)? else {
+        return Ok(None);
+    };
+    let access = if sequential(r) {
+        Access::Sequential
+    } else {
+        Access::Random
+    };
+    if shrink == 1 && access == Access::Random {
+        return Ok(None);
+    }
+    let image = VipsImage::jpegload_buffer_with_opts(
+        data,
+        VOption::new()
+            .set("shrink", shrink)
+            .set("access", access as i32)
+            .set("fail_on", FailOn::Error as i32),
+    )
+    .map_err(|_| "native JPEG reduced decode failed")?;
+    super::engine::checked(image.get_width(), image.get_height())?;
+    let p = adjust(
+        p,
+        [head.get_width(), head.get_height()],
+        [image.get_width(), image.get_height()],
+    );
+    Ok(Some((image, p)))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::request::{self, Config};
+
+    fn request(options: &str) -> request::Request {
+        request::parse(
+            &format!("/unsafe/{options}/plain/local:///fixture.jpg@jpg"),
+            &Config::unsafe_local(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn shrinks_only_when_both_axes_have_enough_source_samples() {
+        let fit = request("rs:fit:320:320");
+        assert_eq!(plan(2048, 920, &fit).unwrap().unwrap().0, 4);
+        let fill = request("rs:fill:256:256");
+        assert_eq!(plan(2048, 920, &fill).unwrap().unwrap().0, 2);
+        assert_eq!(plan(320, 144, &fit).unwrap().unwrap().0, 1);
+        assert!(plan(2048, 920, &request("c:800:600:ce")).unwrap().is_none());
+        assert!(plan(2048, 920, &request("rot:90")).unwrap().is_none());
+        assert!(plan(2048, 920, &request("rs:fit:320:320/trim:10"))
+            .unwrap()
+            .is_none());
+    }
+
+    #[test]
+    fn odd_jpeg_sizes_keep_the_unrounded_resize_plan() {
+        let r = request("rs:fit:25:25");
+        let (shrink, p) = plan(101, 71, &r).unwrap().unwrap();
+        assert_eq!(shrink, 4);
+        let p = adjust(p, [101, 71], [26, 18]);
+        assert_eq!((26.0 * p.scale[0]).round_ties_even(), 25.0);
+        assert_eq!((18.0 * p.scale[1]).round_ties_even(), 18.0);
+        assert_eq!(p.target, [25, 25]);
+    }
+
+    #[test]
+    fn repeated_encoding_and_row_rewinds_keep_random_access() {
+        assert!(sequential(&request("rs:fit:320:320")));
+        assert!(!sequential(&request("rs:fit:320:320/mb:500")));
+        assert!(!sequential(&request("rs:fit:320:320/sh:1")));
+        assert!(!sequential(&request("rs:fit:320:320/bl:2")));
+        assert!(!sequential(&request("rot:90")));
+    }
+}

@@ -119,6 +119,7 @@ pub(super) fn apply(
     mut image: VipsImage,
     r: &Request,
     vector: bool,
+    decoded_plan: Option<super::scale::Plan>,
 ) -> Result<(VipsImage, f64), Error> {
     let o = &r.options;
     let e = &r.extra;
@@ -167,7 +168,10 @@ pub(super) fn apply(
             e.crop_smart,
         )?;
     }
-    let p = super::scale::Plan::new(image.get_width(), image.get_height(), r, vector)?;
+    let p = match decoded_plan {
+        Some(plan) => plan,
+        None => super::scale::Plan::new(image.get_width(), image.get_height(), r, vector)?,
+    };
     let dpr = p.dpr;
     if e.encoding.linear && p.scale != [1.0; 2] {
         let space = image
