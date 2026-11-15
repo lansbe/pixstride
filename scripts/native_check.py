@@ -4,6 +4,7 @@ import argparse
 import base64
 import json
 import os
+import random
 import struct
 from pathlib import Path
 import subprocess
@@ -188,6 +189,10 @@ def check(args):
         svg = root / 'fixture.svg'
         svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><defs><linearGradient id="g"><stop stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient></defs><rect width="32" height="24" fill="url(#g)"/></svg>')
         assert read_png(run(binary, root, svg))[0][:2] == (32, 24)
+        svg_png = run(binary, root, svg)
+        assert run(binary, root, svg, options=f'mb:{len(svg_png)}') == svg_png
+        run(binary, root, svg, options=f'mb:{len(svg_png) - 1}', success=False)
+        run(binary, root, svg, options='mb:1', success=False)
         for content in ('<g transform="translate(4 4)"><path d="M0 0H16V12H0Z" fill="red"/></g>', '<defs><mask id="m"><rect width="16" height="24" fill="white"/></mask></defs><rect width="32" height="24" fill="blue" mask="url(#m)"/>', '<defs><linearGradient id="g"><stop stop-color="red"/></linearGradient></defs><style>rect{fill:url("#g")}</style><rect width="32" height="24"/>', '<text x="2" y="20" font-family="sans-serif" font-size="18" fill="green">X</text>'):
             svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">'+content+'</svg>')
             raster=read_png(run(binary,root,svg))
@@ -205,6 +210,18 @@ def check(args):
         embedded_png=read_png(run(binary,root,svg))
         assert embedded_png[0][:2]==(32,24) and 255 in embedded_png[1], 'Embedded SVG raster was not rendered'
         passed.append('static-svg-sanitization-and-boundary')
+        portrait = root / 'portrait.png'
+        rng = random.Random(1)
+        portrait.write_bytes(png(512, 2048, rows=(rng.randbytes(512 * 3) for _ in range(2048))))
+        jpeg = run(binary, root, portrait, options='q:90', output='jpg')
+        portrait.write_bytes(jpeg)
+        for options in ('rs:fill:128:16/g:ce', 'rs:fill:128:16/g:no', 'rs:auto:64:128/g:ce'):
+            assert run(binary, root, portrait, options=options).startswith(b'\x89PNG')
+        for fraction in (75, 90):
+            portrait.write_bytes(jpeg[:len(jpeg) * fraction // 100])
+            for options in ('rs:fill:128:16/g:ce', 'rs:fill:128:16/g:no', 'rs:auto:64:128/g:ce'):
+                run(binary, root, portrait, options=options, success=False)
+        passed.append('implicit-vertical-crop-rejects-truncated-jpeg')
         source.write_bytes(png(32, 24))
         run(binary, root, source, options='mb:1', output='jpg', success=False)
         run(binary, root, source, options='mb:1', output='png', success=False)

@@ -146,8 +146,12 @@ pub(super) fn try_process(data: &[u8], r: &Request) -> Result<Option<NativeResul
         height: dimensions[1],
         pixels,
     };
+    let body = super::encode::optimized_png(&image)?;
+    if r.extra.max_bytes > 0 && body.len() > r.extra.max_bytes {
+        return Err("size target unavailable for this format");
+    }
     Ok(Some(NativeResult {
-        body: super::encode::optimized_png(&image)?,
+        body,
         dimensions,
         origin: [width as usize, height as usize],
         format: OutputFormat::Png,
@@ -187,5 +191,25 @@ mod tests {
         }
         let huge = br#"<svg width="100000" height="100000"><rect width="1" height="1"/></svg>"#;
         assert!(try_process(huge, &r).is_err());
+    }
+
+    #[test]
+    fn lossless_svg_png_honors_exact_and_exceeded_byte_targets() {
+        let source = br#"<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><rect width="32" height="24" fill="red"/></svg>"#;
+        let mut r = request::parse(
+            "/unsafe/plain/local:///fixture.svg@png",
+            &Config::unsafe_local(),
+        )
+        .unwrap();
+        let original = try_process(source, &r).unwrap().unwrap().body;
+        r.extra.max_bytes = original.len();
+        assert_eq!(try_process(source, &r).unwrap().unwrap().body, original);
+        for limit in [1, original.len() - 1] {
+            r.extra.max_bytes = limit;
+            assert!(
+                try_process(source, &r).is_err(),
+                "ignored byte target {limit}"
+            );
+        }
     }
 }

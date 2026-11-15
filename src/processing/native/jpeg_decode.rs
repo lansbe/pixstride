@@ -14,6 +14,8 @@ pub(super) fn source_access(
 ) -> Access {
     if format == Some(crate::request::OutputFormat::Tiff)
         && sequential(r)
+        && Plan::new(head.get_width(), head.get_height(), r, false)
+            .is_ok_and(|p| reads_all_rows(&p, head.get_height()))
         && (!r.auto_rotate || head.get_int("orientation").unwrap_or(1) == 1)
     {
         Access::Sequential
@@ -62,8 +64,17 @@ fn sequential(r: &Request) -> bool {
         && r.watermark.is_none()
         && !r.extra.extend
         && !r.extra.extend_aspect
+        && !r.extra.fill_down
+        && !r.extra.enforce_thumbnail
         && r.effects.trim.is_none()
         && r.effects.pixelate <= 1
+}
+
+fn reads_all_rows(plan: &Plan, height: i32) -> bool {
+    // Final fill/auto/min/zoom geometry can discard the decoder's last rows.
+    // Only horizontal cropping is safe for a single-pass source; random access
+    // forces complete decoding before any implicit vertical crop is evaluated.
+    plan.target[1] == 0 || f64::from(height) * plan.scale[1] <= f64::from(plan.target[1])
 }
 
 pub(super) fn crop_input(
@@ -110,7 +121,7 @@ pub(super) fn try_load(
     let Some((shrink, p)) = plan(head.get_width(), head.get_height(), r)? else {
         return Ok(None);
     };
-    let access = if sequential(r) {
+    let access = if sequential(r) && reads_all_rows(&p, head.get_height()) {
         Access::Sequential
     } else {
         Access::Random
@@ -243,5 +254,53 @@ mod tests {
         assert_eq!((cropped.get_width(), cropped.get_height()), (9, 6));
         let pixels = super::super::raster::export(&cropped).unwrap();
         assert_eq!(pixels.len(), 9 * 6 * 3);
+    }
+
+    #[test]
+    fn implicit_vertical_crops_reject_truncated_jpeg_tails() {
+        super::super::engine::initialize().unwrap();
+        let mut state = 1u32;
+        let pixels = (0..256 * 1024 * 3)
+            .map(|_| {
+                state = state.wrapping_mul(1664525).wrapping_add(1013904223);
+                (state >> 24) as u8
+            })
+            .collect();
+        let image = VipsImage::new_from_owned_u8(pixels, 256, 1024, 3).unwrap();
+        let data = image
+            .write_to_buffer_with_opts(".jpg", VOption::new().set("Q", 90))
+            .unwrap();
+        drop(image);
+        for options in [
+            "rs:fill:128:16/g:ce",
+            "rs:fill:128:16/g:no",
+            "rs:auto:64:128/g:ce",
+        ] {
+            let mut r = request(options);
+            r.format = Some(crate::request::OutputFormat::Png);
+            assert!(super::super::engine::process(data.clone(), &r, &[]).is_ok());
+            let truncated = data[..data.len() * 9 / 10].to_vec();
+            assert!(
+                super::super::engine::process(truncated, &r, &[]).is_err(),
+                "accepted truncated JPEG with {options}"
+            );
+        }
+    }
+
+    #[test]
+    fn tiff_vertical_crop_requires_complete_source_access() {
+        super::super::engine::initialize().unwrap();
+        let head = VipsImage::new_from_owned_u8(vec![0; 4 * 16 * 3], 4, 16, 3).unwrap();
+        for options in ["rs:fill:4:1", "rs:auto:2:4", "rs:fill-down:4:1"] {
+            assert_eq!(
+                source_access(
+                    Some(crate::request::OutputFormat::Tiff),
+                    &head,
+                    &request(options)
+                ),
+                Access::Random,
+                "sequential TIFF can discard rows with {options}"
+            );
+        }
     }
 }

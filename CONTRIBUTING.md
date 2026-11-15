@@ -74,3 +74,5 @@ Stable `vX.Y.Z` tags publish the version, commit SHA and (when newer) `latest`. 
 The HTTP URL/options, environment variables, CLI and supported image behavior form the public contract. Stable releases follow SemVer; during 0.x, document incompatibilities and increment the minor version. Changes to validation limits can affect previously valid inputs and must be disclosed even when made for security.
 
 This lightweight two-line workflow adapts [GitHub flow](https://docs.github.com/en/get-started/using-github/github-flow) to a separately tested integration line. It avoids the full collection of long-lived Gitflow branches. Version and changelog conventions: [SemVer](https://semver.org/spec/v2.0.0.html), [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
+
+Ordinary and tagged container CI both run `scripts/container_check.py --image pixstride:check --engine auto`, alongside the native-mode check, then verify fail-closed startup. HTTP checks execute from Python on the host; they require no BusyBox or other test client inside the runtime image.

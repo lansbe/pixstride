@@ -2,6 +2,8 @@
 
 The suite measures 25 predefined HTTP image-processing cases on native Linux AMD64 and ARM64. [versions.json](benchmarks/versions.json) pins default published images by immutable multi-platform digest; the initial snapshot compares Pixstride 0.3.0 and imgproxy 4.0.24. Raw reports retain the actual image identities for overrides and future runs. Pixstride default routing and forced-native mode are separate observations. Default routing can select native processing when an input or option requires it.
 
+The candidate win target applies to the default configuration. Forced-native mode is retained as a separate diagnostic in every raw report and can lose individual comparisons; its results cannot replace default-mode observations.
+
 This compares packaged services, including their different libraries and deployment behavior. It does not isolate programming-language performance. The [compatibility suite](COMPATIBILITY.md) still targets imgproxy 4.0.21.
 
 ## Corpus

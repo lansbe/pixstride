@@ -32,6 +32,12 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Decode eligible plain eight-bit PNGs with png 0.18.1 before native geometry, retaining CRC/trailer validation, source budgets, straight alpha and invisible RGB. Metadata, profiles, HDR, palettes, animation and interlace retain the native loader. Reduce eligible JPEGs at load by 2, 4 or 8 and use sequential access for single-pass requests. Keep geometry based on original dimensions, validate original source budgets before shrinking, and preserve random access for repeated quality attempts and operations that rewind rows. Reduced JPEG sampling can change pixels and encoded bytes.
 
 
+### Fixed
+
+- Enforce exact encoded-byte limits for accelerated SVG-to-PNG output, including targets too small for a lossless result.
+- Keep random source access when computed JPEG/TIFF geometry can discard source rows, including implicit vertical fill/auto crops and fill-down. Reject truncated JPEG tails even when the selected crop uses only earlier rows.
+- Exercise the same host-driven default-routing container checks in ordinary and tagged CI, replacing Alpine-only BusyBox clients after the Ubuntu migration.
+
 ## [0.3.0] - 2026-11-14
 
 ### Changed

@@ -110,26 +110,11 @@ jobs:
           docker save pixstride:check -o "$RUNNER_TEMP/pixstride.tar"
           chmod 0444 "$RUNNER_TEMP/pixstride.tar"
           docker run --rm --cap-drop=ALL --security-opt=no-new-privileges --memory=1g --pids-limit=64 -v "$RUNNER_TEMP/pixstride.tar:/image.tar:ro" aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb image --input /image.tar --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 --no-progress
-      - name: Verify locked-down startup and a synthetic image
+      - name: Exercise default routing and locked-down startup
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/images"
-          printf '%s' '<svg width="64" height="48"><rect width="64" height="48" fill="#247ac0"/></svg>' > "$RUNNER_TEMP/images/sample.svg"
-          docker run -d --name pixstride-check --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=512m --pids-limit=64 --cpus=2 -p 127.0.0.1:8080:8080 -v "$RUNNER_TEMP/images:/images:ro" -e PIXSTRIDE_ALLOW_UNSAFE=1 -e PIXSTRIDE_LOCAL_ROOT=/images -e PIXSTRIDE_ALLOWED_HOSTS=127.0.0.1 pixstride:check
-          trap 'docker rm -f pixstride-check' EXIT
-          for attempt in {1..30}; do
-            if curl --fail --silent http://127.0.0.1:8080/health; then break; fi
-            sleep 1
-          done
-          curl --fail --silent --show-error 'http://127.0.0.1:8080/unsafe/rs:fit:32:24/plain/local:///sample.svg@png' -o "$RUNNER_TEMP/output.png"
-          python3 - "$RUNNER_TEMP/output.png" <<'PY'
-          import struct,sys
-          data=open(sys.argv[1],'rb').read()
-          assert data[:8]==b'\x89PNG\r\n\x1a\n'
-          assert struct.unpack('>II',data[16:24])==(32,24)
-          PY
-          test "$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:8080/unsafe/plain/http://127.0.0.1/image.png@png')" = 502
+          python3 scripts/container_check.py --image pixstride:check --engine auto
           if docker run --rm --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=128m --pids-limit=32 pixstride:check; then exit 1; fi
   # Untagged candidates are pushed by digest before validation. In a public
   # package they are publicly pullable. Release tags move only after all checks.
@@ -234,33 +219,11 @@ jobs:
             image --input /image.tar --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 --no-progress
       - name: Verify native runtime restrictions on the exact image
         run: python3 scripts/container_check.py --image pixstride:check
-      - name: Exercise the exact platform image
+      - name: Exercise default routing and locked-down startup
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/images"
-          printf '%s' '<svg width="64" height="48"><rect width="64" height="48" fill="#247ac0"/></svg>' > "$RUNNER_TEMP/images/sample.svg"
-          docker run -d --name pixstride-check --network=none --read-only --cap-drop=ALL \
-            --security-opt=no-new-privileges --memory=512m --pids-limit=64 --cpus=2 \
-            -v "$RUNNER_TEMP/images:/images:ro" -e PIXSTRIDE_ALLOW_UNSAFE=1 \
-            -e PIXSTRIDE_LOCAL_ROOT=/images -e PIXSTRIDE_ALLOWED_HOSTS=127.0.0.1 pixstride:check
-          trap 'docker rm -f pixstride-check >/dev/null 2>&1 || true' EXIT
-          ready=0
-          for attempt in {1..30}; do
-            if docker exec pixstride-check pixstride healthcheck; then ready=1; break; fi
-            sleep 1
-          done
-          test "$ready" = 1
-          docker exec pixstride-check /bin/busybox wget -q -O - \
-            'http://127.0.0.1:8080/unsafe/rs:fit:32:24/plain/local:///sample.svg@png' > "$RUNNER_TEMP/output.png"
-          python3 - "$RUNNER_TEMP/output.png" <<'PY'
-          import struct, sys
-          data = open(sys.argv[1], 'rb').read()
-          assert data[:8] == b'\x89PNG\r\n\x1a\n'
-          assert struct.unpack('>II', data[16:24]) == (32, 24)
-          PY
-          response=$(docker exec pixstride-check /bin/busybox sh -c "printf 'GET /unsafe/plain/http://127.0.0.1/image.png@png HTTP/1.1\\r\\nHost: localhost:8080\\r\\n\\r\\n' | nc -w 2 127.0.0.1 8080")
-          [[ "$response" == 'HTTP/1.1 502 '* ]]
+          python3 scripts/container_check.py --image pixstride:check --engine auto
           if docker run --rm --network=none --read-only --cap-drop=ALL --security-opt=no-new-privileges --memory=128m --pids-limit=32 pixstride:check; then exit 1; fi
       - name: Retain the validated immutable references
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
