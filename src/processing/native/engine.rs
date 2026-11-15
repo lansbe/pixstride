@@ -75,7 +75,10 @@ pub(super) fn load(data: &[u8], frames: usize, thumbnail: bool) -> Result<VipsIm
 }
 
 fn prepare(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
-    if r.auto_rotate {
+    if r.auto_rotate
+        && (image.get_typeof("orientation").unwrap_or(0) != 0
+            || image.get_typeof("exif-ifd0-Orientation").unwrap_or(0) != 0)
+    {
         image = image.autorot().map_err(|_| "native EXIF rotation failed")?;
     }
     if r.strip_color_profile && image.get_typeof("icc-profile-data").unwrap_or(0) != 0 {
@@ -92,13 +95,16 @@ fn prepare(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
             image.get_interpretation(),
             Ok(Interpretation::BW | Interpretation::Grey16)
         );
-        image = image
-            .colourspace(if gray {
-                Interpretation::BW
-            } else {
-                Interpretation::Srgb
-            })
-            .map_err(|_| "native colour conversion failed")?;
+        let space = if gray {
+            Interpretation::BW
+        } else {
+            Interpretation::Srgb
+        };
+        if image.get_interpretation().ok() != Some(space) {
+            image = image
+                .colourspace(space)
+                .map_err(|_| "native colour conversion failed")?;
+        }
     }
     if !r.extra.preserve_hdr
         && image.get_format().map_err(|_| "invalid pixel type")? != BandFormat::Uchar
@@ -290,18 +296,18 @@ pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeRes
     let mut frames = Vec::new();
     let mut sum = 0usize;
     for index in 0..count {
-        let frame = input
-            .extract_area(
-                0,
-                index as i32 * frame_height,
-                input.get_width(),
-                if animated {
-                    frame_height
-                } else {
-                    input.get_height()
-                },
-            )
-            .map_err(|_| "native frame extraction failed")?;
+        let frame = if animated {
+            input
+                .extract_area(
+                    0,
+                    index as i32 * frame_height,
+                    input.get_width(),
+                    frame_height,
+                )
+                .map_err(|_| "native frame extraction failed")?
+        } else {
+            input.clone()
+        };
         let frame = prepare(frame, r)?;
         let (frame, dpr) = geometry::apply(
             frame,

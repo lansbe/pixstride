@@ -48,8 +48,6 @@ fn sequential(r: &Request) -> bool {
         && !r.extra.extend
         && !r.extra.extend_aspect
         && r.effects.trim.is_none()
-        && r.effects.blur_sigma == 0.0
-        && r.effects.sharpen_sigma == 0.0
         && r.effects.pixelate <= 1
 }
 
@@ -138,8 +136,9 @@ mod tests {
     fn repeated_encoding_and_row_rewinds_keep_random_access() {
         assert!(sequential(&request("rs:fit:320:320")));
         assert!(!sequential(&request("rs:fit:320:320/mb:500")));
-        assert!(!sequential(&request("rs:fit:320:320/sh:1")));
-        assert!(!sequential(&request("rs:fit:320:320/bl:2")));
+        assert!(sequential(&request("rs:fit:320:320/sh:1")));
+        assert!(sequential(&request("rs:fit:320:320/bl:2")));
+        assert!(!sequential(&request("rs:fit:320:320/trim:10")));
         assert!(!sequential(&request("rot:90")));
     }
 }

@@ -20,8 +20,8 @@ fn compress_bounded(input: &[u8], limit: usize) -> Result<Vec<u8>, Error> {
     if input.len() > MAX_FILE || limit < 8 {
         return Err("PNG: data or output budget exceeds limit");
     }
-    // SAFETY: level six is valid; a failed C allocation is handled explicitly.
-    let compressor = NonNull::new(unsafe { ffi::libdeflate_alloc_compressor(6) })
+    // SAFETY: level one is valid; a failed C allocation is handled explicitly.
+    let compressor = NonNull::new(unsafe { ffi::libdeflate_alloc_compressor(1) })
         .map(Compressor)
         .ok_or("PNG: compressor allocation failed")?;
     // SAFETY: the compressor is live; input length is bounded above.

@@ -45,7 +45,7 @@ pub(super) fn resize_scale(
         return Err("resize computation budget exceeded");
     }
     if sx == 1.0 && sy == 1.0 {
-        return image.copy().map_err(|_| "native copy failed");
+        return Ok(image.clone());
     }
     let options = VOption::new().set("vscale", sy).set(
         "kernel",
@@ -87,6 +87,9 @@ fn crop(
         width.min(image.get_width()).max(1),
         height.min(image.get_height()).max(1),
     );
+    if !smart && width == image.get_width() && height == image.get_height() {
+        return Ok(image.clone());
+    }
     if smart {
         return image
             .smartcrop(width, height)
