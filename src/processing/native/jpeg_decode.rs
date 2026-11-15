@@ -52,7 +52,7 @@ fn sequential(r: &Request) -> bool {
 }
 
 pub(super) fn try_load(
-    data: &[u8],
+    data: &std::sync::Arc<Vec<u8>>,
     head: &VipsImage,
     r: &Request,
 ) -> Result<Option<(VipsImage, Plan)>, Error> {
@@ -77,7 +77,7 @@ pub(super) fn try_load(
     if shrink == 1 && access == Access::Random {
         return Ok(None);
     }
-    let image = VipsImage::jpegload_buffer_with_opts(
+    let image = super::shared::load(
         data,
         VOption::new()
             .set("shrink", shrink)

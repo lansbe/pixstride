@@ -85,7 +85,7 @@ pub(super) fn run(persistent: bool) -> Result<(), Error> {
         renew_cpu_budget(persistent)?;
         output(
             &mut out,
-            engine::process(&source, &request, &mark)?,
+            engine::process(source, &request, &mark)?,
             persistent,
         )?;
         if !persistent {

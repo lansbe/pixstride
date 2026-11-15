@@ -38,6 +38,15 @@ pub(super) fn checked(width: i32, height: i32) -> Result<(), Error> {
 }
 
 pub(super) fn load(data: &[u8], frames: usize, thumbnail: bool) -> Result<VipsImage, Error> {
+    load_with_owner(data, frames, thumbnail, None)
+}
+
+fn load_with_owner(
+    data: &[u8],
+    frames: usize,
+    thumbnail: bool,
+    owner: Option<&std::sync::Arc<Vec<u8>>>,
+) -> Result<VipsImage, Error> {
     let format = sniff(data);
     if format == Some(OutputFormat::Svg) {
         super::svg::validate(data)?;
@@ -78,8 +87,12 @@ pub(super) fn load(data: &[u8], frames: usize, thumbnail: bool) -> Result<VipsIm
     if thumbnail && matches!(format, Some(OutputFormat::Heic | OutputFormat::Avif)) {
         option = option.set("thumbnail", true);
     }
-    VipsImage::new_from_buffer_with_opts(data, "", option)
-        .map_err(|_| "native source decode failed")
+    if let Some(owner) = owner {
+        super::shared::load(owner, option)
+    } else {
+        VipsImage::new_from_buffer_with_opts(data, "", option)
+            .map_err(|_| "native source decode failed")
+    }
 }
 
 fn prepare(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
@@ -192,9 +205,12 @@ pub(super) fn initialize() -> Result<(), Error> {
     })
 }
 
-pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeResult, Error> {
-    if sniff(data) == Some(OutputFormat::Svg) {
-        if let Some(result) = super::fast_svg::try_process(data, r)? {
+pub(super) fn process(data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeResult, Error> {
+    if data.len() > r.extra.max_source_bytes.min(crate::MAX_FILE) {
+        return Err("native source exceeds byte limit");
+    }
+    if sniff(&data) == Some(OutputFormat::Svg) {
+        if let Some(result) = super::fast_svg::try_process(&data, r)? {
             return Ok(result);
         }
     }
@@ -202,14 +218,15 @@ pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeRes
     // Declared before every image: their last references drop first, then
     // libvips releases this reused thread's private regions and error state.
     let _cleanup = ThreadCleanup;
-    let sanitized;
-    let data = if r.extra.encoding.sanitize_svg && sniff(data) == Some(OutputFormat::Svg) {
-        sanitized = super::svg::sanitize(data)?;
-        &sanitized[..]
-    } else {
-        data
-    };
-    let head = load(data, 1, r.extra.enforce_thumbnail)?;
+    let encoded = std::sync::Arc::new(
+        if r.extra.encoding.sanitize_svg && sniff(&data) == Some(OutputFormat::Svg) {
+            super::svg::sanitize(&data)?
+        } else {
+            data
+        },
+    );
+    let data = encoded.as_slice();
+    let head = load_with_owner(data, 1, r.extra.enforce_thumbnail, Some(&encoded))?;
     let frame_height = head.get_page_height().max(1);
     let origin = [head.get_width() as usize, frame_height as usize];
     checked(head.get_width(), frame_height)?;
@@ -287,9 +304,9 @@ pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeRes
         );
     let mut decoded_plan = None;
     let input = if animated {
-        load(data, count, r.extra.enforce_thumbnail)?
+        load_with_owner(data, count, r.extra.enforce_thumbnail, Some(&encoded))?
     } else if source_format == OutputFormat::Jpeg {
-        if let Some((image, plan)) = super::jpeg_decode::try_load(data, &head, r)? {
+        if let Some((image, plan)) = super::jpeg_decode::try_load(&encoded, &head, r)? {
             decoded_plan = Some(plan);
             image
         } else {
@@ -405,7 +422,7 @@ mod cleanup_tests {
             &crate::request::Config::unsafe_local(),
         )
         .unwrap();
-        assert!(process(&[0xff, 0xd8, 0, 0], &r, &[]).is_err());
+        assert!(process(vec![0xff, 0xd8, 0, 0], &r, &[]).is_err());
         assert!(Vips::error_buffer().unwrap().is_empty());
     }
 }

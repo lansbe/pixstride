@@ -11,6 +11,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Require Adler32 and ancillary CRC validation in the optimized PNG input decoder, including late chunks and cropped requests; override the dependency's permissive defaults.
+- Move encoded inputs and eligible decoded PNG rasters into native graph ownership without redundant copies. Retain shared immutable source bytes until native finalization, use exclusive pixel ownership, and correct the vendored source wrapper's native reference counting when cloned.
 - Release libvips thread-private regions and error state after every native image, after dropping all image references. Bound glibc worker arenas to two. On Linux, request pipe capacity up to 1 MiB when kernel quotas permit, retaining the same framed protocol and absolute deadline.
 - Feed native RGB/RGBA8 rasters directly to lossless PNG encoding and encode ordinary RGB BMP output without expanding to RGBA first. Validate and free the owned GLib allocation once; retain byte-identical output for the same pixels/options.
 - Build unreleased containers with pinned Ubuntu 26.04/glibc and the same Rust 1.100.0 toolchain, retaining non-root execution, codec checks and resource restrictions. Published 0.3.0 images keep Alpine/musl.

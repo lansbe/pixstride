@@ -1,8 +1,8 @@
 //! Bounded Rust PNG inflation before native geometry; preserve metadata/HDR fallbacks.
 use crate::{request::Request, Error};
-use fast_png::{BitDepth, ColorType, Decoder, Info, Limits, Transformations};
+use fast_png::{BitDepth, ColorType, DecodeOptions, Decoder, Info, Limits, Transformations};
 use libvips::{
-    enums::{BandFormat, Interpretation},
+    enums::Interpretation,
     voption::{Setter, VOption},
     VipsImage,
 };
@@ -49,7 +49,12 @@ fn decode(data: &[u8], r: &Request) -> Result<Option<Decoded>, Error> {
     if data.len() > r.extra.max_source_bytes.min(crate::MAX_FILE) {
         return Err("PNG source exceeds byte limit");
     }
-    let mut decoder = Decoder::new(Cursor::new(data));
+    // png defaults to ignoring Adler32 and tolerating ancillary CRC failures.
+    // Require both checks, including late chunks read by finish().
+    let mut checks = DecodeOptions::default();
+    checks.set_ignore_checksums(false);
+    checks.set_skip_ancillary_crc_failures(false);
+    let mut decoder = Decoder::new_with_options(Cursor::new(data), checks);
     decoder.set_transformations(Transformations::IDENTITY);
     decoder.set_limits(Limits {
         bytes: crate::MAX_FILE,
@@ -115,25 +120,19 @@ pub(super) fn try_load(data: &[u8], r: &Request) -> Result<Option<VipsImage>, Er
     else {
         return Ok(None);
     };
-    VipsImage::new_from_memory_copy(
-        &pixels,
-        dimensions[0],
-        dimensions[1],
-        bands,
-        BandFormat::Uchar,
-    )
-    .and_then(|image| {
-        image.copy_with_opts(VOption::new().set(
-            "interpretation",
-            if bands <= 2 {
-                Interpretation::BW
-            } else {
-                Interpretation::Srgb
-            } as i32,
-        ))
-    })
-    .map(Some)
-    .map_err(|_| "native PNG raster import failed")
+    VipsImage::new_from_owned_u8(pixels, dimensions[0], dimensions[1], bands)
+        .and_then(|image| {
+            image.copy_with_opts(VOption::new().set(
+                "interpretation",
+                if bands <= 2 {
+                    Interpretation::BW
+                } else {
+                    Interpretation::Srgb
+                } as i32,
+            ))
+        })
+        .map(Some)
+        .map_err(|_| "native PNG raster import failed")
 }
 
 #[cfg(test)]
@@ -157,6 +156,26 @@ mod tests {
         .unwrap()
         .as_slice()
         .to_vec()
+    }
+
+    #[test]
+    fn decoding_rejects_wrong_adler_even_with_valid_idat_crc_and_late_bad_crc() {
+        let source = sample();
+        let mut corrupt = source.clone();
+        let end = 41 + u32::from_be_bytes(corrupt[33..37].try_into().unwrap()) as usize;
+        corrupt[end - 1] ^= 1;
+        let crc = crc32fast::hash(&corrupt[37..end]);
+        corrupt[end..end + 4].copy_from_slice(&crc.to_be_bytes());
+        assert!(decode(&corrupt, &request()).is_err(), "unchecked Adler32");
+        let mut late = source[..source.len() - 12].to_vec();
+        late.extend_from_slice(&3u32.to_be_bytes());
+        late.extend_from_slice(b"tEXtk\0v");
+        late.extend_from_slice(&0u32.to_be_bytes());
+        late.extend_from_slice(&source[source.len() - 12..]);
+        assert!(
+            decode(&late, &request()).is_err(),
+            "unchecked ancillary CRC"
+        );
     }
 
     fn request() -> request::Request {

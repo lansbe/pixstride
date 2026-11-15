@@ -35,6 +35,8 @@ mod raster;
 #[cfg(feature = "native-codecs")]
 mod scale;
 #[cfg(feature = "native-codecs")]
+mod shared;
+#[cfg(feature = "native-codecs")]
 mod svg;
 #[cfg(feature = "native-codecs")]
 mod worker;

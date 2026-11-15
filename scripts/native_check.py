@@ -205,6 +205,13 @@ def check(args):
         corrupt[29] ^= 1
         source.write_bytes(corrupt)
         run(binary, root, source, success=False)
+        source.write_bytes(png(32, 24, channels=4))
+        corrupt = bytearray(source.read_bytes())
+        size = int.from_bytes(corrupt[33:37], 'big')
+        corrupt[41 + size - 1] ^= 1  # Wrong zlib Adler32, still-valid IDAT CRC.
+        corrupt[41 + size:45 + size] = zlib.crc32(corrupt[37:41 + size]).to_bytes(4, 'big')
+        source.write_bytes(corrupt)
+        run(binary, root, source, options='c:8:8:ce/rs:fit:4:4', success=False)
         passed.append('resource-and-malformed-input-rejection')
     print(f'{len(passed)} native checks passed: ' + ', '.join(passed))
     if args.report:
