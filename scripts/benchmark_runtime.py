@@ -12,13 +12,42 @@ import socket
 import subprocess
 import time
 
-from benchmark_fixtures import MIMES, sha256
+from benchmark_fixtures import MIMES, ROOT, sha256
 from benchmark_metrics import cgroup_location
 
 SECRET = 'synthetic-benchmark-secret'
 KEY, SALT = bytes.fromhex('42' * 32), bytes.fromhex('37' * 16)
 ENGINES = ('pixstride_default', 'pixstride_native', 'imgproxy')
 MEMORY_BYTES = 1024 ** 3
+
+
+def candidate_source(revision, repository=ROOT):
+    """Describe a committed checkout, independently of its platform image ID."""
+    if not re.fullmatch(r'[0-9a-f]{40}', revision):
+        raise ValueError('Candidate revision must be a full Git commit SHA')
+    def git(*args):
+        return subprocess.check_output(['git', '-C', str(repository), *args], text=True).strip()
+    if git('rev-parse', 'HEAD') != revision:
+        raise ValueError('Candidate revision does not match the checkout')
+    if (subprocess.run(['git', '-C', str(repository), 'diff', '--quiet', 'HEAD']).returncode
+            or git('ls-files', '--others', '--exclude-standard')):
+        raise ValueError('Candidate images require a clean committed source checkout')
+    return {'revision': revision, 'tree': git('rev-parse', 'HEAD^{tree}'),
+            'dockerfile_sha256': sha256((repository / 'Dockerfile').read_bytes()),
+            'cargo_lock_sha256': sha256((repository / 'Cargo.lock').read_bytes())}
+
+
+def validate_candidate_image(image, revision):
+    source = image.get('candidate') or {}
+    if (not re.fullmatch(r'sha256:[0-9a-f]{64}', image.get('reference', ''))
+            or image.get('image_id') != image['reference']):
+        raise ValueError('Candidate images must use their inspected immutable local image ID')
+    for field, length in [('revision', 40), ('tree', 40), ('dockerfile_sha256', 64), ('cargo_lock_sha256', 64)]:
+        if not re.fullmatch(r'[0-9a-f]{' + str(length) + '}', source.get(field, '')):
+            raise ValueError('Candidate source provenance is missing or malformed')
+    if (source['revision'] != revision or
+            image.get('labels', {}).get('org.opencontainers.image.revision') != revision):
+        raise ValueError('Candidate image, source checkout and harness must have the same revision')
 
 
 def architecture(value=None):
@@ -108,17 +137,26 @@ class Docker:
     def inspect(self, name):
         return json.loads(self.run('inspect', name))[0]
 
-    def image(self, reference):
-        if not re.search(r'@sha256:[0-9a-f]{64}$', reference):
-            raise ValueError('Benchmark images must include immutable sha256 digests')
-        self.run('pull', reference, timeout=600)
+    def image(self, reference, candidate_revision=None):
+        if candidate_revision:
+            if not re.fullmatch(r'sha256:[0-9a-f]{64}', reference):
+                raise ValueError('Candidate images must be addressed by immutable local image ID')
+            source = candidate_source(candidate_revision)
+        else:
+            if not re.search(r'@sha256:[0-9a-f]{64}$', reference):
+                raise ValueError('Benchmark images must include immutable sha256 digests')
+            self.run('pull', reference, timeout=600)
         data = json.loads(self.run('image', 'inspect', reference))[0]
         require_native_image(data['Architecture'], data['Os'])
-        return {'reference': reference, 'image_id': data['Id'], 'architecture': data['Architecture'],
+        image = {'reference': reference, 'image_id': data['Id'], 'architecture': data['Architecture'],
                 'os': data['Os'], 'repo_digests': data.get('RepoDigests', []),
                 'labels': {key: value for key, value in (data['Config'].get('Labels') or {}).items()
                            if key.startswith('org.opencontainers.image.') and key.rsplit('.', 1)[-1] in
                            {'version', 'revision', 'source', 'created'}}}
+        if candidate_revision:
+            image['candidate'] = source
+            validate_candidate_image(image, candidate_revision)
+        return image
 
     def probe(self, reference, arguments, owner, product):
         name = f'pixstride-bench-{owner}-probe-{product}'

@@ -42,6 +42,46 @@ def measured_report(architecture='amd64'):
 
 
 class BenchmarkReportTests(unittest.TestCase):
+    def test_candidate_pair_uses_same_clean_source_but_arch_specific_immutable_image_ids(self):
+        reports = [measured_report(), measured_report('arm64')]
+        source = dict(revision='b' * 40, tree='e' * 40, dockerfile_sha256='f' * 64, cargo_lock_sha256='1' * 64)
+        for index, report in enumerate(reports):
+            image = report['images']['pixstride']
+            image.update(reference='sha256:' + str(index + 2) * 64,
+                         image_id='sha256:' + str(index + 2) * 64,
+                         candidate=copy.deepcopy(source),
+                         labels={'org.opencontainers.image.revision': 'b' * 40})
+        validate_pair(reports)
+        from benchmark_report import render_overview
+        reports[0]['images']['pixstride']['capabilities'] = {'version': '0.3.0'}
+        reports[0]['images']['imgproxy']['version'] = '4.0.24'
+        rendered = render_overview([reports[0]])
+        self.assertIn('Unreleased candidate', rendered)
+        self.assertIn('b' * 40, rendered)
+        for field in ['revision', 'tree', 'dockerfile_sha256', 'cargo_lock_sha256']:
+            changed = copy.deepcopy(reports)
+            changed[1]['images']['pixstride']['candidate'][field] = '9' * len(source[field])
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate_pair(changed)
+
+    def test_candidate_report_rejects_missing_or_mismatched_source_and_image_provenance(self):
+        original = measured_report()
+        image = original['images']['pixstride']
+        image.update(reference='sha256:' + '2' * 64, image_id='sha256:' + '2' * 64,
+                     candidate=dict(revision='b' * 40, tree='e' * 40, dockerfile_sha256='f' * 64, cargo_lock_sha256='1' * 64),
+                     labels={'org.opencontainers.image.revision': 'b' * 40})
+        validate_report(original)
+        for change in ['mutable', 'image_id', 'revision', 'label', 'missing_source']:
+            report = copy.deepcopy(original)
+            image = report['images']['pixstride']
+            if change == 'mutable': image['reference'] = 'pixstride:candidate'
+            elif change == 'image_id': image['image_id'] = 'sha256:' + '3' * 64
+            elif change == 'revision': image['candidate']['revision'] = 'a' * 40
+            elif change == 'label': image['labels']['org.opencontainers.image.revision'] = 'a' * 40
+            else: del image['candidate']
+            with self.subTest(change=change), self.assertRaises(ValueError):
+                validate_report(report)
+
     def test_host_and_image_architecture_must_agree_before_publication(self):
         report = measured_report('arm64')
         report['images']['pixstride']['architecture'] = 'amd64'

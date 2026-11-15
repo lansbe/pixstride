@@ -54,6 +54,10 @@ Copy the same prepared corpus to the second architecture. Image overrides via `-
 
 The [Benchmarks workflow](.github/workflows/benchmark.yml) shares one corpus between native `ubuntu-24.04` and `ubuntu-24.04-arm` jobs. Qualification pushes on the benchmark branch trigger it; `workflow_dispatch` supports manual reruns after integration. Timing ratios do not gate unrelated PRs. Correctness, input integrity and accounting do gate a benchmark run. Failures retain diagnostics and available partial JSON; owned containers are cleaned. Raw report artifacts have 90-day retention; corpus media have seven days.
 
+The [Candidate benchmarks workflow](.github/workflows/benchmark-candidate.yml) builds the current clean checkout independently on two AMD64 and two ARM64 runners. It uses the same shared corpus, pinned imgproxy image, 25 cases, three modes and full measurement protocol. Candidate images stay local to their runners; there is no registry or release publication. Each is addressed by its inspected immutable Docker image ID and labelled with the exact Git revision. Reports retain source tree, Dockerfile and Cargo.lock hashes; cross-architecture validation requires identical source provenance while allowing platform-specific image IDs. Manual candidate runs use `--pixstride-image sha256:<local-image-id> --candidate-revision <full-clean-commit-sha>` after building with `--label org.opencontainers.image.revision=<full-clean-commit-sha>`.
+
+Candidate workflow success means the full measurements and correctness checks completed, not that every case beat imgproxy. Inspect every CPU/p50/p95/memory ratio and pixel/output-size difference. Keep both independent repetitions, including losses, and repeat near-parity results before claiming a confirmed advantage. The published 0.3.0 results below remain the release baseline until separate candidate evidence is qualified.
+
 After collecting one full raw report per architecture:
 
 ```sh

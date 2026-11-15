@@ -3,6 +3,9 @@ import importlib.util
 import io
 from pathlib import Path
 import sys
+import json
+import subprocess
+import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
@@ -10,6 +13,44 @@ from benchmark_runtime import counter_delta, require_native_image, signed_path, 
 
 
 class BenchmarkRuntimeTests(unittest.TestCase):
+    def test_candidate_source_requires_exact_clean_commit_and_records_build_inputs(self):
+        from benchmark_runtime import candidate_source
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], text=True, stderr=subprocess.DEVNULL).strip()
+            git('init')
+            git('config', 'core.hooksPath', '/dev/null')
+            (root / 'Dockerfile').write_text('FROM scratch\n')
+            (root / 'Cargo.lock').write_text('version = 4\n')
+            git('add', '.')
+            git('-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid', 'commit', '-m', 'fixture')
+            revision = git('rev-parse', 'HEAD')
+            source = candidate_source(revision, root)
+            self.assertEqual(source['revision'], revision)
+            self.assertEqual(source['tree'], git('rev-parse', 'HEAD^{tree}'))
+            self.assertEqual(source['dockerfile_sha256'], 'bb57c7da220a8753d7bdabac0d3afdb6efa742e4c736c5bc93ab40dfd5e23b9b')
+            with self.assertRaises(ValueError): candidate_source('a' * 40, root)
+            (root / 'untracked.rs').write_text('untracked build input')
+            with self.assertRaises(ValueError): candidate_source(revision, root)
+            (root / 'untracked.rs').unlink()
+            (root / 'Cargo.lock').write_text('changed')
+            with self.assertRaises(ValueError): candidate_source(revision, root)
+
+    def test_candidate_image_is_local_immutable_and_revision_label_must_match(self):
+        from benchmark_runtime import validate_candidate_image
+        source = dict(revision='a' * 40, tree='b' * 40, dockerfile_sha256='c' * 64, cargo_lock_sha256='d' * 64)
+        image = {'image_id': 'sha256:' + 'e' * 64,
+                 'reference': 'sha256:' + 'e' * 64,
+                 'labels': {'org.opencontainers.image.revision': 'a' * 40}, 'candidate': source}
+        validate_candidate_image(image, 'a' * 40)
+        for field, value in [('reference', 'pixstride:candidate'), ('image_id', 'sha256:' + 'f' * 64)]:
+            changed = json.loads(json.dumps(image)); changed[field] = value
+            with self.assertRaises(ValueError): validate_candidate_image(changed, 'a' * 40)
+        with self.assertRaises(ValueError): validate_candidate_image(image, 'b' * 40)
+        del image['labels']['org.opencontainers.image.revision']
+        with self.assertRaises(ValueError): validate_candidate_image(image, 'a' * 40)
+
     def test_signed_path_binds_options_source_and_format(self):
         path = signed_path({'options': 'rs:fit:320:320/q:85', 'source': 'landscape.jpg', 'format': 'jpg'})
         self.assertTrue(path.endswith('/rs:fit:320:320/q:85/plain/local:///landscape.jpg@jpg'))

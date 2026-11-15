@@ -146,8 +146,11 @@ def run(args):
     docker = Docker(args.docker)
     owner = uuid.uuid4().hex[:12]
     images = {}
+    if args.candidate_revision and not args.pixstride_image:
+        raise ValueError('Candidate revision requires an immutable local Pixstride image ID')
     for product, override in [('pixstride', args.pixstride_image), ('imgproxy', args.imgproxy_image)]:
-        images[product] = docker.image(override or versions[product]['image'])
+        images[product] = docker.image(override or versions[product]['image'],
+                                       candidate_revision=args.candidate_revision if product == 'pixstride' else None)
     # Probe metadata in separate containers so CLI startup cannot inflate measured peaks.
     images['pixstride']['capabilities'] = json.loads(docker.probe(images['pixstride']['reference'], ['capabilities'], owner, 'pixstride'))
     images['imgproxy']['version'] = docker.probe(images['imgproxy']['reference'], ['imgproxy', 'version'], owner, 'imgproxy')
@@ -202,6 +205,7 @@ def main():
     parser.add_argument('--docker', default='docker')
     parser.add_argument('--architecture', choices=['amd64', 'arm64'])
     parser.add_argument('--pixstride-image')
+    parser.add_argument('--candidate-revision', help='Full clean checkout SHA for a locally built immutable candidate image')
     parser.add_argument('--imgproxy-image')
     parser.add_argument('--batches', type=int, default=6)
     parser.add_argument('--requests', type=int, default=24)

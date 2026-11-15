@@ -42,6 +42,7 @@
 !/.github/workflows/
 !/.github/workflows/container.yml
 !/.github/workflows/benchmark.yml
+!/.github/workflows/benchmark-candidate.yml
 !/.github/dependabot.yml
 !/.github/checks/
 !/.github/checks/abi/

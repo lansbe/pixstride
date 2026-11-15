@@ -11,7 +11,7 @@ import statistics
 
 from benchmark_fixtures import ROOT, corpus_hash, sha256
 from benchmark_metrics import balanced_orders, percentile, summarize_batches
-from benchmark_runtime import ENGINES, MEMORY_BYTES, require_native_image
+from benchmark_runtime import ENGINES, MEMORY_BYTES, require_native_image, validate_candidate_image
 
 LABELS = {'pixstride_default': 'Pixstride default', 'pixstride_native': 'Pixstride native', 'imgproxy': 'imgproxy'}
 
@@ -36,6 +36,10 @@ def validate_report(report):
         if not {'architecture', 'os'}.issubset(image):
             raise ValueError('Reports require inspected image architecture and operating system')
         require_native_image(image['architecture'], image['os'], report['host']['architecture'])
+        if image.get('candidate') or image.get('reference', '').startswith('sha256:'):
+            if product != 'pixstride':
+                raise ValueError('The imgproxy reference must remain a published digest-pinned image')
+            validate_candidate_image(image, report['harness_revision'])
     orders = balanced_orders(ENGINES, protocol['batches'])
     for case in cases:
         if case.get('status') != 'success' or set(case.get('engines', {})) != set(ENGINES):
@@ -77,6 +81,10 @@ def validate_pair(reports):
     if {c['id'] for c in left['cases']} != {c['id'] for c in right['cases']}:
         raise ValueError('Reports do not contain the same cases')
     for product in ['pixstride', 'imgproxy']:
+        if left['images'][product].get('candidate') or right['images'][product].get('candidate'):
+            if left['images'][product].get('candidate') != right['images'][product].get('candidate'):
+                raise ValueError('Candidate images use different source revisions/build inputs')
+            continue
         if left['images'][product]['reference'] != right['images'][product]['reference']:
             raise ValueError('Reports use different image versions')
 
@@ -96,7 +104,10 @@ def overview(report, engine):
 def render_overview(reports):
     protocol = reports[0]['protocol']
     images = reports[0]['images']
-    text = (f'Images: Pixstride **{images["pixstride"]["capabilities"]["version"]}** / imgproxy **{images["imgproxy"]["version"]}**. '
+    candidate = images['pixstride'].get('candidate')
+    identity = (f'Unreleased candidate `{candidate["revision"]}` (package version **{images["pixstride"]["capabilities"]["version"]}**)'
+                if candidate else f'Images: Pixstride **{images["pixstride"]["capabilities"]["version"]}**')
+    text = (f'{identity} / imgproxy **{images["imgproxy"]["version"]}**. '
             f'Per case/mode: {protocol["batches"]} balanced batches × {protocol["requests_per_batch"]} timed requests '
             f'({protocol["batches"] * protocol["requests_per_batch"]} total), after {protocol["warmups"]} warmups.\n\n')
     text += '| Linux | Pixstride mode | Lower CPU | Lower HTTP p50 | Median CPU ratio | Median p50 ratio | Median peak cgroup ratio | Exact visible pixels |\n'
@@ -122,6 +133,10 @@ def render_tables(reports):
         protocol = report['protocol']
         text += f'{protocol["batches"]} batches × {protocol["requests_per_batch"]} timed requests per case/mode, after {protocol["warmups"]} warmups.\n\n'
         text += f'Harness `{report["harness_revision"]}`; corpus SHA-256 `{report["fixtures"]["corpus_sha256"]}`.\n\n'
+        candidate = report['images']['pixstride'].get('candidate')
+        if candidate:
+            text += (f'Unreleased candidate source `{candidate["revision"]}`; '
+                     f'immutable local image `{report["images"]["pixstride"]["image_id"]}`.\n\n')
         text += 'Each triple is **Pixstride default / Pixstride native / imgproxy**. Pixel MAE is **default / native**, taking the larger black/white composite error against imgproxy. Memory is the fresh container lifetime cgroup peak, including startup, warmups, file cache and kernel memory.\n\n'
         text += '| Case | CPU ms/request | HTTP p50 ms | HTTP p95 ms | Peak cgroup MiB | Output KiB | Pixel MAE |\n'
         text += '|---|---:|---:|---:|---:|---:|---:|\n'

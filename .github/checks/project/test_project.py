@@ -66,6 +66,7 @@ class DocumentationTests(unittest.TestCase):
         shutil.copytree(ROOT / ".github/checks/compatibility", self.root / ".github/checks/compatibility")
         (self.root / '.github/workflows').mkdir(parents=True)
         shutil.copyfile(ROOT / '.github/workflows/benchmark.yml', self.root / '.github/workflows/benchmark.yml')
+        shutil.copyfile(ROOT / '.github/workflows/benchmark-candidate.yml', self.root / '.github/workflows/benchmark-candidate.yml')
         (self.root / 'scripts').mkdir()
         shutil.copyfile(ROOT / 'scripts/benchmark_fixtures.py', self.root / 'scripts/benchmark_fixtures.py')
         run("git", "init", "-b", "master", cwd=self.root)
