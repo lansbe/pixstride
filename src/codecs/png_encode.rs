@@ -6,6 +6,8 @@
 //! `Image` and therefore is not invented here.
 
 use crate::{deflate_encode, Buffer, Error, Image, MAX_FILE, MAX_PIXELS};
+#[cfg(target_arch = "x86_64")]
+mod x86;
 
 const SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 const MAX_DIMENSION: usize = 100_000;
@@ -47,7 +49,13 @@ fn filtered(kind: usize, x: u8, a: u8, b: u8, c: u8) -> u8 {
     }
 }
 
-#[cfg(any(test, not(all(target_arch = "aarch64", target_feature = "neon"))))]
+#[cfg(any(
+    test,
+    not(any(
+        target_arch = "x86_64",
+        all(target_arch = "aarch64", target_feature = "neon")
+    ))
+))]
 fn score_filters_scalar(current: &[u8], previous: &[u8], channels: usize) -> [u64; 5] {
     let mut scores = [0u64; 5];
     for i in 0..current.len() {
@@ -173,7 +181,15 @@ fn score_filters(current: &[u8], previous: &[u8], channels: usize) -> [u64; 5] {
     scores
 }
 
-#[cfg(not(all(target_arch = "aarch64", target_feature = "neon")))]
+#[cfg(target_arch = "x86_64")]
+fn score_filters(current: &[u8], previous: &[u8], channels: usize) -> [u64; 5] {
+    x86::scores(current, previous, channels)
+}
+
+#[cfg(not(any(
+    target_arch = "x86_64",
+    all(target_arch = "aarch64", target_feature = "neon")
+)))]
 fn score_filters(current: &[u8], previous: &[u8], channels: usize) -> [u64; 5] {
     score_filters_scalar(current, previous, channels)
 }
@@ -216,6 +232,11 @@ fn append_filtered(
         }
     }
     while i < current.len() {
+        #[cfg(target_arch = "x86_64")]
+        if i + 16 <= current.len() {
+            i = x86::append(raw, current, previous, channels, kind, i);
+            continue;
+        }
         raw.push(filtered(
             kind,
             current[i],
@@ -389,7 +410,7 @@ mod lane_tests {
     #[test]
     fn vector_filter_scores_match_the_scalar_reference_at_lane_boundaries() {
         for channels in [3, 4] {
-            for width in [1, 3, 4, 5, 15, 16, 17, 31, 32, 33, 257] {
+            for width in [1, 3, 4, 5, 15, 16, 17, 31, 32, 33, 257, 40_001] {
                 let current = (0..width * channels)
                     .map(|i| (i * 73 + 19) as u8)
                     .collect::<Vec<_>>();
@@ -401,6 +422,33 @@ mod lane_tests {
                     score_filters_scalar(&current, &previous, channels),
                     "{width} pixels, {channels} channels"
                 );
+                for kind in 0..5 {
+                    let mut actual = Vec::new();
+                    append_filtered(&mut actual, &current, &previous, channels, kind);
+                    let expected: Vec<_> = (0..current.len())
+                        .map(|i| {
+                            filtered(
+                                kind,
+                                current[i],
+                                if i >= channels {
+                                    current[i - channels]
+                                } else {
+                                    0
+                                },
+                                previous[i],
+                                if i >= channels {
+                                    previous[i - channels]
+                                } else {
+                                    0
+                                },
+                            )
+                        })
+                        .collect();
+                    assert_eq!(
+                        actual, expected,
+                        "filter {kind}, {width} pixels, {channels} channels"
+                    );
+                }
             }
         }
     }
