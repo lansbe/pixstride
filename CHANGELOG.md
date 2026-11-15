@@ -11,6 +11,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Use source-precision premultiplied samples for native Lanczos alpha resizing, matching imgproxy’s integer convolution pipeline. Preserve HDR/floating types and explicit quality/lossless settings; low alpha/color samples and encoded bytes can change relative to the previous floating intermediate.
 - Reuse bounded isolated native workers instead of starting a process and initializing libvips for every image. Use nonblocking owned pipes with one absolute read/write deadline, avoiding two per-image helper threads. Keep length-delimited pipes, per-image deadlines and renewed CPU budgets, replace failed workers, recycle after 256 successful images and reap idle workers on shutdown. Native image/operation caches remain disabled; no response cache is added. Performance qualification of this unreleased implementation is recorded separately from the published 0.3.0 baseline.
 - Default unreleased source builds to automatic routing: retain validated opaque PNG identities and use reusable native workers for other eligible transforms. Keep explicit `builtin` legacy routing and forced `native` processing. Native selection can change JPEG sampling/resize pixels, encoded bytes and ETags; change the signed cachebuster or invalidate transformed-image caches when upgrading.
 - Accelerate PNG adaptive filter scoring and residual generation with baseline SSE2 on x86_64, retaining scalar-equivalent scores, filters and tie ordering. ARM64 retains its NEON implementation.

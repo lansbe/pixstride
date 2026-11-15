@@ -61,6 +61,9 @@ pub(super) fn resize_scale(
             .map_err(|_| "invalid native pixel type")?;
         image
             .premultiply()
+            // Preserve the source precision for integer convolution, as in
+            // imgproxy's native resize pipeline; floating/HDR types stay typed.
+            .and_then(|i| if nearest { Ok(i) } else { i.cast(format) })
             .and_then(|i| i.resize_with_opts(sx, options))
             .and_then(|i| i.unpremultiply())
             .and_then(|i| i.cast(format))
@@ -357,4 +360,24 @@ pub(super) fn decorate(mut image: VipsImage, r: &Request, d: f64) -> Result<Vips
             .map_err(|_| "native background failed")?;
     }
     Ok(image)
+}
+
+#[cfg(test)]
+mod alpha_tests {
+    use super::*;
+    #[test]
+    fn alpha_resize_uses_the_input_precision_for_premultiplied_samples() {
+        super::super::engine::initialize().unwrap();
+        let data = [128u8, 64, 32, 128].repeat(64);
+        let image =
+            VipsImage::new_from_memory_copy(&data, 8, 8, 4, libvips::enums::BandFormat::Uchar)
+                .unwrap()
+                .copy_with_opts(VOption::new().set(
+                    "interpretation",
+                    libvips::enums::Interpretation::Srgb as i32,
+                ))
+                .unwrap();
+        let resized = resize_scale(&image, 0.5, 0.5, false).unwrap();
+        assert_eq!(resized.getpoint(0, 0).unwrap(), [127., 63., 31., 128.]);
+    }
 }

@@ -52,7 +52,7 @@ jobs:
             runner: ubuntu-24.04
           - arch: arm64
             runner: ubuntu-24.04-arm
-        repetition: [1, 2]
+        repetition: [1, 2, 3]
     runs-on: ${{ matrix.platform.runner }}
     timeout-minutes: 75
     env:
