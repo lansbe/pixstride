@@ -200,6 +200,9 @@ def check(args):
         passed.append('static-svg-sanitization-and-boundary')
         source.write_bytes(png(32, 24))
         run(binary, root, source, options='mb:1', output='jpg', success=False)
+        run(binary, root, source, options='mb:1', output='png', success=False)
+        plain = run(binary, root, source, output='png')
+        assert run(binary, root, source, options=f'mb:{len(plain)}', output='png') == plain
         run(binary, root, source, options='dpr:100000/el:1', success=False)
         corrupt = bytearray(source.read_bytes())
         corrupt[29] ^= 1

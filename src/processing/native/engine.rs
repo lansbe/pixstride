@@ -303,22 +303,27 @@ pub(super) fn process(data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeR
             OutputFormat::Gif | OutputFormat::Webp | OutputFormat::Tiff
         );
     let mut decoded_plan = None;
-    let input = if animated {
-        load_with_owner(data, count, r.extra.enforce_thumbnail, Some(&encoded))?
-    } else if source_format == OutputFormat::Jpeg {
-        if let Some((image, plan)) = super::jpeg_decode::try_load(&encoded, &head, r)? {
-            decoded_plan = Some(plan);
-            image
+    let input = {
+        // Scope the header owner here: a reduced loader must not leave a second
+        // source graph alive through encoding.
+        let head = head;
+        if animated {
+            load_with_owner(data, count, r.extra.enforce_thumbnail, Some(&encoded))?
+        } else if source_format == OutputFormat::Jpeg {
+            if let Some((image, plan)) = super::jpeg_decode::try_load(&encoded, &head, r)? {
+                decoded_plan = Some(plan);
+                image
+            } else {
+                head
+            }
+        } else if source_format == OutputFormat::Png
+            && head.get_typeof("icc-profile-data").unwrap_or(0) == 0
+            && (!r.auto_rotate || head.get_int("orientation").unwrap_or(1) == 1)
+        {
+            super::png_decode::try_load(data, r)?.unwrap_or(head)
         } else {
             head
         }
-    } else if source_format == OutputFormat::Png
-        && head.get_typeof("icc-profile-data").unwrap_or(0) == 0
-        && (!r.auto_rotate || head.get_int("orientation").unwrap_or(1) == 1)
-    {
-        super::png_decode::try_load(data, r)?.unwrap_or(head)
-    } else {
-        head
     };
     let count = if animated { count } else { 1 };
     let mut frames = Vec::new();
@@ -401,7 +406,10 @@ pub(super) fn process(data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeR
             OutputFormat::Jpeg
         };
     }
-    let bytes = encode::save(&image, r, format, height as i32)?;
+    drop(input);
+    drop(frames);
+    drop(encoded);
+    let bytes = encode::save(image, r, format, height as i32)?;
     Ok(NativeResult {
         body: bytes,
         dimensions: [width, height],

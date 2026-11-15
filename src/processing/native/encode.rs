@@ -63,29 +63,6 @@ fn attempt(
         };
         return Ok(b.as_slice().to_vec());
     }
-    if format == OutputFormat::Png
-        && r.strip_metadata
-        && r.strip_color_profile
-        && !r.extra.keep_copyright
-        && !r.extra.preserve_hdr
-        && !r.extra.encoding.png_quantize
-        && !r.extra.encoding.png_interlaced
-        && image.get_format().ok() == Some(BandFormat::Uchar)
-        && image.get_interpretation().ok() == Some(Interpretation::Srgb)
-        && matches!(image.get_bands(), 3 | 4)
-        && i64::from(image.get_width()) * i64::from(image.get_height()) * 4
-            <= crate::MAX_FILE as i64
-    {
-        let pixels = super::raster::export(image)?;
-        return Ok(crate::png_encode::encode_pixels(
-            image.get_width() as usize,
-            image.get_height() as usize,
-            &pixels,
-            image.get_bands() as usize,
-        )?
-        .as_slice()
-        .to_vec());
-    }
     let encoding = &r.extra.encoding;
     let keep = 31;
     let mut options = VOption::new()
@@ -228,7 +205,7 @@ pub(super) fn optimized_png(image: &Image) -> Result<Vec<u8>, Error> {
 }
 
 pub(super) fn save(
-    image: &VipsImage,
+    image: VipsImage,
     r: &Request,
     format: OutputFormat,
     page_height: i32,
@@ -250,7 +227,36 @@ pub(super) fn save(
     {
         return Err("selected format cannot preserve high precision");
     }
-    let image = super::metadata::strip(image, r)?;
+    let stripped = super::metadata::strip(&image, r)?;
+    drop(image);
+    let image = stripped;
+    if format == OutputFormat::Png
+        && r.strip_metadata
+        && r.strip_color_profile
+        && !r.extra.keep_copyright
+        && !r.extra.preserve_hdr
+        && !r.extra.encoding.png_quantize
+        && !r.extra.encoding.png_interlaced
+        && image.get_format().ok() == Some(BandFormat::Uchar)
+        && image.get_interpretation().ok() == Some(Interpretation::Srgb)
+        && matches!(image.get_bands(), 3 | 4)
+        && i64::from(image.get_width()) * i64::from(image.get_height()) * 4
+            <= crate::MAX_FILE as i64
+    {
+        let pixels = super::raster::detach(image)?;
+        let bytes = crate::png_encode::encode_pixels(
+            pixels.width,
+            pixels.height,
+            pixels.memory,
+            pixels.bands,
+        )?
+        .as_slice()
+        .to_vec();
+        if r.extra.max_bytes > 0 && bytes.len() > r.extra.max_bytes {
+            return Err("size target unavailable for this format");
+        }
+        return Ok(bytes);
+    }
     let image = &image;
     let quality = r
         .quality

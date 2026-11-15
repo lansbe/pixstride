@@ -11,6 +11,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Release native source graphs and thread-private regions after materializing eligible PNG output, before allocating filter/compression buffers, then release owned raster pixels before compression. Keep final raster ownership independent and retain byte limits and encoded bytes.
 - Require Adler32 and ancillary CRC validation in the optimized PNG input decoder, including late chunks and cropped requests; override the dependency's permissive defaults.
 - Move encoded inputs and eligible decoded PNG rasters into native graph ownership without redundant copies. Retain shared immutable source bytes until native finalization, use exclusive pixel ownership, and correct the vendored source wrapper's native reference counting when cloned.
 - Release libvips thread-private regions and error state after every native image, after dropping all image references. Bound glibc worker arenas to two. On Linux, request pipe capacity up to 1 MiB when kernel quotas permit, retaining the same framed protocol and absolute deadline.

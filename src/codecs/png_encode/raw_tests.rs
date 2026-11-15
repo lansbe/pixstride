@@ -22,6 +22,8 @@ fn packed_rgb_encoding_keeps_pixels_and_rgba_encoder_bytes() {
         .unwrap();
         let encoded = encode_pixels(width, height, &rgb, 3).unwrap();
         assert_eq!(encoded.as_slice(), expected.as_slice());
+        let owned = encode_pixels(width, height, rgb.clone(), 3).unwrap();
+        assert_eq!(owned.as_slice(), encoded.as_slice());
         let decoded = crate::png::decode(encoded.as_slice()).unwrap();
         assert_eq!((decoded.width, decoded.height), (width, height));
         for (pixel, expected) in decoded
@@ -34,6 +36,6 @@ fn packed_rgb_encoding_keeps_pixels_and_rgba_encoder_bytes() {
             assert_eq!(pixel[3], 255);
         }
     }
-    assert!(encode_pixels(0, 1, &[], 3).is_err());
-    assert!(encode_pixels(2, 2, &[0; 11], 3).is_err());
+    assert!(encode_pixels(0, 1, [], 3).is_err());
+    assert!(encode_pixels(2, 2, [0; 11], 3).is_err());
 }

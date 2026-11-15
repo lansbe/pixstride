@@ -335,9 +335,10 @@ pub fn encode(image: &Image) -> Result<Buffer, Error> {
 pub(crate) fn encode_pixels(
     width: usize,
     height: usize,
-    input: &[u8],
+    source: impl AsRef<[u8]>,
     source_channels: usize,
 ) -> Result<Buffer, Error> {
+    let input = source.as_ref();
     if !matches!(source_channels, 3 | 4) {
         return Err("PNG: unsupported input channels");
     }
@@ -401,6 +402,9 @@ pub(crate) fn encode_pixels(
     }
     debug_assert_eq!(raw.len(), raw_len);
     drop(previous);
+    // An owned raster is no longer needed after filtering; release it before
+    // the compressor allocates its output/workspace. Borrowed callers retain it.
+    drop(source);
     let compressed = deflate_encode::compress(&raw)?;
     drop(raw);
     let total = compressed

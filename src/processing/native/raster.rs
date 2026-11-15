@@ -15,6 +15,11 @@ impl Deref for Memory {
         unsafe { std::slice::from_raw_parts(self.raw.as_ptr().cast(), self.len) }
     }
 }
+impl AsRef<[u8]> for Memory {
+    fn as_ref(&self) -> &[u8] {
+        self
+    }
+}
 impl Drop for Memory {
     fn drop(&mut self) {
         // SAFETY: uniquely owned memory returned by vips_image_write_to_memory.
@@ -45,9 +50,49 @@ pub(super) fn export(image: &VipsImage) -> Result<Memory, Error> {
     Ok(memory)
 }
 
+pub(super) struct Detached {
+    pub width: usize,
+    pub height: usize,
+    pub bands: usize,
+    pub memory: Memory,
+}
+
+/// Materialize every output pixel, then release the graph before Rust encoding.
+pub(super) fn detach(image: VipsImage) -> Result<Detached, Error> {
+    let raster = Detached {
+        width: image.get_width() as usize,
+        height: image.get_height() as usize,
+        bands: image.get_bands() as usize,
+        memory: export(&image)?,
+    };
+    drop(image);
+    // This worker thread owns the graph. Private regions may retain source
+    // images after its public references drop; the exported memory is separate.
+    libvips::Vips::thread_shutdown();
+    Ok(raster)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn detached_pixels_release_the_source_graph_before_compression() {
+        use libvips::VipsSource;
+        use std::sync::Arc;
+        super::super::engine::initialize().unwrap();
+        let image = VipsImage::new_from_owned_u8(vec![1, 2, 3, 4, 5, 6], 2, 1, 3).unwrap();
+        let bytes = Arc::new(image.write_to_buffer(".png").unwrap());
+        drop(image);
+        let weak = Arc::downgrade(&bytes);
+        let source = VipsSource::new_from_shared_memory(bytes).unwrap();
+        let image = VipsImage::new_from_source(&source, "").unwrap();
+        drop(source);
+        let detached = detach(image).unwrap();
+        assert!(weak.upgrade().is_none(), "encoded source still retained");
+        assert_eq!((detached.width, detached.height, detached.bands), (2, 1, 3));
+        assert_eq!(&*detached.memory, &[1, 2, 3, 4, 5, 6]);
+    }
+
     #[test]
     fn owned_export_preserves_bands_and_rejects_non_byte_samples() {
         super::super::engine::initialize().unwrap();
