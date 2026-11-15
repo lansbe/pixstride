@@ -11,6 +11,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Feed native RGB/RGBA8 rasters directly to lossless PNG encoding and encode ordinary RGB BMP output without expanding to RGBA first. Validate and free the owned GLib allocation once; retain byte-identical output for the same pixels/options.
 - Build unreleased containers with pinned Ubuntu 26.04/glibc and the same Rust 1.100.0 toolchain, retaining non-root execution, codec checks and resource restrictions. Published 0.3.0 images keep Alpine/musl.
 - Use libdeflate level 1 for lossless compression to reduce CPU/latency at the cost of larger encoded output. Keep decoded samples, quality settings and file ceilings unchanged. Avoid redundant native full-frame extraction, identity crops/resizes and color-space operations; allow streaming JPEG blur/sharpen while retaining random access for row-rewinding operations and byte-target retries.
 - Use source-precision premultiplied samples for native Lanczos alpha resizing, matching imgproxy’s integer convolution pipeline. Preserve HDR/floating types and explicit quality/lossless settings; low alpha/color samples and encoded bytes can change relative to the previous floating intermediate.

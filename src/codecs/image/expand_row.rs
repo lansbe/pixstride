@@ -321,6 +321,39 @@ pub(crate) fn encode_bmp(image: &Image) -> Result<Buffer, Error> {
     }
     Ok(buffer)
 }
+#[cfg(any(test, feature = "native-codecs"))]
+pub(crate) fn encode_bmp_rgb(width: usize, height: usize, rgb: &[u8]) -> Result<Buffer, Error> {
+    dimensions(width, height)?;
+    if rgb.len() != width * height * 3 {
+        return Err("BMP: inconsistent RGB raster");
+    }
+    let (mut buffer, stride) = bmp_output(width, height)?;
+    for y in 0..height {
+        let input = &rgb[y * width * 3..(y + 1) * width * 3];
+        let at = 54 + (height - 1 - y) * stride;
+        let out = &mut buffer.as_mut_slice()[at..at + width * 3];
+        #[cfg_attr(not(target_arch = "aarch64"), allow(unused_mut))]
+        let mut x = 0;
+        #[cfg(target_arch = "aarch64")]
+        unsafe {
+            use core::arch::aarch64::*;
+            while x + 16 <= width {
+                // SAFETY: the guard covers sixteen complete RGB pixels on
+                // both disjoint rows. The store only swaps red and blue.
+                let v = vld3q_u8(input.as_ptr().add(x * 3));
+                vst3q_u8(out.as_mut_ptr().add(x * 3), uint8x16x3_t(v.2, v.1, v.0));
+                x += 16;
+            }
+        }
+        for (src, dst) in input[x * 3..]
+            .chunks_exact(3)
+            .zip(out[x * 3..].chunks_exact_mut(3))
+        {
+            dst.copy_from_slice(&[src[2], src[1], src[0]]);
+        }
+    }
+    Ok(buffer)
+}
 pub(crate) fn full_jpeg_bmp(
     parsed: crate::jpeg::ParsedJpeg<'_>,
     width: usize,

@@ -31,6 +31,8 @@ mod png_decode;
 #[cfg(feature = "native-codecs")]
 mod pool;
 #[cfg(feature = "native-codecs")]
+mod raster;
+#[cfg(feature = "native-codecs")]
 mod scale;
 #[cfg(feature = "native-codecs")]
 mod svg;

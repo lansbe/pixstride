@@ -126,7 +126,11 @@ cp "$here/abi_harness.rs" "$here/abi_probe_tests.rs" "$tmp/"
 cp "$repo/src/network/fetch/policy.rs" "$tmp/policy.rs"
 cp "$repo/src/network/fetch/response.rs" "$tmp/response.rs"
 cc -std=c11 -Wall -Wextra -Werror -c "$here/abi_check.c" -o "$tmp/abi_check.o"
+# Native archives precede the platform runtime libraries in rustc's link order.
+# A trailing link-arg object can introduce stack-protector/libc references after
+# GNU --as-needed has already discarded their providers (notably ARM64 glibc).
+ar crs "$tmp/libpixstride_abi.a" "$tmp/abi_check.o"
 # RUSTFLAGS carries the build target and linker options where provided.
 # shellcheck disable=SC2086
-CARGO_PKG_VERSION=abi rustc --edition=2021 "$tmp/abi_harness.rs" ${RUSTFLAGS:-} -C "link-arg=$tmp/abi_check.o" -o "$tmp/abi_check"
+CARGO_PKG_VERSION=abi rustc --edition=2021 "$tmp/abi_harness.rs" ${RUSTFLAGS:-} -L "native=$tmp" -l static=pixstride_abi -o "$tmp/abi_check"
 "$tmp/abi_check"

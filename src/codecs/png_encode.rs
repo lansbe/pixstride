@@ -6,6 +6,8 @@
 //! `Image` and therefore is not invented here.
 
 use crate::{deflate_encode, Buffer, Error, Image, MAX_FILE, MAX_PIXELS};
+#[cfg(test)]
+mod raw_tests;
 #[cfg(target_arch = "x86_64")]
 mod x86;
 
@@ -327,7 +329,18 @@ fn append_best_row(raw: &mut Vec<u8>, current: &[u8], previous: &[u8], channels:
 
 /// Produce a valid, lossless PNG with bounded libdeflate compression.
 pub fn encode(image: &Image) -> Result<Buffer, Error> {
-    let (width, height) = (image.width, image.height);
+    encode_pixels(image.width, image.height, image.pixels.as_slice(), 4)
+}
+
+pub(crate) fn encode_pixels(
+    width: usize,
+    height: usize,
+    input: &[u8],
+    source_channels: usize,
+) -> Result<Buffer, Error> {
+    if !matches!(source_channels, 3 | 4) {
+        return Err("PNG: unsupported input channels");
+    }
     if width == 0
         || height == 0
         || width > MAX_DIMENSION
@@ -336,15 +349,16 @@ pub fn encode(image: &Image) -> Result<Buffer, Error> {
     {
         return Err("PNG: dimensions out of bounds");
     }
-    let input_stride = width.checked_mul(4).ok_or("PNG: size too large")?;
+    let input_stride = width
+        .checked_mul(source_channels)
+        .ok_or("PNG: size too large")?;
     let input_len = input_stride
         .checked_mul(height)
         .ok_or("PNG: size too large")?;
-    let input = image.pixels.as_slice();
     if input.len() != input_len {
         return Err("PNG: inconsistent pixels");
     }
-    let opaque = all_opaque(input);
+    let opaque = source_channels == 3 || all_opaque(input);
     let channels = if opaque { 3 } else { 4 };
     let stride = width.checked_mul(channels).ok_or("PNG: size too large")?;
     let raw_len = stride
@@ -358,7 +372,16 @@ pub fn encode(image: &Image) -> Result<Buffer, Error> {
     raw.try_reserve_exact(raw_len)
         .map_err(|_| "PNG: allocation failed")?;
     let mut previous = zeros(stride)?;
-    if opaque {
+    if source_channels == 3 {
+        for (y, row) in input.chunks_exact(input_stride).enumerate() {
+            let above = if y == 0 {
+                previous.as_slice()
+            } else {
+                &input[(y - 1) * input_stride..y * input_stride]
+            };
+            append_best_row(&mut raw, row, above, 3);
+        }
+    } else if opaque {
         let mut current = zeros(stride)?;
         for row in input.chunks_exact(input_stride) {
             opaque_rgb_row(row, &mut current);

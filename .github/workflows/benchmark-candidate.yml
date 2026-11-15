@@ -12,6 +12,7 @@ on:
       - scripts/benchmark*.py
       - scripts/native_pool_check.py
       - .github/checks/project/test_benchmark*.py
+      - .github/checks/abi/**
       - .github/workflows/benchmark-candidate.yml
 permissions:
   contents: read
