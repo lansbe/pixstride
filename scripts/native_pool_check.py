@@ -57,6 +57,7 @@ def check(binary):
         for name, color in [('red', [255, 0, 0]), ('blue', [0, 0, 255])]:
             (root / (name + '.png')).write_bytes(png(32, 24, channels=3, rows=[color * 32] * 24))
         (root / 'bad.png').write_bytes(b'\x89PNG\r\n\x1a\ntruncated')
+        (root / 'large-bad.png').write_bytes(b'\x89PNG\r\n\x1a\n' + bytes(4 * 1024 * 1024))
         red = '/unsafe/plain/local:///red.png@png'
         blue = '/unsafe/plain/local:///blue.png@png'
         with server(binary, root, {'PIXSTRIDE_ENGINE': 'auto'}) as (port, process, _):
@@ -103,6 +104,13 @@ def check(binary):
             assert time.monotonic() - started < 4, 'Native wall-clock deadline was not enforced'
             assert gone(stopped), 'Timed-out worker was not killed and reaped'
             assert request(port, red)[2] == expected[2], 'Timeout poisoned the next request'
+            stopped = next(iter(children(process.pid)))
+            os.kill(stopped, signal.SIGSTOP)
+            started = time.monotonic()
+            assert request(port, '/unsafe/plain/local:///large-bad.png@png')[0] != 200
+            assert time.monotonic() - started < 4, 'A full input pipe escaped the exchange deadline'
+            assert gone(stopped), 'Write-blocked worker was not killed and reaped'
+            assert request(port, red)[2] == expected[2], 'Write timeout poisoned the next request'
             idle = children(process.pid)
         deadline = time.monotonic() + 3
         while any(not gone(pid) for pid in idle) and time.monotonic() < deadline:

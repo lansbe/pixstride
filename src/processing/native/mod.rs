@@ -25,6 +25,8 @@ mod metadata;
 #[cfg(feature = "native-codecs")]
 mod palette;
 #[cfg(feature = "native-codecs")]
+mod pipe;
+#[cfg(feature = "native-codecs")]
 mod png_decode;
 #[cfg(feature = "native-codecs")]
 mod pool;

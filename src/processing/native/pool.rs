@@ -1,10 +1,9 @@
 //! Bounded, recyclable native processes; pixels and operations are never cached.
-use super::{parse_output, timeout, worker};
+use super::{parse_output, pipe, timeout, worker};
 use crate::{pipeline::Processed, Error};
 use std::{
-    io::Write,
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
-    sync::{mpsc, Condvar, Mutex, OnceLock},
+    sync::{Condvar, Mutex, OnceLock},
     time::{Duration, Instant},
 };
 
@@ -53,91 +52,51 @@ impl Worker {
             let _ = child.wait();
             return Err("native worker pipe unavailable");
         };
-        Ok(Self {
+        let worker = Self {
             child,
             input,
             output,
             requests: 0,
             timeout,
-        })
+        };
+        pipe::nonblocking(&worker.input)?;
+        pipe::nonblocking(&worker.output)?;
+        Ok(worker)
     }
 
     fn exchange(&mut self, options: &[u8], source: &[u8], mark: &[u8]) -> Result<Processed, Error> {
-        let Self {
-            child,
-            input,
-            output,
-            timeout,
-            ..
-        } = self;
-        std::thread::scope(|scope| {
-            let (sent, received) = mpsc::sync_channel(1);
-            let (write_sent, write_received) = mpsc::sync_channel(1);
-            let deadline = Instant::now() + Duration::from_secs(*timeout);
-            let writer = std::thread::Builder::new()
-                .name("native-input".into())
-                .spawn_scoped(scope, move || {
-                    let result = (|| -> std::io::Result<()> {
-                        for bytes in [options, source, mark] {
-                            input.write_all(&(bytes.len() as u64).to_le_bytes())?;
-                            input.write_all(bytes)?;
-                        }
-                        input.flush()
-                    })();
-                    let _ = write_sent.send(result);
-                })
-                .map_err(|_| "cannot start native input thread")?;
-            let reader = match std::thread::Builder::new()
-                .name("native-output".into())
-                .spawn_scoped(scope, move || {
-                    let result = worker::frame(output, worker::OUTPUT_LIMIT)
-                        .and_then(|bytes| bytes.ok_or("native worker closed output"));
-                    let _ = sent.send(result);
-                }) {
-                Ok(reader) => reader,
-                Err(_) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    let _ = writer.join();
-                    return Err("cannot start native output thread");
+        let deadline = Instant::now() + Duration::from_secs(self.timeout);
+        let result = (|| {
+            for bytes in [options, source, mark] {
+                pipe::write_all(
+                    &mut self.input,
+                    &(bytes.len() as u64).to_le_bytes(),
+                    deadline,
+                )?;
+                pipe::write_all(&mut self.input, bytes, deadline)?;
+            }
+            let bytes = pipe::frame(&mut self.output, worker::OUTPUT_LIMIT, deadline)?;
+            parse_output(&bytes)
+        })();
+        if result.is_err() {
+            use std::os::unix::process::ExitStatusExt;
+            let status = match self.child.try_wait() {
+                Ok(Some(status)) => Some(status),
+                _ => {
+                    let _ = self.child.kill();
+                    self.child.wait().ok()
                 }
             };
-            let written = write_received
-                .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-                .map_err(|_| "native processing deadline exceeded")
-                .and_then(|result| result.map_err(|_| "native input rejected"));
-            let result = written.and_then(|()| {
-                received
-                    .recv_timeout(deadline.saturating_duration_since(Instant::now()))
-                    .map_err(|_| "native processing deadline exceeded")
-                    .and_then(|result| result)
-            });
-            let mut crashed = false;
-            if result.is_err() {
-                use std::os::unix::process::ExitStatusExt;
-                let status = match child.try_wait() {
-                    Ok(Some(status)) => Some(status),
-                    _ => {
-                        let _ = child.kill();
-                        child.wait().ok()
-                    }
-                };
-                crashed = status.is_some_and(|status| {
-                    status.code() == Some(101)
-                        || status.signal().is_some_and(|signal| {
-                            [libc::SIGSEGV, libc::SIGBUS, libc::SIGILL, libc::SIGABRT]
-                                .contains(&signal)
-                        })
-                });
-            }
-            writer.join().map_err(|_| "native input worker failed")?;
-            reader.join().map_err(|_| "native output worker failed")?;
-            if crashed {
+            if status.is_some_and(|status| {
+                status.code() == Some(101)
+                    || status.signal().is_some_and(|signal| {
+                        [libc::SIGSEGV, libc::SIGBUS, libc::SIGILL, libc::SIGABRT].contains(&signal)
+                    })
+            }) {
                 return Err("native worker crashed");
             }
-            let bytes = result?;
-            parse_output(&bytes)
-        })
+        }
+        result
     }
 }
 
