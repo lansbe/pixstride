@@ -6,6 +6,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- Retain the qualified unreleased candidate's six complete native Linux runs: default routing has lower CPU, HTTP p50/p95 and peak cgroup memory in all 25 cases in each of three AMD64 and three ARM64 runs. See [the measurements and limits](BENCHMARKS.md#unreleased-candidate-confirmation), including larger encoded files and decoded-pixel differences. Published 0.3.0 results remain separate.
 - Publish qualified repeated candidate snapshots separately from release evidence, retaining every raw report and checking archive hashes, derived metrics and generated documentation. Add aggregate process-memory diagnostics in separate post-measurement containers.
 - Add repeated candidate qualification that rejects default CPU/p50/p95/memory losses, duplicate samples, mismatched source/corpus/options and decoded-pixel regressions; require extra retained runs near parity before confirming 25/25.
 - Reusable 25-case image-processing benchmarks for native Linux AMD64 and ARM64, comparing immutable Pixstride default/native and imgproxy images with one shared public corpus, balanced repeated HTTP measurements, child-inclusive CPU, peak cgroup memory, output sizes and decoded-pixel differences. Preserve raw samples and generate checked documentation tables from the measured evidence.

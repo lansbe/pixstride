@@ -89,6 +89,142 @@ Committed evidence contains losslessly compressed raw samples plus readable summ
 
 Evidence: [AMD64 summary](benchmarks/results/linux-amd64.json) / [complete samples](benchmarks/results/linux-amd64.raw.json.gz), [ARM64 summary](benchmarks/results/linux-arm64.json) / [complete samples](benchmarks/results/linux-arm64.raw.json.gz). Each summary records the compressed archive and decoded JSON hashes. These are the final qualification run's results; earlier development trials are not mixed into this snapshot.
 
+<!-- candidate:details:start -->
+## Unreleased candidate confirmation
+
+Unreleased [candidate `fe350b73b784`](https://github.com/lansbe/pixstride/commit/fe350b73b7841251f99a224abe33f46acb970842); default routing, all retained native runs. The published 0.3.0 baseline below is unchanged.
+
+Candidate `fe350b73b7841251f99a224abe33f46acb970842`: **25/25 confirmed on both architectures**.
+
+Default routing only; CPU, HTTP p50/p95 and peak cgroup memory must be lower in every retained run. Close timings (within 5%) or noisy CPU require at least three runs. Both modes retain the published decoded-pixel error envelope; PNG identities stay exact. This pixel agreement check does not certify perceptual equivalence.
+
+### Linux amd64: 25/25 confirmed, 3 runs
+
+| Case | Status | CPU ratio | p50 ratio | p95 ratio | Peak cgroup ratio |
+|---|---|---:|---:|---:|---:|
+| 01-jpeg-identity | confirmed-win | 0.643–0.679× | 0.719–0.748× | 0.695–0.740× | 0.450–0.600× |
+| 02-jpeg-thumbnail | confirmed-win | 0.839–0.898× | 0.889–0.935× | 0.904–0.911× | 0.663–0.729× |
+| 03-jpeg-medium | confirmed-win | 0.783–0.826× | 0.839–0.871× | 0.810–0.858× | 0.716–0.744× |
+| 04-jpeg-square | confirmed-win | 0.859–0.901× | 0.898–0.938× | 0.866–0.898× | 0.735–0.756× |
+| 05-jpeg-retina | confirmed-win | 0.786–0.830× | 0.863–0.887× | 0.849–0.871× | 0.696–0.720× |
+| 06-photo-crop | confirmed-win | 0.407–0.438× | 0.465–0.483× | 0.463–0.489× | 0.789–0.816× |
+| 07-photo-rotate | confirmed-win | 0.738–0.793× | 0.733–0.806× | 0.668–0.761× | 0.560–0.623× |
+| 08-photo-blur | confirmed-win | 0.825–0.873× | 0.854–0.906× | 0.558–0.906× | 0.845–0.867× |
+| 09-photo-sharpen | confirmed-win | 0.787–0.836× | 0.812–0.858× | 0.820–0.846× | 0.926–0.935× |
+| 10-png-identity | confirmed-win | 0.122–0.135× | 0.145–0.159× | 0.144–0.161× | 0.272–0.289× |
+| 11-png-thumbnail | confirmed-win | 0.403–0.454× | 0.445–0.497× | 0.448–0.500× | 0.601–0.612× |
+| 12-png-jpeg | confirmed-win | 0.464–0.489× | 0.489–0.525× | 0.491–0.525× | 0.578–0.599× |
+| 13-png-bmp | confirmed-win | 0.448–0.502× | 0.483–0.534× | 0.490–0.546× | 0.626–0.630× |
+| 14-photo-webp | confirmed-win | 0.849–0.909× | 0.859–0.927× | 0.841–0.912× | 0.822–0.857× |
+| 15-earth-png | confirmed-win | 0.360–0.438× | 0.493–0.558× | 0.472–0.663× | 0.670–0.690× |
+| 16-progressive-jpeg | confirmed-win | 0.787–0.866× | 0.834–0.890× | 0.730–0.900× | 0.753–0.800× |
+| 17-alpha-identity | confirmed-win | 0.478–0.749× | 0.608–0.872× | 0.625–0.868× | 0.589–0.632× |
+| 18-alpha-thumbnail | confirmed-win | 0.531–0.659× | 0.679–0.792× | 0.639–0.731× | 0.612–0.622× |
+| 19-alpha-jpeg | confirmed-win | 0.787–0.877× | 0.824–0.911× | 0.789–0.951× | 0.796–0.846× |
+| 20-alpha-webp | confirmed-win | 0.782–0.871× | 0.801–0.884× | 0.799–0.890× | 0.868–0.937× |
+| 21-graphics-identity | confirmed-win | 0.074–0.103× | 0.099–0.129× | 0.100–0.131× | 0.164–0.180× |
+| 22-graphics-square | confirmed-win | 0.549–0.706× | 0.684–0.884× | 0.700–0.871× | 0.641–0.668× |
+| 23-grayscale-jpeg | confirmed-win | 0.452–0.514× | 0.463–0.522× | 0.475–0.538× | 0.611–0.663× |
+| 24-tiff-png | confirmed-win | 0.404–0.423× | 0.476–0.490× | 0.475–0.494× | 0.682–0.699× |
+| 25-svg-raster | confirmed-win | 0.530–0.598× | 0.594–0.673× | 0.588–0.636× | 0.453–0.475× |
+
+### Linux arm64: 25/25 confirmed, 3 runs
+
+| Case | Status | CPU ratio | p50 ratio | p95 ratio | Peak cgroup ratio |
+|---|---|---:|---:|---:|---:|
+| 01-jpeg-identity | confirmed-win | 0.737–0.742× | 0.766–0.768× | 0.740–0.743× | 0.560–0.655× |
+| 02-jpeg-thumbnail | confirmed-win | 0.918–0.926× | 0.940–0.944× | 0.931–0.940× | 0.749–0.812× |
+| 03-jpeg-medium | confirmed-win | 0.873–0.876× | 0.886–0.894× | 0.878–0.886× | 0.684–0.739× |
+| 04-jpeg-square | confirmed-win | 0.920–0.923× | 0.943–0.946× | 0.926–0.946× | 0.745–0.810× |
+| 05-jpeg-retina | confirmed-win | 0.879–0.884× | 0.896–0.906× | 0.871–0.890× | 0.733–0.828× |
+| 06-photo-crop | confirmed-win | 0.532–0.533× | 0.628–0.631× | 0.604–0.616× | 0.693–0.758× |
+| 07-photo-rotate | confirmed-win | 0.758–0.813× | 0.767–0.801× | 0.698–0.796× | 0.594–0.738× |
+| 08-photo-blur | confirmed-win | 0.950–0.953× | 0.959–0.964× | 0.955–0.963× | 0.894–0.929× |
+| 09-photo-sharpen | confirmed-win | 0.889–0.892× | 0.893–0.895× | 0.878–0.894× | 0.933–0.982× |
+| 10-png-identity | confirmed-win | 0.184–0.185× | 0.215–0.216× | 0.214–0.215× | 0.242–0.284× |
+| 11-png-thumbnail | confirmed-win | 0.702–0.723× | 0.754–0.780× | 0.727–0.754× | 0.557–0.610× |
+| 12-png-jpeg | confirmed-win | 0.755–0.760× | 0.803–0.812× | 0.777–0.780× | 0.494–0.510× |
+| 13-png-bmp | confirmed-win | 0.765–0.785× | 0.800–0.821× | 0.784–0.807× | 0.527–0.603× |
+| 14-photo-webp | confirmed-win | 0.905–0.906× | 0.911–0.911× | 0.904–0.906× | 0.685–0.798× |
+| 15-earth-png | confirmed-win | 0.584–0.592× | 0.854–0.865× | 0.743–0.766× | 0.671–0.751× |
+| 16-progressive-jpeg | confirmed-win | 0.854–0.884× | 0.884–0.905× | 0.811–0.896× | 0.725–0.886× |
+| 17-alpha-identity | confirmed-win | 0.397–0.399× | 0.460–0.467× | 0.452–0.463× | 0.698–0.787× |
+| 18-alpha-thumbnail | confirmed-win | 0.796–0.814× | 0.920–0.939× | 0.837–0.852× | 0.654–0.692× |
+| 19-alpha-jpeg | confirmed-win | 0.949–0.955× | 0.969–0.973× | 0.963–0.967× | 0.824–0.865× |
+| 20-alpha-webp | confirmed-win | 0.834–0.837× | 0.841–0.848× | 0.837–0.865× | 0.785–0.884× |
+| 21-graphics-identity | confirmed-win | 0.108–0.109× | 0.131–0.132× | 0.128–0.130× | 0.172–0.215× |
+| 22-graphics-square | confirmed-win | 0.718–0.730× | 0.834–0.847× | 0.762–0.775× | 0.679–0.770× |
+| 23-grayscale-jpeg | confirmed-win | 0.747–0.757× | 0.769–0.779× | 0.766–0.776× | 0.775–0.881× |
+| 24-tiff-png | confirmed-win | 0.548–0.580× | 0.738–0.780× | 0.719–0.764× | 0.607–0.672× |
+| 25-svg-raster | confirmed-win | 0.357–0.381× | 0.408–0.431× | 0.413–0.433× | 0.534–0.629× |
+
+
+amd64 CPU: AMD EPYC 7763 64-Core Processor, AMD EPYC 9V45 96-Core Processor, Intel(R) Xeon(R) 6975P-C. Two CPUs are assigned per service.
+
+arm64 CPU: 0xd49. Two CPUs are assigned per service.
+
+### Encoded size and decoded-pixel agreement
+
+Default routing; ranges cover every retained run. Color error is the worst black/white composite MAE/RMSE against imgproxy; alpha is checked separately. Both modes must pass the pixel gate. These are pairwise errors, not quality scores.
+
+| Linux | Case | Encoded size ratio | Max color MAE | Max color RMSE | Max alpha MAE |
+|---|---|---:|---:|---:|---:|
+| amd64 | 01-jpeg-identity | 1.0074–1.0074× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 02-jpeg-thumbnail | 1.0307–1.0307× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 03-jpeg-medium | 1.0083–1.0083× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 04-jpeg-square | 1.0221–1.0221× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 05-jpeg-retina | 1.0098–1.0098× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 06-photo-crop | 1.0094–1.0094× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 07-photo-rotate | 1.0072–1.0072× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 08-photo-blur | 1.0288–1.0288× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 09-photo-sharpen | 1.0102–1.0102× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 10-png-identity | 1.0141–1.0141× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 11-png-thumbnail | 1.0156–1.0156× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 12-png-jpeg | 1.0080–1.0080× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 13-png-bmp | 0.99994056–0.99994056× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 14-photo-webp | 1.0000–1.0000× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 15-earth-png | 1.0098–1.0098× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 16-progressive-jpeg | 1.0099–1.0099× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 17-alpha-identity | 1.1763–1.1763× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 18-alpha-thumbnail | 1.0247–1.0247× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 19-alpha-jpeg | 1.0381–1.0381× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 20-alpha-webp | 1.0000–1.0000× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 21-graphics-identity | 0.9971–0.9971× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 22-graphics-square | 1.0567–1.0567× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 23-grayscale-jpeg | 1.0158–1.0158× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 24-tiff-png | 1.0087–1.0087× | 0.000000 | 0.000000 | 0.000000 |
+| amd64 | 25-svg-raster | 0.9278–0.9278× | 0.009113 | 0.095461 | 0.000000 |
+| arm64 | 01-jpeg-identity | 1.0074–1.0074× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 02-jpeg-thumbnail | 1.0307–1.0307× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 03-jpeg-medium | 1.0083–1.0083× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 04-jpeg-square | 1.0221–1.0221× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 05-jpeg-retina | 1.0098–1.0098× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 06-photo-crop | 1.0094–1.0094× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 07-photo-rotate | 1.0072–1.0072× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 08-photo-blur | 1.0288–1.0288× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 09-photo-sharpen | 1.0104–1.0104× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 10-png-identity | 1.0141–1.0141× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 11-png-thumbnail | 1.0156–1.0156× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 12-png-jpeg | 1.0080–1.0080× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 13-png-bmp | 0.99994056–0.99994056× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 14-photo-webp | 1.0000–1.0000× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 15-earth-png | 1.0098–1.0098× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 16-progressive-jpeg | 1.0099–1.0099× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 17-alpha-identity | 1.1763–1.1763× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 18-alpha-thumbnail | 1.0247–1.0247× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 19-alpha-jpeg | 1.0381–1.0381× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 20-alpha-webp | 1.0000–1.0000× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 21-graphics-identity | 0.9971–0.9971× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 22-graphics-square | 1.0567–1.0567× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 23-grayscale-jpeg | 1.0158–1.0158× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 24-tiff-png | 1.0087–1.0087× | 0.000000 | 0.000000 | 0.000000 |
+| arm64 | 25-svg-raster | 0.9278–0.9278× | 0.009113 | 0.095461 | 0.000000 |
+
+Raw reports, hashes, source/image identities and recomputed qualification: [candidate index](benchmarks/results/candidate-index.json).
+
+Retained workflow evidence: [run 1](https://github.com/lansbe/pixstride/actions/runs/43760099406).
+<!-- candidate:details:end -->
+
 <!-- benchmark:tables:start -->
 ### Linux amd64
 
