@@ -1,5 +1,19 @@
 //! Release completed codec work before considering unused allocator pages.
 use crate::request::Request;
+use std::cell::Cell;
+
+thread_local! {
+    static SHARPEN_SINCE_RECLAIM: Cell<u8> = const { Cell::new(0) };
+}
+
+fn reclaim_due(sharpen: bool, counter: &Cell<u8>) -> bool {
+    if !sharpen {
+        return false;
+    }
+    let due = counter.get() != 0;
+    counter.set(u8::from(!due));
+    due
+}
 
 pub(super) fn reclaim_for(r: &Request) -> bool {
     r.effects.sharpen_sigma > 0.0
@@ -29,7 +43,9 @@ impl Drop for CodecCleanup {
     fn drop(&mut self) {
         libvips::Vips::error_clear();
         libvips::Vips::thread_shutdown();
-        if self.reclaim {
+        // Amortize page-discard and next-request page-fault costs, while
+        // bounding retention to one intervening sharpen operation.
+        if SHARPEN_SINCE_RECLAIM.with(|c| reclaim_due(self.reclaim, c)) {
             release_heap();
         }
     }
@@ -37,6 +53,15 @@ impl Drop for CodecCleanup {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn reclamation_amortizes_page_fault_cost_across_sharpen_operations() {
+        let counter = std::cell::Cell::new(0);
+        assert!(!super::reclaim_due(true, &counter));
+        assert!(!super::reclaim_due(false, &counter));
+        assert!(super::reclaim_due(true, &counter));
+        assert!(!super::reclaim_due(true, &counter));
+        assert!(super::reclaim_due(true, &counter));
+    }
     #[test]
     fn reclaim_policy_is_selected_by_the_actual_filter_request() {
         use crate::request::{self, Config};
