@@ -345,7 +345,12 @@ pub(super) fn process(data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeR
             && head.get_typeof("icc-profile-data").unwrap_or(0) == 0
             && (!r.auto_rotate || head.get_int("orientation").unwrap_or(1) == 1)
         {
-            super::png_decode::try_load(data, r)?.unwrap_or(head)
+            if let Some((image, plan)) = super::png_decode::try_load(data, r)? {
+                decoded_plan = plan;
+                image
+            } else {
+                head
+            }
         } else {
             head
         }

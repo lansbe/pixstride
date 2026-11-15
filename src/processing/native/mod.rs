@@ -29,6 +29,8 @@ mod pipe;
 #[cfg(feature = "native-codecs")]
 mod png_decode;
 #[cfg(feature = "native-codecs")]
+mod png_resize;
+#[cfg(feature = "native-codecs")]
 mod pool;
 #[cfg(feature = "native-codecs")]
 mod raster;

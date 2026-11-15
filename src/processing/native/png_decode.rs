@@ -111,15 +111,22 @@ fn decode(data: &[u8], r: &Request) -> Result<Option<Decoded>, Error> {
     }))
 }
 
-pub(super) fn try_load(data: &[u8], r: &Request) -> Result<Option<VipsImage>, Error> {
+pub(super) fn try_load(
+    data: &[u8],
+    r: &Request,
+) -> Result<Option<(VipsImage, Option<super::scale::Plan>)>, Error> {
     let Some(Decoded {
-        dimensions,
+        mut dimensions,
         bands,
-        pixels,
+        mut pixels,
     }) = decode(data, r)?
     else {
         return Ok(None);
     };
+    let mut plan = super::png_resize::plan(dimensions, bands, r)?;
+    if let Some(plan) = &mut plan {
+        (dimensions, pixels) = super::png_resize::resize(pixels, dimensions, plan)?;
+    }
     VipsImage::new_from_owned_u8(pixels, dimensions[0], dimensions[1], bands)
         .and_then(|image| {
             image.copy_with_opts(VOption::new().set(
@@ -131,7 +138,7 @@ pub(super) fn try_load(data: &[u8], r: &Request) -> Result<Option<VipsImage>, Er
                 } as i32,
             ))
         })
-        .map(Some)
+        .map(|image| Some((image, plan)))
         .map_err(|_| "native PNG raster import failed")
 }
 
@@ -192,6 +199,29 @@ mod tests {
         assert_eq!(decoded.dimensions, [2, 1]);
         assert_eq!(decoded.bands, 4);
         assert_eq!(decoded.pixels, [255, 0, 0, 128, 2, 3, 4, 0]);
+    }
+
+    #[test]
+    fn resized_alpha_jpeg_validates_the_complete_original_before_downscaling() {
+        super::super::engine::initialize().unwrap();
+        let source = sample();
+        let mut r = request::parse(
+            "/unsafe/rs:fit:1:1/plain/local:///fixture.png@jpg",
+            &Config::unsafe_local(),
+        )
+        .unwrap();
+        let (image, plan) = try_load(&source, &r).unwrap().unwrap();
+        assert_eq!((image.get_width(), image.get_height()), (1, 1));
+        assert_eq!(plan.unwrap().scale, [1.0; 2]);
+        assert!(try_load(&source[..source.len() - 1], &r).is_err());
+        let mut corrupt = source.clone();
+        let end = 41 + u32::from_be_bytes(corrupt[33..37].try_into().unwrap()) as usize;
+        corrupt[end - 1] ^= 1;
+        let crc = crc32fast::hash(&corrupt[37..end]);
+        corrupt[end..end + 4].copy_from_slice(&crc.to_be_bytes());
+        assert!(try_load(&corrupt, &r).is_err());
+        r.extra.max_source_pixels = 1;
+        assert!(try_load(&source, &r).is_err());
     }
 
     #[test]

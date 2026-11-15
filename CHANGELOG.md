@@ -13,6 +13,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Use bounded SIMD premultiplied Lanczos3 for eligible plain RGBA8 PNG-to-JPEG downscaling, preserving original source admission, geometry/DPR and requested encoder quality. Other pixel types, metadata/HDR/linear-light and complex geometry retain the native route; resampling can change pixels and encoded bytes.
 - Keep glibc mmap/trim thresholds fixed at 4 MiB in workers and the container so large per-image allocations can be released instead of raising adaptive heap retention.
 - Materialize bounded cropped JPEG input from a sequential full decode, preserving validation of unused rows while releasing decoder caches. Stream bounded single-pass JPEG blur/sharpen output through thin strips; materialize independent rasters for repeated byte-target encodes.
 - Stream eligible single-pass TIFF input; keep random access for animation, row rewinds and repeated encoding.

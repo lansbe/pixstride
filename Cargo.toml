@@ -23,6 +23,7 @@ cookie_store = { version = "0.22.1", default-features = false, optional = true }
 crc32fast = "=1.5.5"
 dotenvy = { version = "0.15.7", optional = true }
 fast_png = { version = "=0.18.1", package = "png", default-features = false, optional = true }
+fast_image_resize = { version = "=6.1.0", optional = true }
 futures-util = { version = "0.3.34", optional = true }
 gif = { version = "0.14.2", optional = true }
 http = { version = "1.5.0", optional = true }
@@ -46,7 +47,7 @@ tokio = { version = "1.54.1", features = ["rt", "time"], optional = true }
 url = { version = "2.5.8", optional = true }
 
 [features]
-native-codecs = ["dep:libvips", "dep:color_quant", "dep:gif", "dep:roxmltree", "dep:resvg", "dep:fast_png"]
+native-codecs = ["dep:libvips", "dep:color_quant", "dep:gif", "dep:roxmltree", "dep:resvg", "dep:fast_png", "dep:fast_image_resize"]
 cloud-sources = ["dep:opendal", "dep:tokio", "dep:reqwest", "dep:http", "dep:futures-util", "dep:bytes", "dep:reqsign-core", "dep:reqsign-aws-v4"]
 telemetry = ["dep:reqwest", "dep:tokio"]
 source-cookies = ["dep:cookie_store", "dep:psl", "dep:url"]

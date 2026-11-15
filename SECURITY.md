@@ -72,3 +72,5 @@ S3 client-side decryption is separately enabled and supports authenticated KMS V
 Unreleased native PNG decoding uses png 0.18.1 for plain eight-bit input under a 64 MiB decoder/raster ceiling, with CRC/trailer validation and unchanged original source-pixel admission. Metadata/profile/HDR/animation/interlace declarations retain the native loader. JPEG reduced decoding checks the full original source dimensions before shrinking and preserves the per-image worker deadline and address-space limits.
 
 Sequential JPEG/TIFF admission checks the computed final geometry: implicit vertical crops and fill-down retain random access so discarded rows cannot hide truncated JPEG tails. Accelerated SVG PNG output retains the explicit encoded-byte ceiling.
+
+The RGBA8 PNG-to-JPEG SIMD resizer runs only after full strict decoding and original source admission, inside the isolated worker. It admits bounded scratch/coefficient estimates, uses no shared resizer/cache or Rayon pool, and keeps metadata/HDR/linear-light and complex geometry on the existing native path.
