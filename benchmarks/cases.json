@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "01-jpeg-identity",
+      "label": "Photo JPEG identity",
+      "source": "landscape.jpg",
+      "options": "q:85",
+      "format": "jpg",
+      "dimensions": [
+        2048,
+        920
+      ]
+    },
+    {
+      "id": "02-jpeg-thumbnail",
+      "label": "Photo JPEG thumbnail",
+      "source": "landscape.jpg",
+      "options": "rs:fit:320:320/q:85",
+      "format": "jpg",
+      "dimensions": [
+        320,
+        144
+      ]
+    },
+    {
+      "id": "03-jpeg-medium",
+      "label": "Photo JPEG medium",
+      "source": "landscape.jpg",
+      "options": "rs:fit:1280:720/q:85",
+      "format": "jpg",
+      "dimensions": [
+        1280,
+        575
+      ]
+    },
+    {
+      "id": "04-jpeg-square",
+      "label": "Photo square crop",
+      "source": "landscape.jpg",
+      "options": "rs:fill:256:256/g:ce/q:85",
+      "format": "jpg",
+      "dimensions": [
+        256,
+        256
+      ]
+    },
+    {
+      "id": "05-jpeg-retina",
+      "label": "Photo JPEG DPR 2",
+      "source": "landscape.jpg",
+      "options": "rs:fit:480:320/dpr:2/q:85",
+      "format": "jpg",
+      "dimensions": [
+        960,
+        431
+      ]
+    },
+    {
+      "id": "06-photo-crop",
+      "label": "Photo center crop",
+      "source": "landscape.jpg",
+      "options": "c:800:600:ce",
+      "format": "png",
+      "dimensions": [
+        800,
+        600
+      ]
+    },
+    {
+      "id": "07-photo-rotate",
+      "label": "Photo 90 degree rotation",
+      "source": "landscape.jpg",
+      "options": "rot:90/q:85",
+      "format": "jpg",
+      "dimensions": [
+        920,
+        2048
+      ]
+    },
+    {
+      "id": "08-photo-blur",
+      "label": "Photo thumbnail and blur",
+      "source": "landscape.jpg",
+      "options": "rs:fit:640:360/bl:2/q:85",
+      "format": "jpg",
+      "dimensions": [
+        640,
+        288
+      ]
+    },
+    {
+      "id": "09-photo-sharpen",
+      "label": "Photo thumbnail and sharpen",
+      "source": "landscape.jpg",
+      "options": "rs:fit:640:360/sh:1/q:85",
+      "format": "jpg",
+      "dimensions": [
+        640,
+        288
+      ]
+    },
+    {
+      "id": "10-png-identity",
+      "label": "Photo PNG identity",
+      "source": "landscape.png",
+      "options": "",
+      "format": "png",
+      "dimensions": [
+        2048,
+        920
+      ]
+    },
+    {
+      "id": "11-png-thumbnail",
+      "label": "Photo PNG thumbnail",
+      "source": "landscape.png",
+      "options": "rs:fit:320:320",
+      "format": "png",
+      "dimensions": [
+        320,
+        144
+      ]
+    },
+    {
+      "id": "12-png-jpeg",
+      "label": "Photo PNG to JPEG",
+      "source": "landscape.png",
+      "options": "rs:fit:1280:720/q:85",
+      "format": "jpg",
+      "dimensions": [
+        1280,
+        575
+      ]
+    },
+    {
+      "id": "13-png-bmp",
+      "label": "Photo PNG to BMP",
+      "source": "landscape.png",
+      "options": "rs:fit:1024:768",
+      "format": "bmp",
+      "dimensions": [
+        1024,
+        460
+      ]
+    },
+    {
+      "id": "14-photo-webp",
+      "label": "Earth JPEG to WebP",
+      "source": "earth.jpg",
+      "options": "rs:fit:1024:1024/q:80",
+      "format": "webp",
+      "dimensions": [
+        1024,
+        1024
+      ]
+    },
+    {
+      "id": "15-earth-png",
+      "label": "Earth JPEG to PNG",
+      "source": "earth.jpg",
+      "options": "rs:fit:512:512",
+      "format": "png",
+      "dimensions": [
+        512,
+        512
+      ]
+    },
+    {
+      "id": "16-progressive-jpeg",
+      "label": "Progressive JPEG resize",
+      "source": "progressive.jpg",
+      "options": "rs:fit:1024:768/q:85",
+      "format": "jpg",
+      "dimensions": [
+        1024,
+        460
+      ]
+    },
+    {
+      "id": "17-alpha-identity",
+      "label": "Alpha PNG identity",
+      "source": "alpha.png",
+      "options": "",
+      "format": "png",
+      "dimensions": [
+        1024,
+        768
+      ]
+    },
+    {
+      "id": "18-alpha-thumbnail",
+      "label": "Alpha PNG thumbnail",
+      "source": "alpha.png",
+      "options": "rs:fit:320:320",
+      "format": "png",
+      "dimensions": [
+        320,
+        240
+      ]
+    },
+    {
+      "id": "19-alpha-jpeg",
+      "label": "Alpha on white JPEG",
+      "source": "alpha.png",
+      "options": "rs:fit:320:320/bg:ffffff/q:85",
+      "format": "jpg",
+      "dimensions": [
+        320,
+        240
+      ]
+    },
+    {
+      "id": "20-alpha-webp",
+      "label": "Alpha PNG to WebP",
+      "source": "alpha.png",
+      "options": "rs:fit:320:320/q:80",
+      "format": "webp",
+      "dimensions": [
+        320,
+        240
+      ]
+    },
+    {
+      "id": "21-graphics-identity",
+      "label": "Large flat graphics PNG",
+      "source": "graphics.png",
+      "options": "",
+      "format": "png",
+      "dimensions": [
+        2048,
+        1536
+      ]
+    },
+    {
+      "id": "22-graphics-square",
+      "label": "Flat graphics square crop",
+      "source": "graphics.png",
+      "options": "rs:fill:400:400/g:ce",
+      "format": "png",
+      "dimensions": [
+        400,
+        400
+      ]
+    },
+    {
+      "id": "23-grayscale-jpeg",
+      "label": "Grayscale PNG to JPEG",
+      "source": "gray.png",
+      "options": "rs:fit:256:256/q:85",
+      "format": "jpg",
+      "dimensions": [
+        256,
+        192
+      ]
+    },
+    {
+      "id": "24-tiff-png",
+      "label": "RGB TIFF to PNG",
+      "source": "earth.tiff",
+      "options": "rs:fit:640:640",
+      "format": "png",
+      "dimensions": [
+        640,
+        640
+      ]
+    },
+    {
+      "id": "25-svg-raster",
+      "label": "SVG graphics rasterization",
+      "source": "chart.svg",
+      "options": "rs:fit:512:512",
+      "format": "png",
+      "dimensions": [
+        512,
+        384
+      ]
+    }
+  ]
+}

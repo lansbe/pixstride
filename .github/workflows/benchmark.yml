@@ -1,0 +1,92 @@
+name: Benchmarks
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/reusable-linux-benchmarks]
+    paths:
+      - .github/workflows/benchmark.yml
+      - scripts/benchmark.py
+      - scripts/benchmark_runtime.py
+      - scripts/benchmark_metrics.py
+      - scripts/benchmark_fixtures.py
+      - .github/checks/project/test_benchmark_runtime.py
+      - .github/checks/project/test_benchmark_runner.py
+      - .github/checks/project/test_benchmark_metrics.py
+      - .github/checks/project/test_benchmark_fixtures.py
+      - benchmarks/cases.json
+      - benchmarks/versions.json
+permissions:
+  contents: read
+concurrency:
+  group: benchmarks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  corpus:
+    name: Shared corpus and accounting tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned independent fixture/decoder dependency
+        run: |
+          python3 -m venv "$RUNNER_TEMP/benchmark-env"
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
+      - name: Test accounting and create one shared corpus
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m unittest discover -s .github/checks/project -v
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_fixtures.py --output "$RUNNER_TEMP/corpus" --cache "$RUNNER_TEMP/source-cache"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: benchmark-shared-corpus
+          path: ${{ runner.temp }}/corpus/
+          if-no-files-found: error
+          retention-days: 7
+  measure:
+    name: Native Linux ${{ matrix.arch }}
+    needs: corpus
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      BENCHMARK_RUNNER: ${{ matrix.runner }}
+      BENCHMARK_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: benchmark-shared-corpus
+          path: ${{ runner.temp }}/corpus
+      - name: Install pinned independent decoder and test the harness
+        run: |
+          python3 -m venv "$RUNNER_TEMP/benchmark-env"
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m unittest discover -s .github/checks/project -v
+      - name: Check all 25 cases before measuring
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark.py --architecture "$BENCHMARK_ARCH" --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/preflight.json" --preflight
+      - name: Measure 25 cases with balanced engine ordering
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark.py --architecture "$BENCHMARK_ARCH" --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/report.json"
+      - name: Verify owned containers were cleaned
+        if: always()
+        run: test -z "$(docker ps -aq --filter label=io.pixstride.benchmark.run)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: benchmark-linux-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/report.json
+            ${{ runner.temp }}/preflight.json
+          if-no-files-found: warn
+          retention-days: 90

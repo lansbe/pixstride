@@ -140,7 +140,11 @@ Build the reference from the exact source commit in reference.json (`go build -o
 
 CI adds macOS ARM64/Intel checks, native round trips, HTTP/Unix/OTLP integration, a 100-request concurrent soak and deterministic mutation smoke. The Linux AMD64/ARM64 Docker builds run both feature configurations and real native codec checks before release promotion; `python3 scripts/container_check.py --image pixstride:check` also checks the restricted runtime, modern encoders, authorization, SSRF refusal, health and metrics. Its optional `--remote-url` checks a public HTTPS fixture outside mandatory CI. The macOS jobs install Go explicitly to build the pinned reference. A configured workflow is not evidence that remote jobs have run successfully. Docker and the other three platform combinations must pass their own jobs before a release is approved.
 
-The mutation runner uses a fixed seed and bounded malformed PNG/GIF/SVG inputs. It catches parent crashes, native crash signals and harness deadlines. It is not a coverage-guided fuzzing campaign. Longer runs use `--cases`/`--requests` up to 10000. Synthetic soak results are correctness evidence, not an equal-quality performance benchmark. The historical README benchmark does not measure this native engine.
+The mutation runner uses a fixed seed and bounded malformed PNG/GIF/SVG inputs. It catches parent crashes, native crash signals and harness deadlines. It is not a coverage-guided fuzzing campaign. Longer runs use `--cases`/`--requests` up to 10000. Synthetic soak results are correctness evidence, not an equal-quality performance benchmark.
+
+## Performance measurements
+
+The reusable [25-case Linux benchmark](BENCHMARKS.md) initially measures shipped Pixstride 0.3.0 default/native modes against imgproxy 4.0.24 on native AMD64 and ARM64. Its newer performance baseline does not change this guide's pinned imgproxy 4.0.21 compatibility target. HTTP timing, CPU including child processes, peak cgroup memory, encoded sizes and decoded-pixel agreement are reported separately. Different filters, libraries and encoders can change pixels or compression; timing results are not proof of equal-quality performance or complete compatibility.
 
 ## Deliberate differences and remaining limits
 

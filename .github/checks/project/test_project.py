@@ -56,13 +56,18 @@ class DocumentationTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="pixstride-project-test-")
         self.root = Path(self.directory.name)
-        for name in ("Cargo.toml", "Cargo.lock", "README.md", "SECURITY.md", "CHANGELOG.md", "CONTRIBUTING.md", "COMPATIBILITY.md", "LICENSE"):
+        for name in ("Cargo.toml", "Cargo.lock", "README.md", "SECURITY.md", "CHANGELOG.md", "CONTRIBUTING.md", "COMPATIBILITY.md", "BENCHMARKS.md", "LICENSE"):
             shutil.copyfile(ROOT / name, self.root / name)
         shutil.copytree(ROOT / "src", self.root / "src")
+        shutil.copytree(ROOT / "benchmarks", self.root / "benchmarks")
         (self.root / ".github").mkdir()
         (self.root / "vendor/rs-vips").mkdir(parents=True)
         shutil.copyfile(ROOT / "vendor/rs-vips/README.md", self.root / "vendor/rs-vips/README.md")
         shutil.copytree(ROOT / ".github/checks/compatibility", self.root / ".github/checks/compatibility")
+        (self.root / '.github/workflows').mkdir(parents=True)
+        shutil.copyfile(ROOT / '.github/workflows/benchmark.yml', self.root / '.github/workflows/benchmark.yml')
+        (self.root / 'scripts').mkdir()
+        shutil.copyfile(ROOT / 'scripts/benchmark_fixtures.py', self.root / 'scripts/benchmark_fixtures.py')
         run("git", "init", "-b", "master", cwd=self.root)
         run("git", "config", "user.name", "Fixture", cwd=self.root)
         run("git", "config", "user.email", "fixture@example.invalid", cwd=self.root)
