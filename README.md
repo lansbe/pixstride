@@ -65,12 +65,12 @@ Version 0.1.1 introduced work limits that can reject expensive valid inputs. The
 The reusable suite compares Pixstride (default routing and forced native) with imgproxy, using immutable published images and the same 25 cases on native Linux AMD64 and ARM64. It covers public photos, transparency, flat graphics, JPEG/PNG/WebP/BMP, progressive JPEG, grayscale, TIFF and SVG. See [BENCHMARKS.md](BENCHMARKS.md) for all cases, CPU/HTTP/memory/output measurements, pixel differences, hardware, raw evidence and rerun commands.
 
 <!-- candidate:summary:start -->
-Unreleased [candidate `fe350b73b784`](https://github.com/lansbe/pixstride/commit/fe350b73b7841251f99a224abe33f46acb970842); default routing, all retained native runs. The published 0.3.0 baseline below is unchanged.
+Unreleased [candidate `6145080e14a5`](https://github.com/lansbe/pixstride/commit/6145080e14a5e717a7a85ae9fd7174f894e08e39); default routing, all retained native runs. The published 0.3.0 baseline below is unchanged.
 
 | Linux | Confirmed cases | Runs | CPU ratio range | HTTP p50 range | HTTP p95 range | Peak cgroup range |
 |---|---:|---:|---:|---:|---:|---:|
-| amd64 | 25/25 | 3 | 0.0742–0.9089× | 0.0992–0.9376× | 0.0996–0.9509× | 0.1637–0.9372× |
-| arm64 | 25/25 | 3 | 0.1079–0.9552× | 0.1310–0.9731× | 0.1284–0.9674× | 0.1717–0.9820× |
+| amd64 | 25/25 | 3 | 0.0660–0.9272× | 0.0896–0.9570× | 0.0952–0.9408× | 0.1604–0.9740× |
+| arm64 | 25/25 | 3 | 0.1085–0.9601× | 0.1316–0.9711× | 0.1289–0.9741× | 0.1792–0.9995× |
 
 Ratios are Pixstride/imgproxy; lower is better. Counts require lower CPU, p50, p95 and peak cgroup memory in every run, with extra repeats near parity. Different encoding can increase file size. Decoded-pixel agreement is checked against the published envelope; this does not certify perceptual equivalence. See [candidate evidence](benchmarks/results/candidate-index.json) and [all cases](BENCHMARKS.md).
 <!-- candidate:summary:end -->
