@@ -16,6 +16,14 @@ pub(super) struct NativeResult {
     pub format: OutputFormat,
 }
 
+struct ThreadCleanup;
+impl Drop for ThreadCleanup {
+    fn drop(&mut self) {
+        Vips::error_clear();
+        Vips::thread_shutdown();
+    }
+}
+
 pub(super) fn checked(width: i32, height: i32) -> Result<(), Error> {
     if width <= 0
         || height <= 0
@@ -191,6 +199,9 @@ pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeRes
         }
     }
     initialize()?;
+    // Declared before every image: their last references drop first, then
+    // libvips releases this reused thread's private regions and error state.
+    let _cleanup = ThreadCleanup;
     let sanitized;
     let data = if r.extra.encoding.sanitize_svg && sniff(data) == Some(OutputFormat::Svg) {
         sanitized = super::svg::sanitize(data)?;
@@ -380,4 +391,21 @@ pub(super) fn process(data: &[u8], r: &Request, mark: &[u8]) -> Result<NativeRes
         origin,
         format,
     })
+}
+
+#[cfg(test)]
+mod cleanup_tests {
+    use super::*;
+    #[test]
+    fn failed_native_request_clears_the_codec_thread_error_state() {
+        initialize().unwrap();
+        Vips::error_clear();
+        let r = crate::request::parse(
+            "/unsafe/plain/local:///broken.jpg@jpg",
+            &crate::request::Config::unsafe_local(),
+        )
+        .unwrap();
+        assert!(process(&[0xff, 0xd8, 0, 0], &r, &[]).is_err());
+        assert!(Vips::error_buffer().unwrap().is_empty());
+    }
 }

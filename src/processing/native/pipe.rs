@@ -13,6 +13,15 @@ pub(super) fn nonblocking(pipe: &impl AsRawFd) -> Result<(), Error> {
     if flags < 0 || unsafe { libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK) } < 0 {
         return Err("cannot configure native pipe");
     }
+    #[cfg(target_os = "linux")]
+    // A bounded larger pipe avoids dozens of handoffs for ordinary encoded
+    // sources. Kernel/user quotas may deny it: retain the original safe pipe.
+    unsafe {
+        let capacity = libc::fcntl(fd, libc::F_GETPIPE_SZ);
+        if capacity > 0 && capacity < 1024 * 1024 {
+            libc::fcntl(fd, libc::F_SETPIPE_SZ, 1024 * 1024);
+        }
+    }
     Ok(())
 }
 
@@ -114,6 +123,24 @@ mod tests {
         os::unix::net::UnixStream,
         time::{Duration, Instant},
     };
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn pipe_capacity_increases_only_within_the_kernel_allowed_bound() {
+        let (probe, _probe_writer) = std::io::pipe().unwrap();
+        let permitted =
+            unsafe { libc::fcntl(probe.as_raw_fd(), libc::F_SETPIPE_SZ, 1024 * 1024) } >= 0;
+        let (reader, _writer) = std::io::pipe().unwrap();
+        let original = unsafe { libc::fcntl(reader.as_raw_fd(), libc::F_GETPIPE_SZ) };
+        nonblocking(&reader).unwrap();
+        let size = unsafe { libc::fcntl(reader.as_raw_fd(), libc::F_GETPIPE_SZ) };
+        assert!(size >= original);
+        if permitted {
+            assert_eq!(size, 1024 * 1024);
+        } else {
+            assert!(size <= original.max(1024 * 1024));
+        }
+    }
 
     #[test]
     fn transfers_more_than_the_pipe_capacity_without_helper_io_threads() {

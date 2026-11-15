@@ -11,6 +11,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Release libvips thread-private regions and error state after every native image, after dropping all image references. Bound glibc worker arenas to two. On Linux, request pipe capacity up to 1 MiB when kernel quotas permit, retaining the same framed protocol and absolute deadline.
 - Feed native RGB/RGBA8 rasters directly to lossless PNG encoding and encode ordinary RGB BMP output without expanding to RGBA first. Validate and free the owned GLib allocation once; retain byte-identical output for the same pixels/options.
 - Build unreleased containers with pinned Ubuntu 26.04/glibc and the same Rust 1.100.0 toolchain, retaining non-root execution, codec checks and resource restrictions. Published 0.3.0 images keep Alpine/musl.
 - Use libdeflate level 1 for lossless compression to reduce CPU/latency at the cost of larger encoded output. Keep decoded samples, quality settings and file ceilings unchanged. Avoid redundant native full-frame extraction, identity crops/resizes and color-space operations; allow streaming JPEG blur/sharpen while retaining random access for row-rewinding operations and byte-target retries.
