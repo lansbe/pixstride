@@ -234,9 +234,17 @@ pub(super) fn save(
         && !r.extra.preserve_hdr
         && super::shared::fits_memory(&stripped)
     {
-        // Finish neighborhood filters and release their source/working regions
-        // before the JPEG saver allocates coefficient/entropy buffers.
-        super::shared::materialize(stripped)?
+        if r.extra.max_bytes == 0 {
+            // Thin output strips bound upstream filter working regions. Only
+            // a single saver pass may consume this sequential image.
+            let stream = stripped
+                .sequential_with_opts(VOption::new().set("tile_height", 16))
+                .map_err(|_| "native JPEG filter streaming failed")?;
+            drop(stripped);
+            stream
+        } else {
+            super::shared::materialize(stripped)?
+        }
     } else {
         stripped
     };

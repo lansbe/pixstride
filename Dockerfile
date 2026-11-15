@@ -40,7 +40,7 @@ LABEL org.opencontainers.image.source="https://github.com/lansbe/pixstride" \
       org.opencontainers.image.description="Bounded image transformation server written in Rust"
 USER 65532:65532
 ENV PIXSTRIDE_BIND=0.0.0.0 PIXSTRIDE_PORT=8080 MALLOC_ARENA_MAX=2 \
-    MALLOC_MMAP_THRESHOLD_=131072 MALLOC_TRIM_THRESHOLD_=131072
+    MALLOC_MMAP_THRESHOLD_=4194304 MALLOC_TRIM_THRESHOLD_=4194304
 EXPOSE 8080
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=3s --start-period=3s --retries=3 CMD ["pixstride", "healthcheck"]

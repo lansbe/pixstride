@@ -66,6 +66,15 @@ python3 scripts/benchmark_qualification.py --reports amd64-*/report.json arm64-*
 
 The JSON and Markdown list every case, CPU/p50/p95/memory ratio range, required repeats and pixel regressions. Exit code 1 means the target is not met. Input corruption or incompatible evidence raises an error. The published 0.3.0 results below remain the release baseline until separate candidate evidence is qualified.
 
+Publish a qualified candidate separately, retaining every full report from its cohort:
+
+```sh
+python3 scripts/candidate_snapshot.py --publish amd64-*/report.json arm64-*/report.json
+python3 scripts/candidate_snapshot.py --check
+```
+
+The publisher rejects remaining losses, incomplete or incompatible evidence and duplicate samples before updating documentation. It stores all retained raw reports as deterministic gzip archives, with compressed/raw SHA-256 hashes and recomputed qualification in `benchmarks/results/candidate-index.json`. Separate generated candidate blocks include every case's timing/memory range, encoded sizes and decoded-pixel errors. The release baseline stays intact. CI checks archive integrity, provenance, recomputed metrics and documentation drift. Unqualified attempts remain in their workflow artifacts; no favorable subset can replace the full cohort.
+
 After collecting one full raw report per architecture:
 
 ```sh

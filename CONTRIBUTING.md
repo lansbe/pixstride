@@ -59,6 +59,8 @@ Use the reusable [25-case Linux benchmark](BENCHMARKS.md) for performance compar
 
 Regenerate Markdown tables with `python3 scripts/benchmark_report.py --update-docs` after installing reviewed raw evidence in `benchmarks/results`. Run `python3 scripts/benchmark_report.py --check` to verify their consistency. Commit only public sanitized JSON summaries and losslessly compressed raw evidence, with image/corpus/harness identities and workflow provenance. Keep downloaded media, caches, logs and personal host paths untracked. See the guide for setup, all 25 cases and full rerun/publication commands.
 
+Qualified repeated candidates use `python3 scripts/candidate_snapshot.py --publish amd64-*/report.json arm64-*/report.json`, preserving the release baseline. `python3 scripts/candidate_snapshot.py --check` recomputes qualification from every retained archive and checks generated candidate tables. Failed cohorts stay in workflow artifacts. The optional memory diagnostics run in new containers after all formal measurements; their process aggregates omit addresses, PIDs and file paths and never qualify performance.
+
 ## Releases
 
 1. Keep human-written notes in `Unreleased`. For a stable release after betas, include all changes since the previous stable version, not only changes since the last beta.

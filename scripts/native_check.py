@@ -70,6 +70,11 @@ def check(args):
         assert smallest < largest, 'Quality fixture does not exercise byte-target attempts'
         target = (smallest + largest) // 2
         assert len(run(binary, root, photo, options=f'q:95/mb:{target}', output='jpg')) <= target
+        large_sharp = len(run(binary, root, photo, options='sh:1/q:95', output='jpg'))
+        small_sharp = len(run(binary, root, photo, options='sh:1/q:1', output='jpg'))
+        sharp_target = (large_sharp + small_sharp) // 2
+        assert small_sharp < large_sharp
+        assert len(run(binary, root, photo, options=f'sh:1/q:95/mb:{sharp_target}', output='jpg')) <= sharp_target
         metadata = b'Exif\0\0' + exif()
         photo.write_bytes(jpeg[:2] + b'\xff\xe1' + struct.pack('>H', len(metadata) + 2) + metadata + jpeg[2:])
         assert read_png(run(binary, root, photo, options='rs:fit:25:25'))[0][:2] == (18, 25)

@@ -86,6 +86,13 @@ jobs:
       - name: Verify owned containers were cleaned
         if: always()
         run: test -z "$(docker ps -aq --filter label=io.pixstride.benchmark.run)"
+      - name: Inspect separate diagnostic containers after all measurements
+        continue-on-error: true
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/performance_memory.py --image "$(cat "$RUNNER_TEMP/candidate-image.txt")" --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/memory-diagnostics.json"
+      - name: Verify diagnostic containers were cleaned
+        if: always()
+        run: test -z "$(docker ps -aq --filter label=io.pixstride.benchmark.run)"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -96,6 +103,7 @@ jobs:
             ${{ runner.temp }}/cases.md
             ${{ runner.temp }}/cases.csv
             ${{ runner.temp }}/candidate-image.txt
+            ${{ runner.temp }}/memory-diagnostics.json
           if-no-files-found: warn
           retention-days: 90
   qualify:

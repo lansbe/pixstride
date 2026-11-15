@@ -34,6 +34,7 @@ jobs:
           if test -n "$PR_BASE"; then args+=(--base "$PR_BASE"); fi
           python3 scripts/project.py check "${args[@]}"
           python3 scripts/benchmark_report.py --check
+          python3 scripts/candidate_snapshot.py --check
           python3 - <<'PY'
           import os, re
           title = os.environ.get('PR_TITLE', '')
