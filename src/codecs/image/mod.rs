@@ -32,4 +32,6 @@ mod transform;
 pub(crate) use transform::*;
 
 mod prefilter;
+#[cfg(test)]
+mod rgb_tests;
 use prefilter::prehalve_parsed;

@@ -4,6 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import socket
+import struct
 import subprocess
 import tempfile
 import time
@@ -41,7 +42,7 @@ def check(args):
             docker('run', '-d', '--name', name, '--read-only', '--cap-drop=ALL',
                    '--security-opt=no-new-privileges', '--memory=512m', '--pids-limit=64', '--cpus=2',
                    '-p', f'127.0.0.1:{port}:8080', '-v', str(root) + ':/images:ro',
-                   '-e', 'PIXSTRIDE_ALLOW_UNSAFE=1', '-e', 'PIXSTRIDE_ENGINE=native',
+                   '-e', 'PIXSTRIDE_ALLOW_UNSAFE=1', '-e', 'PIXSTRIDE_ENGINE=' + args.engine,
                    '-e', 'PIXSTRIDE_LOCAL_ROOT=/images', '-e', 'PIXSTRIDE_ALLOWED_HOSTS=' + hosts,
                    '-e', 'PIXSTRIDE_SECRET=synthetic-secret', args.image)
             for _ in range(100):
@@ -56,6 +57,8 @@ def check(args):
                 status, headers, body = get('/unsafe/rs:fit:32:24/plain/local:///sample.svg@' + fmt)
                 assert status == 200 and headers['Content-Type'] == mime and len(body) > 20, fmt
                 assert headers['X-Image-Width'] == '32' and headers['X-Image-Height'] == '24'
+                if fmt == 'png':
+                    assert body[:8] == b'\x89PNG\r\n\x1a\n' and struct.unpack('>II', body[16:24]) == (32, 24)
             for path, authorized, expected in [('/health', False, 403), ('/unsafe/plain/http://127.0.0.1/fixture@png', True, 502)]:
                 try:
                     get(path, authorized)
@@ -69,7 +72,7 @@ def check(args):
             if args.remote_url:
                 encoded = urllib.parse.quote(args.remote_url, safe=':/')
                 assert get('/unsafe/rs:fit:32:24/plain/' + encoded + '@png')[2].startswith(b'\x89PNG')
-            print('Container restrictions, native PNG/AVIF/HEIC/JXL, authorization, SSRF refusal, health and metrics passed')
+            print(f'Container {args.engine} routing, PNG/AVIF/HEIC/JXL, authorization, SSRF refusal, health and metrics passed')
         finally:
             subprocess.run([args.docker, 'rm', '-f', name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
 
@@ -78,5 +81,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--image', default='pixstride:check', help='Use a local tag or the exact validated manifest reference')
     parser.add_argument('--docker', default='docker', help='Docker CLI executable')
+    parser.add_argument('--engine', choices=('auto', 'native'), default='native', help='Routing policy to exercise')
     parser.add_argument('--remote-url', help='Optional public HTTPS image fixture; excluded from mandatory CI')
     check(parser.parse_args())

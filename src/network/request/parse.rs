@@ -36,6 +36,7 @@ pub(crate) fn parse_with_hints(
         encoding: config.encoding.clone(),
         preferred: config.preferred.clone(),
         native: config.native_defaults,
+        accelerated: config.accelerated,
         ..Default::default()
     };
     let mut options = TransformOptions::default();

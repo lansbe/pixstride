@@ -322,6 +322,29 @@ impl VipsImage {
         }
     }
 
+    /// Move an exact, contiguous 1..4-band UCHAR raster into a native image.
+    /// No pixel copy is made. Ownership stays with the C image and its derived
+    /// graph, so there are no Rust aliases even for native in-place operations.
+    pub fn new_from_owned_u8(buffer: Vec<u8>, width: i32, height: i32, bands: i32) -> Result<VipsImage> {
+        let expected = (width > 0 && height > 0 && (1..=4).contains(&bands))
+            .then(|| (width as usize).checked_mul(height as usize)
+                .and_then(|n| n.checked_mul(bands as usize))).flatten();
+        if expected != Some(buffer.len()) {
+            return Err(Error::InitializationError("Invalid owned UCHAR raster size".to_string()));
+        }
+        unsafe {
+            let ctx = bindings::vips_image_new_from_memory(
+                buffer.as_ptr().cast(), buffer.len(), width, height, bands, BandFormat::Uchar as i32,
+            );
+            if !ctx.is_null() {
+                // The Vec moves here: unlike a shared pixel slice, callers
+                // cannot read it concurrently with native mutating operations.
+                utils::keep_owned_bytes(ctx.cast(), buffer);
+            }
+            vips_image_result(ctx, Error::InitializationError("Cannot create owned UCHAR raster".to_string()))
+        }
+    }
+
     /// Like `new_from_memory()`, but VIPS will make a copy of the memory area.
     pub fn new_from_memory_copy(
         buffer: &[u8],

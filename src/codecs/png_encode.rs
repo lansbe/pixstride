@@ -1,11 +1,15 @@
 //! Lossless RGB/RGBA PNG encoding for , with adaptive PNG filters and the
-//! in-tree zlib/DEFLATE encoder. No external image or compression library.
+//! bounded libdeflate zlib encoder.
 //!
 //! Input pixels are RGBA8. An entirely opaque image is encoded as RGB8;
 //! otherwise all four channels are preserved. Color metadata is not part of
 //! `Image` and therefore is not invented here.
 
 use crate::{deflate_encode, Buffer, Error, Image, MAX_FILE, MAX_PIXELS};
+#[cfg(test)]
+mod raw_tests;
+#[cfg(target_arch = "x86_64")]
+mod x86;
 
 const SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 const MAX_DIMENSION: usize = 100_000;
@@ -47,7 +51,13 @@ fn filtered(kind: usize, x: u8, a: u8, b: u8, c: u8) -> u8 {
     }
 }
 
-#[cfg(any(test, not(all(target_arch = "aarch64", target_feature = "neon"))))]
+#[cfg(any(
+    test,
+    not(any(
+        target_arch = "x86_64",
+        all(target_arch = "aarch64", target_feature = "neon")
+    ))
+))]
 fn score_filters_scalar(current: &[u8], previous: &[u8], channels: usize) -> [u64; 5] {
     let mut scores = [0u64; 5];
     for i in 0..current.len() {
@@ -173,7 +183,15 @@ fn score_filters(current: &[u8], previous: &[u8], channels: usize) -> [u64; 5] {
     scores
 }
 
-#[cfg(not(all(target_arch = "aarch64", target_feature = "neon")))]
+#[cfg(target_arch = "x86_64")]
+fn score_filters(current: &[u8], previous: &[u8], channels: usize) -> [u64; 5] {
+    x86::scores(current, previous, channels)
+}
+
+#[cfg(not(any(
+    target_arch = "x86_64",
+    all(target_arch = "aarch64", target_feature = "neon")
+)))]
 fn score_filters(current: &[u8], previous: &[u8], channels: usize) -> [u64; 5] {
     score_filters_scalar(current, previous, channels)
 }
@@ -216,6 +234,11 @@ fn append_filtered(
         }
     }
     while i < current.len() {
+        #[cfg(target_arch = "x86_64")]
+        if i + 16 <= current.len() {
+            i = x86::append(raw, current, previous, channels, kind, i);
+            continue;
+        }
         raw.push(filtered(
             kind,
             current[i],
@@ -304,9 +327,21 @@ fn append_best_row(raw: &mut Vec<u8>, current: &[u8], previous: &[u8], channels:
     append_filtered(raw, current, previous, channels, best);
 }
 
-/// Produce a valid, lossless PNG with a bounded in-tree compressor.
+/// Produce a valid, lossless PNG with bounded libdeflate compression.
 pub fn encode(image: &Image) -> Result<Buffer, Error> {
-    let (width, height) = (image.width, image.height);
+    encode_pixels(image.width, image.height, image.pixels.as_slice(), 4)
+}
+
+pub(crate) fn encode_pixels(
+    width: usize,
+    height: usize,
+    source: impl AsRef<[u8]>,
+    source_channels: usize,
+) -> Result<Buffer, Error> {
+    let input = source.as_ref();
+    if !matches!(source_channels, 3 | 4) {
+        return Err("PNG: unsupported input channels");
+    }
     if width == 0
         || height == 0
         || width > MAX_DIMENSION
@@ -315,15 +350,16 @@ pub fn encode(image: &Image) -> Result<Buffer, Error> {
     {
         return Err("PNG: dimensions out of bounds");
     }
-    let input_stride = width.checked_mul(4).ok_or("PNG: size too large")?;
+    let input_stride = width
+        .checked_mul(source_channels)
+        .ok_or("PNG: size too large")?;
     let input_len = input_stride
         .checked_mul(height)
         .ok_or("PNG: size too large")?;
-    let input = image.pixels.as_slice();
     if input.len() != input_len {
         return Err("PNG: inconsistent pixels");
     }
-    let opaque = all_opaque(input);
+    let opaque = source_channels == 3 || all_opaque(input);
     let channels = if opaque { 3 } else { 4 };
     let stride = width.checked_mul(channels).ok_or("PNG: size too large")?;
     let raw_len = stride
@@ -337,7 +373,16 @@ pub fn encode(image: &Image) -> Result<Buffer, Error> {
     raw.try_reserve_exact(raw_len)
         .map_err(|_| "PNG: allocation failed")?;
     let mut previous = zeros(stride)?;
-    if opaque {
+    if source_channels == 3 {
+        for (y, row) in input.chunks_exact(input_stride).enumerate() {
+            let above = if y == 0 {
+                previous.as_slice()
+            } else {
+                &input[(y - 1) * input_stride..y * input_stride]
+            };
+            append_best_row(&mut raw, row, above, 3);
+        }
+    } else if opaque {
         let mut current = zeros(stride)?;
         for row in input.chunks_exact(input_stride) {
             opaque_rgb_row(row, &mut current);
@@ -357,6 +402,9 @@ pub fn encode(image: &Image) -> Result<Buffer, Error> {
     }
     debug_assert_eq!(raw.len(), raw_len);
     drop(previous);
+    // An owned raster is no longer needed after filtering; release it before
+    // the compressor allocates its output/workspace. Borrowed callers retain it.
+    drop(source);
     let compressed = deflate_encode::compress(&raw)?;
     drop(raw);
     let total = compressed
@@ -389,7 +437,7 @@ mod lane_tests {
     #[test]
     fn vector_filter_scores_match_the_scalar_reference_at_lane_boundaries() {
         for channels in [3, 4] {
-            for width in [1, 3, 4, 5, 15, 16, 17, 31, 32, 33, 257] {
+            for width in [1, 3, 4, 5, 15, 16, 17, 31, 32, 33, 257, 40_001] {
                 let current = (0..width * channels)
                     .map(|i| (i * 73 + 19) as u8)
                     .collect::<Vec<_>>();
@@ -401,6 +449,33 @@ mod lane_tests {
                     score_filters_scalar(&current, &previous, channels),
                     "{width} pixels, {channels} channels"
                 );
+                for kind in 0..5 {
+                    let mut actual = Vec::new();
+                    append_filtered(&mut actual, &current, &previous, channels, kind);
+                    let expected: Vec<_> = (0..current.len())
+                        .map(|i| {
+                            filtered(
+                                kind,
+                                current[i],
+                                if i >= channels {
+                                    current[i - channels]
+                                } else {
+                                    0
+                                },
+                                previous[i],
+                                if i >= channels {
+                                    previous[i - channels]
+                                } else {
+                                    0
+                                },
+                            )
+                        })
+                        .collect();
+                    assert_eq!(
+                        actual, expected,
+                        "filter {kind}, {width} pixels, {channels} channels"
+                    );
+                }
             }
         }
     }

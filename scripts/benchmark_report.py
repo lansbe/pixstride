@@ -11,12 +11,26 @@ import statistics
 
 from benchmark_fixtures import ROOT, corpus_hash, sha256
 from benchmark_metrics import balanced_orders, percentile, summarize_batches
-from benchmark_runtime import ENGINES, MEMORY_BYTES, require_native_image
+from benchmark_runtime import ENGINES, MEMORY_BYTES, require_native_image, validate_candidate_image
 
 LABELS = {'pixstride_default': 'Pixstride default', 'pixstride_native': 'Pixstride native', 'imgproxy': 'imgproxy'}
 
 
-def validate_report(report):
+def validate_client_affinity(report):
+    if report['protocol'].get('client_affinity') != 'disjoint from service cpuset':
+        raise ValueError('New qualification requires separate client CPU affinity')
+    host = report['host']
+    service, client = host.get('selected_cpus'), host.get('client_cpus')
+    valid = lambda cpus: (isinstance(cpus, list) and bool(cpus)
+                          and all(type(c) is int and c >= 0 for c in cpus)
+                          and len(set(cpus)) == len(cpus))
+    if (not valid(service) or not valid(client) or len(service) != 2
+            or set(service) & set(client) or type(host.get('available_cpus')) is not int
+            or host['available_cpus'] != len(service) + len(client)):
+        raise ValueError('Invalid or overlapping service/client CPU affinity evidence')
+
+
+def validate_report(report, *, require_client_isolation=False):
     if (report.get('schema_version') != 1 or report.get('status') != 'success'
             or report.get('profile') != 'full' or report.get('harness_dirty') is not False):
         raise ValueError('Only complete full-protocol reports from committed harnesses can be published')
@@ -31,11 +45,17 @@ def validate_report(report):
         raise ValueError('Corpus manifest is inconsistent')
     if report['host']['architecture'] not in {'amd64', 'arm64'}:
         raise ValueError('Unsupported report architecture')
+    if require_client_isolation or 'client_affinity' in protocol:
+        validate_client_affinity(report)
     for product in ['pixstride', 'imgproxy']:
         image = report.get('images', {}).get(product, {})
         if not {'architecture', 'os'}.issubset(image):
             raise ValueError('Reports require inspected image architecture and operating system')
         require_native_image(image['architecture'], image['os'], report['host']['architecture'])
+        if image.get('candidate') or image.get('reference', '').startswith('sha256:'):
+            if product != 'pixstride':
+                raise ValueError('The imgproxy reference must remain a published digest-pinned image')
+            validate_candidate_image(image, report['harness_revision'])
     orders = balanced_orders(ENGINES, protocol['batches'])
     for case in cases:
         if case.get('status') != 'success' or set(case.get('engines', {})) != set(ENGINES):
@@ -77,6 +97,10 @@ def validate_pair(reports):
     if {c['id'] for c in left['cases']} != {c['id'] for c in right['cases']}:
         raise ValueError('Reports do not contain the same cases')
     for product in ['pixstride', 'imgproxy']:
+        if left['images'][product].get('candidate') or right['images'][product].get('candidate'):
+            if left['images'][product].get('candidate') != right['images'][product].get('candidate'):
+                raise ValueError('Candidate images use different source revisions/build inputs')
+            continue
         if left['images'][product]['reference'] != right['images'][product]['reference']:
             raise ValueError('Reports use different image versions')
 
@@ -96,7 +120,10 @@ def overview(report, engine):
 def render_overview(reports):
     protocol = reports[0]['protocol']
     images = reports[0]['images']
-    text = (f'Images: Pixstride **{images["pixstride"]["capabilities"]["version"]}** / imgproxy **{images["imgproxy"]["version"]}**. '
+    candidate = images['pixstride'].get('candidate')
+    identity = (f'Unreleased candidate `{candidate["revision"]}` (package version **{images["pixstride"]["capabilities"]["version"]}**)'
+                if candidate else f'Images: Pixstride **{images["pixstride"]["capabilities"]["version"]}**')
+    text = (f'{identity} / imgproxy **{images["imgproxy"]["version"]}**. '
             f'Per case/mode: {protocol["batches"]} balanced batches × {protocol["requests_per_batch"]} timed requests '
             f'({protocol["batches"] * protocol["requests_per_batch"]} total), after {protocol["warmups"]} warmups.\n\n')
     text += '| Linux | Pixstride mode | Lower CPU | Lower HTTP p50 | Median CPU ratio | Median p50 ratio | Median peak cgroup ratio | Exact visible pixels |\n'
@@ -122,6 +149,10 @@ def render_tables(reports):
         protocol = report['protocol']
         text += f'{protocol["batches"]} batches × {protocol["requests_per_batch"]} timed requests per case/mode, after {protocol["warmups"]} warmups.\n\n'
         text += f'Harness `{report["harness_revision"]}`; corpus SHA-256 `{report["fixtures"]["corpus_sha256"]}`.\n\n'
+        candidate = report['images']['pixstride'].get('candidate')
+        if candidate:
+            text += (f'Unreleased candidate source `{candidate["revision"]}`; '
+                     f'immutable local image `{report["images"]["pixstride"]["image_id"]}`.\n\n')
         text += 'Each triple is **Pixstride default / Pixstride native / imgproxy**. Pixel MAE is **default / native**, taking the larger black/white composite error against imgproxy. Memory is the fresh container lifetime cgroup peak, including startup, warmups, file cache and kernel memory.\n\n'
         text += '| Case | CPU ms/request | HTTP p50 ms | HTTP p95 ms | Peak cgroup MiB | Output KiB | Pixel MAE |\n'
         text += '|---|---:|---:|---:|---:|---:|---:|\n'

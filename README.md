@@ -52,7 +52,9 @@ The stable container includes the following features. Optional build features ar
 - Optional staged AWS Secrets Manager/SSM, Google Secret Manager and local configuration files; S3/GCS versions and Swift v1/v2/v3 credentials/catalogs.
 - Optional S3/GCS/Azure/Swift readers; nested local files opened without following symlinks. Inbound IPv4/IPv6 TCP or a private Unix socket; bounded admission and optional native concurrency with explicit memory reservations.
 
-See [COMPATIBILITY.md](COMPATIBILITY.md) for the complete option/configuration matrix, build features, tests and differences. Pixstride is **not a complete drop-in replacement for imgproxy**. Native plugins and supported high-precision combinations vary by deployment; use `pixstride capabilities` and the native checks. HTTP/cloud fetches retain exact-host and port policies, with public IPv4/IPv6 by default and explicit opt-ins for private address classes. Native deadlines do not apply to the default in-process built-in engine.
+Unreleased source builds default to `PIXSTRIDE_ENGINE=auto`: validated opaque PNG identities keep their built-in path, while other eligible transforms use reusable isolated workers when `native-codecs` is enabled. `PIXSTRIDE_ENGINE=builtin` selects legacy routing; `native` forces the worker. PNG compression uses libdeflate and runtime-accelerated CRC32, eligible PNG input uses a bounded Rust decoder with explicit Adler32/CRC checks, source and raster ownership avoids redundant native copies, and JPEG downscaling starts during decoding; eligible fontless SVG-to-PNG requests use resvg inside the bounded worker. Eligible plain RGBA8 PNG-to-JPEG downscaling uses bounded SIMD premultiplied Lanczos3. Inside the isolated worker, fully validated plain RGB8 PNG requests with unchanged geometry can return the owned source representation without recompression; metadata/alpha/encoding changes keep the full route. Builds retain the system allocator. GNU Linux native workers use one glibc arena and base pages, with their deadlines, address-space ceiling and recycling policy intact. Images and libvips operations are not cached. Codec/routing changes can change pixels, encoded bytes and ETags; change the signed cachebuster when upgrading. Eligible TIFF input streams through the worker; bounded cropped JPEG input finishes decoding before geometry, and eligible JPEG filter output streams through up to 32-row strips, capped at 4 MiB per strip. The published 0.3.0 images and benchmark evidence below retain their original behavior.
+
+See [COMPATIBILITY.md](COMPATIBILITY.md) for the complete option/configuration matrix, build features, tests and differences. Pixstride is **not a complete drop-in replacement for imgproxy**. Native plugins and supported high-precision combinations vary by deployment; use `pixstride capabilities` and the native checks. HTTP/cloud fetches retain exact-host and port policies, with public IPv4/IPv6 by default and explicit opt-ins for private address classes. Native deadlines do not apply to the in-process built-in path.
 
 Bearer and signed URL failures now use OSS status 403; malformed or disabled processing URLs use 404. HTTP framing errors remain 400.
 
@@ -60,7 +62,38 @@ Version 0.1.1 introduced work limits that can reject expensive valid inputs. The
 
 ## Benchmarks
 
-The reusable suite compares Pixstride (default routing and forced native) with imgproxy, using immutable published images and the same 25 cases on native Linux AMD64 and ARM64. It covers public photos, transparency, flat graphics, JPEG/PNG/WebP/BMP, progressive JPEG, grayscale, TIFF and SVG. See [BENCHMARKS.md](BENCHMARKS.md) for all cases, CPU/HTTP/memory/output measurements, pixel differences, hardware, raw evidence and rerun commands.
+The reusable suite compares Pixstride (default routing and forced native) with imgproxy, using immutable reference images, provenance-checked candidate builds and the same 25 cases on native Linux AMD64 and ARM64. It covers public photos, transparency, flat graphics, JPEG/PNG/WebP/BMP, progressive JPEG, grayscale, TIFF and SVG. See [BENCHMARKS.md](BENCHMARKS.md) for all cases, CPU/HTTP/memory/output measurements, pixel differences, hardware, raw evidence and rerun commands.
+
+<!-- observed:summary:start -->
+Latest measured cohort: **target not met**. Every retained run is included; these observations do not replace the historical qualified snapshot.
+
+Unreleased [candidate `20f202a5b5e1`](https://github.com/lansbe/pixstride/commit/20f202a5b5e17eb0d8e61795e87d04a77a0cac77); default and forced-native, all retained native Linux runs. The published 0.3.0 baseline below is unchanged.
+
+| Linux | Mode | Confirmed cases | Runs | CPU ratio range | HTTP p50 range | HTTP p95 range | Peak cgroup range |
+|---|---|---:|---:|---:|---:|---:|---:|
+| amd64 | default | 25/25 | 3 | 0.0734–0.9003× | 0.0983–0.9358× | 0.0993–0.9548× | 0.1651–0.8336× |
+| amd64 | forced-native | 25/25 | 3 | 0.0752–0.9021× | 0.1007–0.9360× | 0.1008–0.9358× | 0.2698–0.8350× |
+| arm64 | default | 24/25 | 3 | 0.1075–0.9357× | 0.1315–0.9885× | 0.1304–1.0071× | 0.1562–0.8001× |
+| arm64 | forced-native | 25/25 | 3 | 0.1094–0.9382× | 0.1336–0.9883× | 0.1329–0.9676× | 0.2652–0.7959× |
+
+Ratios are Pixstride/imgproxy; lower is better. Both modes must have lower CPU, p50, p95 and peak cgroup memory in every retained run, with at least three independent runs per architecture. Encoded files and pixels can differ; the published agreement envelope is checked, without certifying perceptual equivalence. See [all cases and limits](BENCHMARKS.md) and [raw evidence](benchmarks/results/observed-index.json).
+<!-- observed:summary:end -->
+
+The [preceding six-run cohort](benchmarks/results/observed-47fa85d33c40-index.json) remains intact, including its two AMD64 p95 losses. The engine and HTTP measurement code are unchanged between those runs and the final post-review campaign above; timing variation is not evidence of a further speed optimization.
+
+
+### Historical default-only qualified cohort
+
+<!-- candidate:summary:start -->
+Unreleased [candidate `6145080e14a5`](https://github.com/lansbe/pixstride/commit/6145080e14a5e717a7a85ae9fd7174f894e08e39); default routing, all retained native runs. The published 0.3.0 baseline below is unchanged.
+
+| Linux | Confirmed cases | Runs | CPU ratio range | HTTP p50 range | HTTP p95 range | Peak cgroup range |
+|---|---:|---:|---:|---:|---:|---:|
+| amd64 | 25/25 | 3 | 0.0660–0.9272× | 0.0896–0.9570× | 0.0952–0.9408× | 0.1604–0.9740× |
+| arm64 | 25/25 | 3 | 0.1085–0.9601× | 0.1316–0.9711× | 0.1289–0.9741× | 0.1792–0.9995× |
+
+Ratios are Pixstride/imgproxy; lower is better. Counts require lower CPU, p50, p95 and peak cgroup memory in every run, with extra repeats near parity. Different encoding can increase file size. Decoded-pixel agreement is checked against the published envelope; this does not certify perceptual equivalence. See [candidate evidence](benchmarks/results/candidate-index.json) and [all cases](BENCHMARKS.md).
+<!-- candidate:summary:end -->
 
 <!-- benchmark:summary:start -->
 Images: Pixstride **0.3.0** / imgproxy **4.0.24**. Per case/mode: 6 balanced batches × 24 timed requests (144 total), after 5 warmups.

@@ -1,0 +1,1555 @@
+{
+  "candidate": {
+    "cargo_lock_sha256": "a1e51dedfb365699b208dc5af77bcf8b86f53b18da173bdccea7ffa03fca905b",
+    "dockerfile_sha256": "5d227dfd6b9d7d8a3f35834f9068a5b2274257787db156f8a28c69deb8cd8544",
+    "revision": "6145080e14a5e717a7a85ae9fd7174f894e08e39",
+    "tree": "35de566c322a9c7b82ed75c81137809faf679133"
+  },
+  "qualification": {
+    "architectures": {
+      "amd64": {
+        "cases": [
+          {
+            "id": "01-jpeg-identity",
+            "label": "Photo JPEG identity",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.49248760842627015,
+                0.5639086371199517,
+                0.5834251534708011
+              ],
+              "cpu_ms_per_request": [
+                0.6762938576474247,
+                0.7013052394425004,
+                0.6901023336979552
+              ],
+              "latency_p50_ms": [
+                0.7489780433848947,
+                0.7557079162211268,
+                0.7606863107171161
+              ],
+              "latency_p95_ms": [
+                0.7422076772734026,
+                0.7523564774836019,
+                0.7562283077612292
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "02-jpeg-thumbnail",
+            "label": "Photo JPEG thumbnail",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7040613026819923,
+                0.6712048016395843,
+                0.699954330948394
+              ],
+              "cpu_ms_per_request": [
+                0.9032236529497464,
+                0.8782690889478376,
+                0.927243925535891
+              ],
+              "latency_p50_ms": [
+                0.9302092720051643,
+                0.9126660306541479,
+                0.957041681999059
+              ],
+              "latency_p95_ms": [
+                0.8890959627464089,
+                0.9079175814603903,
+                0.940822971359945
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "03-jpeg-medium",
+            "label": "Photo JPEG medium",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7176827322055538,
+                0.7558618371291705,
+                0.7380776491832882
+              ],
+              "cpu_ms_per_request": [
+                0.8230488871189757,
+                0.8088824911720873,
+                0.8233092513882565
+              ],
+              "latency_p50_ms": [
+                0.8768523109063754,
+                0.8701218565369236,
+                0.8675705506186339
+              ],
+              "latency_p95_ms": [
+                0.8402137483726533,
+                0.8249598561627755,
+                0.8693958521982093
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "04-jpeg-square",
+            "label": "Photo square crop",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7633382609864265,
+                0.7393167943888816,
+                0.7289969450101833
+              ],
+              "cpu_ms_per_request": [
+                0.9012814388179406,
+                0.8771113746246377,
+                0.9115062975845963
+              ],
+              "latency_p50_ms": [
+                0.927869294692536,
+                0.9095380506292075,
+                0.9450031856311638
+              ],
+              "latency_p95_ms": [
+                0.9116804041995741,
+                0.8841311097355439,
+                0.9407921352844321
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "05-jpeg-retina",
+            "label": "Photo JPEG DPR 2",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7199403396053236,
+                0.7186938958707361,
+                0.712976581061206
+              ],
+              "cpu_ms_per_request": [
+                0.8438814640896825,
+                0.8227000628716864,
+                0.8308684972775336
+              ],
+              "latency_p50_ms": [
+                0.8985256090500774,
+                0.8870193609726298,
+                0.8948787473805928
+              ],
+              "latency_p95_ms": [
+                0.8760919153852387,
+                0.8744492681250844,
+                0.8674665422650093
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "06-photo-crop",
+            "label": "Photo center crop",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.8290118293702952,
+                0.7805996867308123,
+                0.7993841240875912
+              ],
+              "cpu_ms_per_request": [
+                0.44496860981784536,
+                0.42101649356118204,
+                0.41395922655478784
+              ],
+              "latency_p50_ms": [
+                0.4908457749283017,
+                0.48968573320429887,
+                0.4638047361549398
+              ],
+              "latency_p95_ms": [
+                0.4927413786208783,
+                0.4905262120874886,
+                0.4652825607586739
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "07-photo-rotate",
+            "label": "Photo 90 degree rotation",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6128170894526035,
+                0.6234115712363582,
+                0.5938578572937945
+              ],
+              "cpu_ms_per_request": [
+                0.7333815624163286,
+                0.7575625005655137,
+                0.7840331590438545
+              ],
+              "latency_p50_ms": [
+                0.7371743387901282,
+                0.7869377371305878,
+                0.8171458268397231
+              ],
+              "latency_p95_ms": [
+                0.6808885291683584,
+                0.7154087386661365,
+                0.7299345753545182
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "08-photo-blur",
+            "label": "Photo thumbnail and blur",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.877412485025955,
+                0.7996828107844334,
+                0.8262176036058595
+              ],
+              "cpu_ms_per_request": [
+                0.8673273412705739,
+                0.8993168548533248,
+                0.8672919735624243
+              ],
+              "latency_p50_ms": [
+                0.8989369396832982,
+                0.9088844547746631,
+                0.8912210012880343
+              ],
+              "latency_p95_ms": [
+                0.8617258253864498,
+                0.8968181797493627,
+                0.8709502553055884
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "09-photo-sharpen",
+            "label": "Photo thumbnail and sharpen",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.9222385500857213,
+                0.9739543238388504,
+                0.9221600583799562
+              ],
+              "cpu_ms_per_request": [
+                0.8211508239155054,
+                0.88256209949228,
+                0.8399699716032701
+              ],
+              "latency_p50_ms": [
+                0.8513262905159318,
+                0.8865405645691172,
+                0.857724414168214
+              ],
+              "latency_p95_ms": [
+                0.8375401412656183,
+                0.8804902198247584,
+                0.8501480482824653
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "10-png-identity",
+            "label": "Photo PNG identity",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.27009331727874775,
+                0.29311326124075127,
+                0.2906593847883704
+              ],
+              "cpu_ms_per_request": [
+                0.13637887557809777,
+                0.1343222595338778,
+                0.11959639058476106
+              ],
+              "latency_p50_ms": [
+                0.16023829842760753,
+                0.1633798718844084,
+                0.14229025653668395
+              ],
+              "latency_p95_ms": [
+                0.16279152283565804,
+                0.16319258487116903,
+                0.1420525249322747
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "11-png-thumbnail",
+            "label": "Photo PNG thumbnail",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6170503944614394,
+                0.6098493903896725,
+                0.6204002582311169
+              ],
+              "cpu_ms_per_request": [
+                0.44793647738280257,
+                0.4753946171285058,
+                0.37087427092895814
+              ],
+              "latency_p50_ms": [
+                0.48783121475983937,
+                0.5303658546920595,
+                0.4079028495148806
+              ],
+              "latency_p95_ms": [
+                0.4846546073889378,
+                0.5253773676131076,
+                0.4013401654172839
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "12-png-jpeg",
+            "label": "Photo PNG to JPEG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.5990320451712253,
+                0.5911059774761768,
+                0.5859021340806209
+              ],
+              "cpu_ms_per_request": [
+                0.4921726945915215,
+                0.5014427874730215,
+                0.4371209365489312
+              ],
+              "latency_p50_ms": [
+                0.528154822162806,
+                0.5325299854587103,
+                0.45381920215353516
+              ],
+              "latency_p95_ms": [
+                0.5307004260764967,
+                0.5182111152277359,
+                0.4503946487788036
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "13-png-bmp",
+            "label": "Photo PNG to BMP",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6334608593290171,
+                0.6025939240149433,
+                0.619175888177053
+              ],
+              "cpu_ms_per_request": [
+                0.5112966065383077,
+                0.5117907952735048,
+                0.41702952674570126
+              ],
+              "latency_p50_ms": [
+                0.5447913484823911,
+                0.5489237294447872,
+                0.44666593669634164
+              ],
+              "latency_p95_ms": [
+                0.554254954105547,
+                0.5415218556543355,
+                0.45007542377442744
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "14-photo-webp",
+            "label": "Earth JPEG to WebP",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.8155912514747254,
+                0.8290251107828656,
+                0.8336762995437058
+              ],
+              "cpu_ms_per_request": [
+                0.9130271818168187,
+                0.9173794907919893,
+                0.8771175649693198
+              ],
+              "latency_p50_ms": [
+                0.922443889090466,
+                0.9253371794620425,
+                0.8847470657125601
+              ],
+              "latency_p95_ms": [
+                0.9235348217301518,
+                0.9122465399815753,
+                0.8755500626559272
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "15-earth-png",
+            "label": "Earth JPEG to PNG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6919560113678488,
+                0.7280610924152213,
+                0.7026381909547739
+              ],
+              "cpu_ms_per_request": [
+                0.44162938724038026,
+                0.380063203598576,
+                0.3702193798831642
+              ],
+              "latency_p50_ms": [
+                0.561854683914418,
+                0.5436643993334046,
+                0.4976369608232753
+              ],
+              "latency_p95_ms": [
+                0.5168570501795311,
+                0.539459905031338,
+                0.48043005772640235
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "16-progressive-jpeg",
+            "label": "Progressive JPEG resize",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.8012613669697859,
+                0.782186697116757,
+                0.7825391536154616
+              ],
+              "cpu_ms_per_request": [
+                0.8728097990842412,
+                0.8783713989991233,
+                0.8521255938240359
+              ],
+              "latency_p50_ms": [
+                0.8902653457262,
+                0.9094974216869278,
+                0.8899770833072534
+              ],
+              "latency_p95_ms": [
+                0.9052627391235574,
+                0.9024523174043589,
+                0.7790165029179907
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "17-alpha-identity",
+            "label": "Alpha PNG identity",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6012665935939593,
+                0.605730378351904,
+                0.6055090998524348
+              ],
+              "cpu_ms_per_request": [
+                0.745813758121849,
+                0.4817397168878475,
+                0.5275446927433158
+              ],
+              "latency_p50_ms": [
+                0.8712689472479832,
+                0.6248459861470875,
+                0.657175889320707
+              ],
+              "latency_p95_ms": [
+                0.8747445040375417,
+                0.6444766265811454,
+                0.6517661963404227
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "18-alpha-thumbnail",
+            "label": "Alpha PNG thumbnail",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6058394160583942,
+                0.614829971743155,
+                0.6122548541321104
+              ],
+              "cpu_ms_per_request": [
+                0.6655037594675024,
+                0.5264860446019946,
+                0.5757003763431643
+              ],
+              "latency_p50_ms": [
+                0.807567638690197,
+                0.6624680368117541,
+                0.7297746251356774
+              ],
+              "latency_p95_ms": [
+                0.7208001213979705,
+                0.6709242826258474,
+                0.6870696860325276
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "19-alpha-jpeg",
+            "label": "Alpha on white JPEG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.5323987844328988,
+                0.5395547604849931,
+                0.532015343759221
+              ],
+              "cpu_ms_per_request": [
+                0.45161541289553936,
+                0.43990309346680834,
+                0.42360605585912664
+              ],
+              "latency_p50_ms": [
+                0.470260128182159,
+                0.45376952531644854,
+                0.4464032333406505
+              ],
+              "latency_p95_ms": [
+                0.463075630343286,
+                0.470950313214525,
+                0.45253386954566654
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "20-alpha-webp",
+            "label": "Alpha PNG to WebP",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.8960840301856007,
+                0.890610474124574,
+                0.8962738120159096
+              ],
+              "cpu_ms_per_request": [
+                0.8613433291748034,
+                0.8311686084994059,
+                0.8138583537352594
+              ],
+              "latency_p50_ms": [
+                0.8734473527836626,
+                0.8518974788630147,
+                0.8336793305984529
+              ],
+              "latency_p95_ms": [
+                0.8719651901332488,
+                0.8489288631558626,
+                0.8339249566015109
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "21-graphics-identity",
+            "label": "Large flat graphics PNG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.17593732512590934,
+                0.16035430665852168,
+                0.16825024020497492
+              ],
+              "cpu_ms_per_request": [
+                0.10235112022490307,
+                0.065978463665268,
+                0.07916891918420108
+              ],
+              "latency_p50_ms": [
+                0.12836618290305518,
+                0.08959114747944237,
+                0.1031499037178746
+              ],
+              "latency_p95_ms": [
+                0.13043660932245413,
+                0.09520345415859346,
+                0.1039906188095925
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "22-graphics-square",
+            "label": "Flat graphics square crop",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6716051712748892,
+                0.6846299810246679,
+                0.6790286144578314
+              ],
+              "cpu_ms_per_request": [
+                0.6984696288280701,
+                0.5445816276883343,
+                0.5966510480245333
+              ],
+              "latency_p50_ms": [
+                0.7778069500793049,
+                0.6802077852089891,
+                0.7433320622853575
+              ],
+              "latency_p95_ms": [
+                0.7856698432691308,
+                0.6871923761227561,
+                0.7650831456651535
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "23-grayscale-jpeg",
+            "label": "Grayscale PNG to JPEG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6690989847715736,
+                0.6748123302986744,
+                0.6784275817625262
+              ],
+              "cpu_ms_per_request": [
+                0.5047588740104745,
+                0.5424127580366574,
+                0.4728196858965547
+              ],
+              "latency_p50_ms": [
+                0.5290053136013215,
+                0.5661239106486422,
+                0.49414154883151074
+              ],
+              "latency_p95_ms": [
+                0.5345036185243776,
+                0.571339130445534,
+                0.4740987053279103
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "24-tiff-png",
+            "label": "RGB TIFF to PNG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6897606382978724,
+                0.7115333333333334,
+                0.6819523715803976
+              ],
+              "cpu_ms_per_request": [
+                0.4248793737633086,
+                0.3941746594845169,
+                0.3754292313244316
+              ],
+              "latency_p50_ms": [
+                0.48996387821812176,
+                0.4863523726738343,
+                0.44578667778263475
+              ],
+              "latency_p95_ms": [
+                0.500281448067995,
+                0.47984648177279915,
+                0.4468350863454744
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "25-svg-raster",
+            "label": "SVG graphics rasterization",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.4470409292035398,
+                0.47847171197648786,
+                0.46194040389775454
+              ],
+              "cpu_ms_per_request": [
+                0.5886945752788136,
+                0.5627449982181948,
+                0.581000880863246
+              ],
+              "latency_p50_ms": [
+                0.651607476801266,
+                0.6090415394027927,
+                0.6409761223197952
+              ],
+              "latency_p95_ms": [
+                0.7192130428025009,
+                0.5869065328419562,
+                0.607152179058908
+              ]
+            },
+            "status": "confirmed-win"
+          }
+        ],
+        "confirmed_cases": 25,
+        "runs": 3,
+        "samples_sha256": [
+          "76fb3e86bb5afc4e7ef13dadb518dbc3da863c766ad941022a63330a0f2fda1a",
+          "7ac22c640f369154558ce04be975260b9f81e065196154a5e8d4013efaa8d1ea",
+          "88272c53030da8b2fb39a6d7325d0ac3142748131f1a5295a2e19d912644b877"
+        ],
+        "workflow_urls": [
+          "https://github.com/lansbe/pixstride/actions/runs/43766833208"
+        ]
+      },
+      "arm64": {
+        "cases": [
+          {
+            "id": "01-jpeg-identity",
+            "label": "Photo JPEG identity",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6295277755951914,
+                0.5527720446943278,
+                0.6174251086210839
+              ],
+              "cpu_ms_per_request": [
+                0.7347530576916234,
+                0.7405186048040094,
+                0.7412165446693391
+              ],
+              "latency_p50_ms": [
+                0.7620122711109596,
+                0.769074492476151,
+                0.7586663650552371
+              ],
+              "latency_p95_ms": [
+                0.7453751147713412,
+                0.7472829619676552,
+                0.7346570084117827
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "02-jpeg-thumbnail",
+            "label": "Photo JPEG thumbnail",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7531305903398927,
+                0.7409417632389614,
+                0.7831198191409193
+              ],
+              "cpu_ms_per_request": [
+                0.92468836387179,
+                0.9207602668825778,
+                0.9181266403919714
+              ],
+              "latency_p50_ms": [
+                0.9446534286434808,
+                0.9408904639228546,
+                0.9345584105320207
+              ],
+              "latency_p95_ms": [
+                0.9414270224097233,
+                0.9354330203577059,
+                0.9251290669491075
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "03-jpeg-medium",
+            "label": "Photo JPEG medium",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6762809155977606,
+                0.7300199417088511,
+                0.790131419817786
+              ],
+              "cpu_ms_per_request": [
+                0.8759367640131889,
+                0.8727296110572472,
+                0.8735493016498105
+              ],
+              "latency_p50_ms": [
+                0.8878749484875277,
+                0.886041848079493,
+                0.8858469754369296
+              ],
+              "latency_p95_ms": [
+                0.8801990650883796,
+                0.877161091302276,
+                0.8813384037736939
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "04-jpeg-square",
+            "label": "Photo square crop",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.8235594084650688,
+                0.7593008739076155,
+                0.747283264911857
+              ],
+              "cpu_ms_per_request": [
+                0.9230429050614956,
+                0.9136631376112638,
+                0.919961126342149
+              ],
+              "latency_p50_ms": [
+                0.9449030835572505,
+                0.9370115146194234,
+                0.9422491223900927
+              ],
+              "latency_p95_ms": [
+                0.9376504158138296,
+                0.9248727109430565,
+                0.9287426461778429
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "05-jpeg-retina",
+            "label": "Photo JPEG DPR 2",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7435330532832191,
+                0.8148389904264578,
+                0.7617117117117117
+              ],
+              "cpu_ms_per_request": [
+                0.8831915102961599,
+                0.8862163266209605,
+                0.8859586657656113
+              ],
+              "latency_p50_ms": [
+                0.9127841947488384,
+                0.9110726191202787,
+                0.896811685424393
+              ],
+              "latency_p95_ms": [
+                0.8969826595442615,
+                0.9056792062325661,
+                0.8989102686334387
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "06-photo-crop",
+            "label": "Photo center crop",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7190745501285347,
+                0.6988405797101449,
+                0.7792887029288703
+              ],
+              "cpu_ms_per_request": [
+                0.5478397139134296,
+                0.5318374754576535,
+                0.54521601520434
+              ],
+              "latency_p50_ms": [
+                0.65184794855345,
+                0.63009758501545,
+                0.6498009017720326
+              ],
+              "latency_p95_ms": [
+                0.63079309412991,
+                0.6082507414483109,
+                0.6328657750132792
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "07-photo-rotate",
+            "label": "Photo 90 degree rotation",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.5530443690377105,
+                0.6321730265074279,
+                0.6318442311675758
+              ],
+              "cpu_ms_per_request": [
+                0.7823102995851661,
+                0.7634332882205112,
+                0.7888076920795544
+              ],
+              "latency_p50_ms": [
+                0.775459258479862,
+                0.7714691373542585,
+                0.7776136250593507
+              ],
+              "latency_p95_ms": [
+                0.7254190279537308,
+                0.6924796746448485,
+                0.758983408515782
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "08-photo-blur",
+            "label": "Photo thumbnail and blur",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.9919730709476955,
+                0.8691659328217386,
+                0.8377376539519311
+              ],
+              "cpu_ms_per_request": [
+                0.9504164469454539,
+                0.9600534565449855,
+                0.958053831725478
+              ],
+              "latency_p50_ms": [
+                0.9609940920852491,
+                0.9710809421150136,
+                0.9639506435603169
+              ],
+              "latency_p95_ms": [
+                0.9582390266046358,
+                0.9741257613194245,
+                0.9740258143109786
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "09-photo-sharpen",
+            "label": "Photo thumbnail and sharpen",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.9734919886899152,
+                0.918630295995357,
+                0.9995000624921885
+              ],
+              "cpu_ms_per_request": [
+                0.8949756273088373,
+                0.8912630809496795,
+                0.8910305722251098
+              ],
+              "latency_p50_ms": [
+                0.8993987139695796,
+                0.8979994917713947,
+                0.8948589343331246
+              ],
+              "latency_p95_ms": [
+                0.9026280533807427,
+                0.9032559152233967,
+                0.8981233086420958
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "10-png-identity",
+            "label": "Photo PNG identity",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.22157874858365856,
+                0.2611834472089725,
+                0.21692666748556688
+              ],
+              "cpu_ms_per_request": [
+                0.18333459587905077,
+                0.18424194030360372,
+                0.1841216763295631
+              ],
+              "latency_p50_ms": [
+                0.21487447777927743,
+                0.21675280799610136,
+                0.21442813302573532
+              ],
+              "latency_p95_ms": [
+                0.21413690937732702,
+                0.21381012950333647,
+                0.21257051528215867
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "11-png-thumbnail",
+            "label": "Photo PNG thumbnail",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6076992210904734,
+                0.6129290285049447,
+                0.5899965265717263
+              ],
+              "cpu_ms_per_request": [
+                0.7188049956477389,
+                0.7062047798793959,
+                0.7060363695553967
+              ],
+              "latency_p50_ms": [
+                0.7772168294670839,
+                0.7616952793916295,
+                0.7616654779883751
+              ],
+              "latency_p95_ms": [
+                0.7510444414121165,
+                0.7286186297587645,
+                0.7265539015418955
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "12-png-jpeg",
+            "label": "Photo PNG to JPEG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7419701986754967,
+                0.5385313880985532,
+                0.49351039538517005
+              ],
+              "cpu_ms_per_request": [
+                0.7516949173212053,
+                0.7592229034026776,
+                0.7639110310080696
+              ],
+              "latency_p50_ms": [
+                0.7995552490956456,
+                0.809299113799873,
+                0.8133686158435348
+              ],
+              "latency_p95_ms": [
+                0.7687169451683633,
+                0.7847499583269408,
+                0.7881762476570883
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "13-png-bmp",
+            "label": "Photo PNG to BMP",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.5359448448762143,
+                0.6127292340884574,
+                0.5671689850592478
+              ],
+              "cpu_ms_per_request": [
+                0.7613852197134351,
+                0.773450475239987,
+                0.7860426473870112
+              ],
+              "latency_p50_ms": [
+                0.7950942187785713,
+                0.805183409308834,
+                0.8201472556783033
+              ],
+              "latency_p95_ms": [
+                0.7832824300039429,
+                0.793882896622704,
+                0.8096037727090237
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "14-photo-webp",
+            "label": "Earth JPEG to WebP",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7331192169457826,
+                0.7812198261989057,
+                0.7197429741561926
+              ],
+              "cpu_ms_per_request": [
+                0.9034363691364317,
+                0.9043214526855803,
+                0.905081468212794
+              ],
+              "latency_p50_ms": [
+                0.9099764728020228,
+                0.9100140293199269,
+                0.9116903149659138
+              ],
+              "latency_p95_ms": [
+                0.9016483785066595,
+                0.902564585761423,
+                0.9060285846222497
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "15-earth-png",
+            "label": "Earth JPEG to PNG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6521691257432284,
+                0.6275414880756127,
+                0.6972848697175389
+              ],
+              "cpu_ms_per_request": [
+                0.5888113576302657,
+                0.5921869633604596,
+                0.5877018512027519
+              ],
+              "latency_p50_ms": [
+                0.8610216826705647,
+                0.8597785312804502,
+                0.8589152735984285
+              ],
+              "latency_p95_ms": [
+                0.7759941784633979,
+                0.7647497803838017,
+                0.770139035819211
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "16-progressive-jpeg",
+            "label": "Progressive JPEG resize",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.8485230295394092,
+                0.7551405517959396,
+                0.82778448214666
+              ],
+              "cpu_ms_per_request": [
+                0.880283382696055,
+                0.8372367454741878,
+                0.8798776211412206
+              ],
+              "latency_p50_ms": [
+                0.9033866142657374,
+                0.874414978569672,
+                0.8993838498564749
+              ],
+              "latency_p95_ms": [
+                0.8977516061540719,
+                0.8077811844647417,
+                0.8937001546302555
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "17-alpha-identity",
+            "label": "Alpha PNG identity",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7922906948195433,
+                0.7071453713481168,
+                0.6941120153183341
+              ],
+              "cpu_ms_per_request": [
+                0.3952123595515802,
+                0.3980949116461154,
+                0.3926943366178959
+              ],
+              "latency_p50_ms": [
+                0.46052602394501735,
+                0.4629699184153444,
+                0.4566686315658628
+              ],
+              "latency_p95_ms": [
+                0.453259086270314,
+                0.4575863515436163,
+                0.4486247497780494
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "18-alpha-thumbnail",
+            "label": "Alpha PNG thumbnail",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7015037593984963,
+                0.6990197029991264,
+                0.6476519734946701
+              ],
+              "cpu_ms_per_request": [
+                0.8005547516636584,
+                0.8208626869852041,
+                0.8042606033614591
+              ],
+              "latency_p50_ms": [
+                0.9162170063948496,
+                0.9453296275610378,
+                0.9222952501952005
+              ],
+              "latency_p95_ms": [
+                0.8493187350978436,
+                0.8761957481282813,
+                0.8279331816879825
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "19-alpha-jpeg",
+            "label": "Alpha on white JPEG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6304690579424517,
+                0.613897450266181,
+                0.670613868889731
+              ],
+              "cpu_ms_per_request": [
+                0.504793481435053,
+                0.508525968774978,
+                0.49958515489117666
+              ],
+              "latency_p50_ms": [
+                0.5211793054496556,
+                0.5258027000776727,
+                0.5156744184913528
+              ],
+              "latency_p95_ms": [
+                0.5180366487955342,
+                0.5304543831110471,
+                0.519644709504552
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "20-alpha-webp",
+            "label": "Alpha PNG to WebP",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7908929025693208,
+                0.7455534800617234,
+                0.7972832670012113
+              ],
+              "cpu_ms_per_request": [
+                0.8399421008176939,
+                0.849038103089976,
+                0.8421138265236418
+              ],
+              "latency_p50_ms": [
+                0.8463660645866151,
+                0.8561124033214039,
+                0.848251809681156
+              ],
+              "latency_p95_ms": [
+                0.8470519436768286,
+                0.8626434149269439,
+                0.8582641627946336
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "21-graphics-identity",
+            "label": "Large flat graphics PNG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.21689911247962326,
+                0.17924952758031135,
+                0.22370508632757816
+              ],
+              "cpu_ms_per_request": [
+                0.1085867580706666,
+                0.10890273055308383,
+                0.1084759618081393
+              ],
+              "latency_p50_ms": [
+                0.13190374804069802,
+                0.13246277358082703,
+                0.1316402399648673
+              ],
+              "latency_p95_ms": [
+                0.12893426329743038,
+                0.13031322415394633,
+                0.12944829050630513
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "22-graphics-square",
+            "label": "Flat graphics square crop",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.7566434898561768,
+                0.7328504101937511,
+                0.7363327229924144
+              ],
+              "cpu_ms_per_request": [
+                0.6881251925190471,
+                0.6912623014464769,
+                0.7256952194006813
+              ],
+              "latency_p50_ms": [
+                0.7983222197845322,
+                0.7976711458888934,
+                0.8417067142654012
+              ],
+              "latency_p95_ms": [
+                0.752899013531021,
+                0.7311567496173912,
+                0.791479576977472
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "23-grayscale-jpeg",
+            "label": "Grayscale PNG to JPEG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.8392332663471943,
+                0.8505177847816299,
+                0.7880890430760336
+              ],
+              "cpu_ms_per_request": [
+                0.7545895135667805,
+                0.7561372004555664,
+                0.7511491895412121
+              ],
+              "latency_p50_ms": [
+                0.769957999310352,
+                0.7767166261909978,
+                0.7601981118498347
+              ],
+              "latency_p95_ms": [
+                0.7680161688168171,
+                0.773110761064138,
+                0.7642646609229766
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "24-tiff-png",
+            "label": "RGB TIFF to PNG",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.6551638221004111,
+                0.643743854473943,
+                0.6695667826713069
+              ],
+              "cpu_ms_per_request": [
+                0.5684043597459244,
+                0.546441759067647,
+                0.560476547346981
+              ],
+              "latency_p50_ms": [
+                0.7680644369380907,
+                0.7339218518520492,
+                0.7523344255129245
+              ],
+              "latency_p95_ms": [
+                0.7430638827968058,
+                0.708953297087341,
+                0.7304674261108476
+              ]
+            },
+            "status": "confirmed-win"
+          },
+          {
+            "id": "25-svg-raster",
+            "label": "SVG graphics rasterization",
+            "noisy_cpu": false,
+            "quality_failures": [],
+            "ratios": {
+              "cgroup_peak_memory_bytes": [
+                0.542853409981709,
+                0.5113636363636364,
+                0.4891916677584174
+              ],
+              "cpu_ms_per_request": [
+                0.3629975551465539,
+                0.3588644320539419,
+                0.36226322464509264
+              ],
+              "latency_p50_ms": [
+                0.4151851932598159,
+                0.4102610245742903,
+                0.41060714501233186
+              ],
+              "latency_p95_ms": [
+                0.4160499712986118,
+                0.410692165850705,
+                0.4030321907209378
+              ]
+            },
+            "status": "confirmed-win"
+          }
+        ],
+        "confirmed_cases": 25,
+        "runs": 3,
+        "samples_sha256": [
+          "2e103d1387c8b37765791bf729c5728035aeb911765e2c3dab02330f54510279",
+          "5f805f520f5821affce950bb947b11772eadc55f536d64613d1cd6e10aca78f0",
+          "8356ff65f4ce72a3983fee67166dbf9e074e7c76fc6ff235a51eb3fbdea94143"
+        ],
+        "workflow_urls": [
+          "https://github.com/lansbe/pixstride/actions/runs/43766833208"
+        ]
+      }
+    },
+    "candidate": {
+      "cargo_lock_sha256": "a1e51dedfb365699b208dc5af77bcf8b86f53b18da173bdccea7ffa03fca905b",
+      "dockerfile_sha256": "5d227dfd6b9d7d8a3f35834f9068a5b2274257787db156f8a28c69deb8cd8544",
+      "revision": "6145080e14a5e717a7a85ae9fd7174f894e08e39",
+      "tree": "35de566c322a9c7b82ed75c81137809faf679133"
+    },
+    "criteria": {
+      "close_minimum_runs": 3,
+      "close_ratio": 0.95,
+      "default_metrics": [
+        "cpu_ms_per_request",
+        "latency_p50_ms",
+        "latency_p95_ms",
+        "cgroup_peak_memory_bytes"
+      ],
+      "minimum_runs_per_architecture": 2,
+      "pixel_tolerance": 0.01
+    },
+    "qualified": true,
+    "schema_version": 1
+  },
+  "reports": [
+    {
+      "architecture": "amd64",
+      "file": "candidate-6145080e14a5-amd64-76fb3e86bb5a.raw.json.gz",
+      "raw_sha256": "ccf7d5a57db2453f6d7f76ac91461e03ccab2ec48c73721de33d918f35af5c1e",
+      "samples_sha256": "76fb3e86bb5afc4e7ef13dadb518dbc3da863c766ad941022a63330a0f2fda1a",
+      "sha256": "47226195892ada9c49f94a76c6dbbf0aedfcd938a489f8c08ad190d3c6cb9ba3"
+    },
+    {
+      "architecture": "amd64",
+      "file": "candidate-6145080e14a5-amd64-7ac22c640f36.raw.json.gz",
+      "raw_sha256": "402f6c31b9cc3edbef5ec71364ff5e83fb7d0e5f9ad2514ed524d70e3b740f9a",
+      "samples_sha256": "7ac22c640f369154558ce04be975260b9f81e065196154a5e8d4013efaa8d1ea",
+      "sha256": "3e1defa31ade6456f9be029062f28e1c44c7a9d675c3dbb2d83fc82d56ae3181"
+    },
+    {
+      "architecture": "amd64",
+      "file": "candidate-6145080e14a5-amd64-88272c53030d.raw.json.gz",
+      "raw_sha256": "97931c7ce7b49350f29457ea9b93ab9ef279b7db2227dc96ef975b3257267b51",
+      "samples_sha256": "88272c53030da8b2fb39a6d7325d0ac3142748131f1a5295a2e19d912644b877",
+      "sha256": "d95bdfb0346eac466579683722bb39e8296e7b340f94b1a5093ed7eafd4e1a2f"
+    },
+    {
+      "architecture": "arm64",
+      "file": "candidate-6145080e14a5-arm64-2e103d1387c8.raw.json.gz",
+      "raw_sha256": "ce2d723a8ffd181640af1b3a295a5f23b1adf577ec0e7a5272ec5e7b3d5c861f",
+      "samples_sha256": "2e103d1387c8b37765791bf729c5728035aeb911765e2c3dab02330f54510279",
+      "sha256": "347c1edd5d98ca242c7635a20a7d8ea96d6cbca81410ecf3610332e6c5bbb711"
+    },
+    {
+      "architecture": "arm64",
+      "file": "candidate-6145080e14a5-arm64-5f805f520f58.raw.json.gz",
+      "raw_sha256": "676c5b630cf7a116688c4d46c4091fd74fcc3c22b3b6adf3a43431a0e47b3b99",
+      "samples_sha256": "5f805f520f5821affce950bb947b11772eadc55f536d64613d1cd6e10aca78f0",
+      "sha256": "ab2baf4e58fc752bd9085016f7d330c7fedbe7349d0711e5ea41ef71db55c249"
+    },
+    {
+      "architecture": "arm64",
+      "file": "candidate-6145080e14a5-arm64-8356ff65f4ce.raw.json.gz",
+      "raw_sha256": "ce2181da86c331e9fd6c553d67f6ab8c9d15dbb982f10474ffc8a8e5f1f6fd18",
+      "samples_sha256": "8356ff65f4ce72a3983fee67166dbf9e074e7c76fc6ff235a51eb3fbdea94143",
+      "sha256": "039aa451b192622ba88a88df1ae091d535d40dba59e2f8eb835c35cdfdea3225"
+    }
+  ],
+  "schema_version": 1
+}

@@ -160,8 +160,7 @@ mod tests {
     }
 
     fn decode(bytes: &[u8]) -> Image {
-        static INIT: std::sync::Once = std::sync::Once::new();
-        INIT.call_once(|| libvips::Vips::init("pixstride-palette-test").unwrap());
+        super::super::engine::initialize().unwrap();
         let image = VipsImage::new_from_buffer(bytes, "").unwrap();
         super::super::encode::raster(&image).unwrap()
     }

@@ -1,0 +1,141 @@
+name: Candidate benchmarks
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/performance-all-cases]
+    paths:
+      - src/**
+      - Cargo.toml
+      - Cargo.lock
+      - Dockerfile
+      - vendor/**
+      - scripts/benchmark*.py
+      - scripts/native_pool_check.py
+      - scripts/performance_allocator.py
+      - benchmarks/allocator_profile.c
+      - .github/checks/project/test_allocator_profile.py
+      - .github/checks/project/test_benchmark*.py
+      - .github/checks/abi/**
+      - .github/workflows/benchmark-candidate.yml
+permissions:
+  contents: read
+concurrency:
+  group: candidate-benchmarks-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  corpus:
+    name: Shared corpus and candidate accounting tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install independent decoder and prepare one checked corpus
+        run: |
+          python3 -m venv "$RUNNER_TEMP/benchmark-env"
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m unittest discover -s .github/checks/project -v
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/project.py check
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_report.py --check
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_fixtures.py --output "$RUNNER_TEMP/corpus" --cache "$RUNNER_TEMP/source-cache"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: candidate-shared-corpus
+          path: ${{ runner.temp }}/corpus/
+          if-no-files-found: error
+          retention-days: 7
+  measure:
+    name: Candidate ${{ matrix.platform.arch }} repetition ${{ matrix.repetition }}
+    needs: corpus
+    strategy:
+      fail-fast: false
+      matrix:
+        platform:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+        repetition: [1, 2, 3]
+    runs-on: ${{ matrix.platform.runner }}
+    timeout-minutes: 75
+    env:
+      BENCHMARK_RUNNER: ${{ matrix.platform.runner }}
+      BENCHMARK_ARCH: ${{ matrix.platform.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: candidate-shared-corpus
+          path: ${{ runner.temp }}/corpus
+      - name: Build the exact candidate checkout without publishing an image
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          docker build --pull --label "org.opencontainers.image.revision=$GITHUB_SHA" --iidfile "$RUNNER_TEMP/candidate-image.txt" -t pixstride:benchmark-candidate .
+      - name: Install the independent decoder
+        run: |
+          python3 -m venv "$RUNNER_TEMP/benchmark-env"
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
+      - name: Preflight every candidate case
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark.py --architecture "$BENCHMARK_ARCH" --fixtures "$RUNNER_TEMP/corpus" --pixstride-image "$(cat "$RUNNER_TEMP/candidate-image.txt")" --candidate-revision "$GITHUB_SHA" --output "$RUNNER_TEMP/preflight.json" --preflight
+      - name: Measure every case with the full balanced protocol
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark.py --architecture "$BENCHMARK_ARCH" --fixtures "$RUNNER_TEMP/corpus" --pixstride-image "$(cat "$RUNNER_TEMP/candidate-image.txt")" --candidate-revision "$GITHUB_SHA" --output "$RUNNER_TEMP/report.json"
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_report.py --reports "$RUNNER_TEMP/report.json" --markdown "$RUNNER_TEMP/cases.md" --csv "$RUNNER_TEMP/cases.csv"
+      - name: Verify owned containers were cleaned
+        if: always()
+        run: test -z "$(docker ps -aq --filter label=io.pixstride.benchmark.run)"
+      - name: Inspect separate diagnostic containers after all measurements
+        continue-on-error: true
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/performance_memory.py --image "$(cat "$RUNNER_TEMP/candidate-image.txt")" --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/memory-diagnostics.json"
+      - name: Profile allocator policies in separate diagnostic containers
+        if: matrix.platform.arch == 'arm64' && matrix.repetition == 1
+        continue-on-error: true
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/performance_allocator.py --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/allocator-profile.json"
+      - name: Verify diagnostic containers were cleaned
+        if: always()
+        run: test -z "$(docker ps -aq --filter label=io.pixstride.benchmark.run)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: candidate-${{ matrix.platform.arch }}-${{ matrix.repetition }}
+          path: |
+            ${{ runner.temp }}/report.json
+            ${{ runner.temp }}/preflight.json
+            ${{ runner.temp }}/cases.md
+            ${{ runner.temp }}/cases.csv
+            ${{ runner.temp }}/candidate-image.txt
+            ${{ runner.temp }}/memory-diagnostics.json
+            ${{ runner.temp }}/allocator-profile.json
+          if-no-files-found: warn
+          retention-days: 90
+  qualify:
+    name: Confirm all cases across independent native runs
+    needs: measure
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: candidate-*-*
+          path: ${{ runner.temp }}/evidence
+      - name: Require both modes to win CPU/p50/p95/memory and retain the pixel envelope
+        run: |
+          python3 scripts/benchmark_qualification.py --reports "$RUNNER_TEMP"/evidence/candidate-amd64-*/report.json "$RUNNER_TEMP"/evidence/candidate-arm64-*/report.json --output "$RUNNER_TEMP/qualification.json" --markdown "$RUNNER_TEMP/qualification.md"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: candidate-qualification
+          path: |
+            ${{ runner.temp }}/qualification.json
+            ${{ runner.temp }}/qualification.md
+          if-no-files-found: warn
+          retention-days: 90
