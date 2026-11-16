@@ -14,6 +14,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 ### Changed
 
 - Reduce repeated native JPEG filter preparation with up to 32-row output strips, capped at 4 MiB per strip for wide images. Preserve native blur/sharpen samples and byte-target fallback; add reusable native filter-strip diagnostics.
+- Pin the benchmark client to spare CPUs outside the services' unchanged two-CPU cpuset; record and validate affinity for new both-mode qualification while preserving historical samples.
+- Retain all six current native Linux reports and both-mode case/size/pixel tables, including failed comparisons, in a separate checked observations snapshot. The two original forced-native losses are resolved; the complete target remains unmet because of two AMD64 p95 losses.
 
 - Retain System allocation and use one glibc arena for GNU Linux native workers, suppressing allocator huge-page promotion before exec and requesting process base pages. Preserve small allocation caches, fixed 4 MiB thresholds, the continuous native filter pipeline, quality, deadlines, the 1 GiB address-space ceiling and recycling. Add reusable allocator/page-policy diagnostics with development-only pinned mimalloc; no custom service allocation override or per-request heap sweep.
 

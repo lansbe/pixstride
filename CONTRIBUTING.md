@@ -59,7 +59,11 @@ Use the reusable [25-case Linux benchmark](BENCHMARKS.md) for performance compar
 
 Regenerate Markdown tables with `python3 scripts/benchmark_report.py --update-docs` after installing reviewed raw evidence in `benchmarks/results`. Run `python3 scripts/benchmark_report.py --check` to verify their consistency. Commit only public sanitized JSON summaries and losslessly compressed raw evidence, with image/corpus/harness identities and workflow provenance. Keep downloaded media, caches, logs and personal host paths untracked. See the guide for setup, all 25 cases and full rerun/publication commands.
 
+New runs require at least three available logical CPUs: two shared by the services and the remaining CPUs reserved for the benchmark client. New both-mode qualification verifies disjoint client/service affinity; historical published evidence retains its original placement.
+
 Qualified repeated candidates use `python3 scripts/candidate_snapshot.py --publish amd64-*/report.json arm64-*/report.json`, preserving the release baseline. `python3 scripts/candidate_snapshot.py --check` recomputes qualification from every retained archive and checks generated candidate tables. Failed cohorts stay in workflow artifacts. The optional memory diagnostics run in new containers after all formal measurements; their process aggregates omit addresses, PIDs and file paths and never qualify performance.
+
+To retain a complete measured cohort even when its target fails, run `python3 scripts/candidate_observations.py --record amd64-*/report.json arm64-*/report.json`. It requires all three runs per architecture and records every loss in a separate observed index and both-mode tables. It never replaces the qualified index. `candidate_snapshot.py --check` also verifies these observed raw hashes, recomputed results and documentation; `candidate_observations.py --check` checks them separately. The observed command records evidence successfully even when it prints `target not met`; use the qualification command as the performance gate.
 
 ## Releases
 

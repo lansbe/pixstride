@@ -62,7 +62,24 @@ Version 0.1.1 introduced work limits that can reject expensive valid inputs. The
 
 ## Benchmarks
 
-The reusable suite compares Pixstride (default routing and forced native) with imgproxy, using immutable published images and the same 25 cases on native Linux AMD64 and ARM64. It covers public photos, transparency, flat graphics, JPEG/PNG/WebP/BMP, progressive JPEG, grayscale, TIFF and SVG. See [BENCHMARKS.md](BENCHMARKS.md) for all cases, CPU/HTTP/memory/output measurements, pixel differences, hardware, raw evidence and rerun commands.
+The reusable suite compares Pixstride (default routing and forced native) with imgproxy, using immutable reference images, provenance-checked candidate builds and the same 25 cases on native Linux AMD64 and ARM64. It covers public photos, transparency, flat graphics, JPEG/PNG/WebP/BMP, progressive JPEG, grayscale, TIFF and SVG. See [BENCHMARKS.md](BENCHMARKS.md) for all cases, CPU/HTTP/memory/output measurements, pixel differences, hardware, raw evidence and rerun commands.
+
+<!-- observed:summary:start -->
+Latest measured cohort: **target not met**. Every retained run is included; these observations do not replace the historical qualified snapshot.
+
+Unreleased [candidate `47fa85d33c40`](https://github.com/lansbe/pixstride/commit/47fa85d33c4047b21f50898998f514ebb9aaad96); default and forced-native, all retained native Linux runs. The published 0.3.0 baseline below is unchanged.
+
+| Linux | Mode | Confirmed cases | Runs | CPU ratio range | HTTP p50 range | HTTP p95 range | Peak cgroup range |
+|---|---|---:|---:|---:|---:|---:|---:|
+| amd64 | default | 24/25 | 3 | 0.0750–0.9112× | 0.1006–0.9370× | 0.1093–1.1209× | 0.1588–0.8202× |
+| amd64 | forced-native | 24/25 | 3 | 0.0769–0.9098× | 0.1031–0.9332× | 0.1137–1.1000× | 0.2631–0.8257× |
+| arm64 | default | 25/25 | 3 | 0.1078–0.9376× | 0.1318–0.9813× | 0.1292–0.9500× | 0.1485–0.7903× |
+| arm64 | forced-native | 25/25 | 3 | 0.1103–0.9350× | 0.1340–0.9731× | 0.1318–0.9603× | 0.2554–0.7919× |
+
+Ratios are Pixstride/imgproxy; lower is better. Both modes must have lower CPU, p50, p95 and peak cgroup memory in every retained run; close/noisy timings require extra repeats. Encoded files and pixels can differ; the published agreement envelope is checked, without certifying perceptual equivalence. See [all cases and limits](BENCHMARKS.md) and [raw evidence](benchmarks/results/observed-index.json).
+<!-- observed:summary:end -->
+
+### Historical default-only qualified cohort
 
 <!-- candidate:summary:start -->
 Unreleased [candidate `6145080e14a5`](https://github.com/lansbe/pixstride/commit/6145080e14a5e717a7a85ae9fd7174f894e08e39); default routing, all retained native runs. The published 0.3.0 baseline below is unchanged.

@@ -109,11 +109,11 @@ def generated_both(reports, result):
     return {'README.md': summary, 'BENCHMARKS.md': details}
 
 
-def with_block(text, kind, anchor, body):
-    start, end = f'<!-- candidate:{kind}:start -->', f'<!-- candidate:{kind}:end -->'
+def with_block(text, kind, anchor, body, *, namespace='candidate', anchor_namespace='benchmark'):
+    start, end = f'<!-- {namespace}:{kind}:start -->', f'<!-- {namespace}:{kind}:end -->'
     block = start + '\n' + body.rstrip() + '\n' + end
     if start not in text and end not in text:
-        marker = f'<!-- benchmark:{anchor}:start -->'
+        marker = f'<!-- {anchor_namespace}:{anchor}:start -->'
         if text.count(marker) != 1:
             raise ValueError('Missing candidate insertion anchor')
         return text.replace(marker, block + '\n\n' + marker)
@@ -203,6 +203,10 @@ def main():
     action.add_argument('--check', action='store_true')
     args = parser.parse_args()
     result = publish(args.publish) if args.publish else check()
+    if args.check:
+        from candidate_observations import check as check_observations
+        if check_observations():
+            print('Latest observed cohort, including losses, is consistent')
     print('Qualified candidate evidence and documentation are consistent' if result else 'No candidate snapshot published')
 
 
