@@ -9,8 +9,6 @@ use crate::{
 
 pub(crate) mod capabilities;
 #[cfg(feature = "native-codecs")]
-mod cleanup;
-#[cfg(feature = "native-codecs")]
 mod composite;
 #[cfg(feature = "native-codecs")]
 mod encode;
@@ -22,8 +20,6 @@ mod fast_svg;
 mod geometry;
 #[cfg(feature = "native-codecs")]
 mod jpeg_decode;
-#[cfg(feature = "native-codecs")]
-mod jpeg_resize;
 #[cfg(feature = "native-codecs")]
 mod metadata;
 #[cfg(feature = "native-codecs")]

@@ -56,7 +56,7 @@ class DocumentationTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="pixstride-project-test-")
         self.root = Path(self.directory.name)
-        for name in ("Cargo.toml", "Cargo.lock", "README.md", "SECURITY.md", "CHANGELOG.md", "CONTRIBUTING.md", "COMPATIBILITY.md", "BENCHMARKS.md", "LICENSE"):
+        for name in ("Cargo.toml", "Cargo.lock", "README.md", "SECURITY.md", "CHANGELOG.md", "CONTRIBUTING.md", "COMPATIBILITY.md", "BENCHMARKS.md", "LICENSE", "THIRD_PARTY_NOTICES.md"):
             shutil.copyfile(ROOT / name, self.root / name)
         shutil.copytree(ROOT / "src", self.root / "src")
         shutil.copytree(ROOT / "benchmarks", self.root / "benchmarks")

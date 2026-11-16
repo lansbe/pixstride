@@ -46,8 +46,14 @@ serde_json = "1.0.154"
 tokio = { version = "1.54.1", features = ["rt", "time"], optional = true }
 url = { version = "2.5.8", optional = true }
 
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dependencies]
+mimalloc = { version = "=0.1.52", default-features = false, features = ["override", "no_thp"], optional = true }
+
+[target.'cfg(all(target_os = "linux", target_env = "gnu"))'.dev-dependencies]
+libmimalloc-sys = { version = "=0.1.49", features = ["extended"] }
+
 [features]
-native-codecs = ["dep:libvips", "dep:color_quant", "dep:gif", "dep:roxmltree", "dep:resvg", "dep:fast_png", "dep:fast_image_resize"]
+native-codecs = ["dep:libvips", "dep:color_quant", "dep:gif", "dep:roxmltree", "dep:resvg", "dep:fast_png", "dep:fast_image_resize", "dep:mimalloc"]
 cloud-sources = ["dep:opendal", "dep:tokio", "dep:reqwest", "dep:http", "dep:futures-util", "dep:bytes", "dep:reqsign-core", "dep:reqsign-aws-v4"]
 telemetry = ["dep:reqwest", "dep:tokio"]
 source-cookies = ["dep:cookie_store", "dep:psl", "dep:url"]

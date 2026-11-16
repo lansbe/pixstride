@@ -13,10 +13,10 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Use pinned mimalloc for both Rust and C allocations in GNU Linux native builds, with transparent huge pages disabled and a 64 MiB initial worker arena under the existing 1 GiB address-space ceiling. Preserve the continuous native filter pipeline, image validation, quality, deadlines and recycling. Other builds retain the system allocator; include allocator license notices with the container.
+
 - Require every default and forced-native CPU/p50/p95/peak-memory comparison to win across all retained native Linux runs. Publish schema2 per-mode evidence while preserving historical default-only snapshots.
 - Validate and move unchanged plain RGB8 PNG frames inside native workers instead of recompressing them. Preserve full checksums/stream and resource admission, fallback behavior and byte targets.
-- Complete eligible RGB JPEG downscaling into an independent bounded raster before native sharpening, releasing decoder/convolution regions and unused outer source ownership before filtering. Preserve native resize/filter samples, source admission, geometry/DPR and requested JPEG quality.
-- After each pair of native sharpen requests and complete image/thread cleanup, advise glibc to release unused allocator pages; other platforms retain normal cleanup. Measure the memory/CPU tradeoff in both modes.
 - Use bounded SIMD premultiplied Lanczos3 for eligible plain RGBA8 PNG-to-JPEG downscaling, preserving original source admission, geometry/DPR and requested encoder quality. Other pixel types, metadata/HDR/linear-light and complex geometry retain the native route; resampling can change pixels and encoded bytes.
 - Keep glibc mmap/trim thresholds fixed at 4 MiB in workers and the container so large per-image allocations can be released instead of raising adaptive heap retention.
 - Materialize bounded cropped JPEG input from a sequential full decode, preserving validation of unused rows while releasing decoder caches. Stream bounded single-pass JPEG blur/sharpen output through thin strips; materialize independent rasters for repeated byte-target encodes.

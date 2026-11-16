@@ -22,6 +22,8 @@ mod network;
 use network::{fetch, local, overload, protocol, request, server};
 mod security;
 use security::signature;
+#[cfg(all(feature = "native-codecs", target_os = "linux", target_env = "gnu"))]
+mod allocator;
 mod buffer;
 mod config;
 mod config_sources;

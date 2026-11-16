@@ -143,7 +143,7 @@ pub(super) fn try_load(
         [head.get_width(), head.get_height()],
         [image.get_width(), image.get_height()],
     );
-    super::jpeg_resize::apply(image, p, r).map(Some)
+    Ok(Some((image, p)))
 }
 
 #[cfg(test)]

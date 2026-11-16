@@ -49,6 +49,11 @@ impl Worker {
             .env("MALLOC_MMAP_THRESHOLD_", "4194304")
             .env("MALLOC_TRIM_THRESHOLD_", "4194304")
             .env("PIXSTRIDE_PROCESS_TIMEOUT", timeout.to_string());
+        #[cfg(all(target_os = "linux", target_env = "gnu"))]
+        command.env(
+            "MIMALLOC_ARENA_RESERVE",
+            crate::allocator::WORKER_ARENA_RESERVE,
+        );
         let mut child = command.spawn().map_err(|_| "cannot start native worker")?;
         let (Some(input), Some(output)) = (child.stdin.take(), child.stdout.take()) else {
             let _ = child.kill();

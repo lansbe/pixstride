@@ -198,6 +198,14 @@ pub(super) fn initialize() -> Result<(), Error> {
     })
 }
 
+struct ThreadCleanup;
+impl Drop for ThreadCleanup {
+    fn drop(&mut self) {
+        Vips::error_clear();
+        Vips::thread_shutdown();
+    }
+}
+
 pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeResult, Error> {
     if data.len() > r.extra.max_source_bytes.min(crate::MAX_FILE) {
         return Err("native source exceeds byte limit");
@@ -213,7 +221,7 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
     initialize()?;
     // Declared before every image: their last references drop first, then
     // libvips releases this reused thread's private regions and error state.
-    let _cleanup = super::cleanup::CodecCleanup::new(r);
+    let _cleanup = ThreadCleanup;
     let encoded = std::sync::Arc::new(
         if r.extra.encoding.sanitize_svg && sniff(&data) == Some(OutputFormat::Svg) {
             super::svg::sanitize(&data)?
