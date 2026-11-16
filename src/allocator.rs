@@ -4,6 +4,7 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 pub(crate) const WORKER_ARENA_RESERVE: &str = "64MiB";
+pub(crate) const WORKER_PURGE_DELAY: &str = "0";
 
 #[cfg(test)]
 mod tests {
@@ -103,6 +104,7 @@ mod tests {
             let status = child
                 .env(MARKER, "1")
                 .env("MIMALLOC_ARENA_RESERVE", super::WORKER_ARENA_RESERVE)
+                .env("MIMALLOC_PURGE_DELAY", super::WORKER_PURGE_DELAY)
                 .status()
                 .unwrap();
             assert!(status.success());

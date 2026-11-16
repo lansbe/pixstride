@@ -97,6 +97,16 @@ python3 scripts/benchmark_report.py --markdown /tmp/pixstride-benchmarks.md --cs
 
 Committed evidence contains losslessly compressed raw samples plus readable summaries. Publication requires identical input files, catalog, harness revision, image references and protocol across architectures, and recalculates statistics from samples. Generated Markdown blocks are checked for drift. Prose and output-quality limitations still require human review.
 
+## Allocator diagnostics
+
+After all qualification measurements, one ARM64 runner compares five allocator purge delays in separate fresh containers with the same two-CPU/1-GiB limits. This optional diagnostic runs native JPEG resize/blur/sharpen primitives with 6 warmups and 48 samples. It includes response deallocation and checks identical encoded output across policies; HTTP, Rust IPC and comparison against imgproxy are absent. Its JSON is marked diagnostic and cannot qualify or publish full benchmark results.
+
+```sh
+python3 scripts/performance_allocator.py --fixtures .benchmark-data --output /tmp/allocator-profile.json
+```
+
+The tool builds the current native builder stage and a local probe using the pinned allocator C source. It retains CPU/processing percentiles and lifetime cgroup peaks, removes owned containers/images, and never publishes an image. Formal qualification still requires the entire six-run, 25-case HTTP cohort after every runtime policy change.
+
 ## Measured results
 
 Evidence: [AMD64 summary](benchmarks/results/linux-amd64.json) / [complete samples](benchmarks/results/linux-amd64.raw.json.gz), [ARM64 summary](benchmarks/results/linux-arm64.json) / [complete samples](benchmarks/results/linux-arm64.raw.json.gz). Each summary records the compressed archive and decoded JSON hashes. These are the final qualification run's results; earlier development trials are not mixed into this snapshot.

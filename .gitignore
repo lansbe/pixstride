@@ -17,6 +17,7 @@
 !/BENCHMARKS.md
 !/benchmarks/
 !/benchmarks/cases.json
+!/benchmarks/allocator_profile.c
 !/benchmarks/versions.json
 !/benchmarks/results/
 !/benchmarks/results/*.json

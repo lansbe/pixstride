@@ -11,6 +11,9 @@ on:
       - vendor/**
       - scripts/benchmark*.py
       - scripts/native_pool_check.py
+      - scripts/performance_allocator.py
+      - benchmarks/allocator_profile.c
+      - .github/checks/project/test_allocator_profile.py
       - .github/checks/project/test_benchmark*.py
       - .github/checks/abi/**
       - .github/workflows/benchmark-candidate.yml
@@ -90,6 +93,11 @@ jobs:
         continue-on-error: true
         run: |
           "$RUNNER_TEMP/benchmark-env/bin/python" scripts/performance_memory.py --image "$(cat "$RUNNER_TEMP/candidate-image.txt")" --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/memory-diagnostics.json"
+      - name: Profile allocator policies in separate diagnostic containers
+        if: matrix.platform.arch == 'arm64' && matrix.repetition == 1
+        continue-on-error: true
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/performance_allocator.py --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/allocator-profile.json"
       - name: Verify diagnostic containers were cleaned
         if: always()
         run: test -z "$(docker ps -aq --filter label=io.pixstride.benchmark.run)"
@@ -104,6 +112,7 @@ jobs:
             ${{ runner.temp }}/cases.csv
             ${{ runner.temp }}/candidate-image.txt
             ${{ runner.temp }}/memory-diagnostics.json
+            ${{ runner.temp }}/allocator-profile.json
           if-no-files-found: warn
           retention-days: 90
   qualify:
