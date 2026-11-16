@@ -20,17 +20,20 @@ from performance_allocator import command
 
 def policies():
     entries = []
-    for disable in (False, True):
-        for threshold in (131072, 524288, 1048576, 4194304):
-            for cache in ('default', '0'):
-                entries.append(dict(id=f'glibc-mmap{threshold}-thp{int(disable)}-cache{cache}',
-                                    allocator='glibc', disable_thp=disable, mmap_threshold=threshold,
-                                    tcache_count=cache, collect=False))
-        for delay in (0, 1000):
-            for collect in (False, True):
-                entries.append(dict(id=f'mimalloc-purge{delay}-thp{int(disable)}-collect{int(collect)}',
-                                    allocator='mimalloc', disable_thp=disable, purge_delay_ms=delay,
-                                    collect=collect))
+    for arenas in (1, 2):
+        for threshold in (131072, 4194304):
+            for trim in (131072, 4194304):
+                for cache in ('1', '4', 'default'):
+                    entries.append(dict(id=f'glibc-arena{arenas}-mmap{threshold}-trim{trim}-cache{cache}',
+                                        allocator='glibc', disable_thp=True, arenas=arenas,
+                                        mmap_threshold=threshold, trim_threshold=trim,
+                                        tcache_count=cache, collect=False))
+    entries.extend([
+        dict(id='glibc-original-control', allocator='glibc', disable_thp=False, arenas=2,
+             mmap_threshold=4194304, trim_threshold=4194304, tcache_count='default', collect=False),
+        dict(id='mimalloc-original-control', allocator='mimalloc', disable_thp=False, arenas=2,
+             purge_delay_ms=1000, collect=False),
+    ])
     return entries
 
 
@@ -68,6 +71,9 @@ def validate(entries):
         if (type(disabled) is not int or disabled not in (0, 1) or type(huge) is not int or huge < 0 or
                 (config['disable_thp'] and (disabled != 1 or huge != 0))):
             raise ValueError('Huge-page control failed or memory evidence is missing')
+        peak, anonymous = metadata.get('process_peak_rss_bytes'), metadata.get('process_anonymous_bytes')
+        if type(peak) is not int or type(anonymous) is not int or not 0 < anonymous <= peak:
+            raise ValueError('Missing or invalid resident-memory counters')
     if seen != expected or any(len(values) != 1 for values in hashes.values()):
         raise ValueError('Incomplete matrix or policies changed encoded output')
 
@@ -90,8 +96,9 @@ def run(args):
     args.output.parent.mkdir(parents=True, exist_ok=True)
     owner = 'allocator-matrix-' + uuid.uuid4().hex[:12]
     builder, image = 'pixstride:builder-' + owner, 'pixstride:probe-' + owner
-    result = dict(kind='allocator-comparison-not-performance-qualification', complete=False,
+    result = dict(kind='allocator-comparison-not-performance-qualification', schema_version=1, complete=False,
                   architecture=architecture(), host=host_metadata(cpus), source=source, corpus_sha256=manifest['corpus_sha256'],
+                  policy_configurations=policies(),
                   host_thp_mode=Path('/sys/kernel/mm/transparent_hugepage/enabled').read_text().strip(),
                   scope='Native primitives: 6 warmups/48 samples; no HTTP/Rust IPC/imgproxy.', observations=[])
     try:
@@ -121,7 +128,8 @@ RUN --network=none set -eu; set -- /usr/local/cargo/registry/src/*/libmimalloc-s
         for config in configs:
             for operation in ('blur', 'sharpen'):
                 environment = dict(PROFILE_DISABLE_THP=str(int(config['disable_thp'])),
-                                   MALLOC_ARENA_MAX='2', MALLOC_TRIM_THRESHOLD_='4194304',
+                                   MALLOC_ARENA_MAX=str(config['arenas']),
+                                   MALLOC_TRIM_THRESHOLD_=str(config.get('trim_threshold', 4194304)),
                                    MIMALLOC_ARENA_RESERVE='64MiB', VIPS_DISC_THRESHOLD='1073741824')
                 if config['allocator'] == 'glibc':
                     environment['MALLOC_MMAP_THRESHOLD_'] = str(config['mmap_threshold'])

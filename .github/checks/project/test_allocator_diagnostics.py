@@ -15,7 +15,8 @@ def observations():
                  cgroup_peak_memory_bytes=32 * 1024**2,
                  output_sha256=('a' if operation == 'blur' else 'b') * 64,
                  metadata=dict(allocator=policy['allocator'], libc_version='2.43',
-                               thp_disabled=int(policy['disable_thp']), anonymous_huge_bytes=0))
+                               thp_disabled=int(policy['disable_thp']), anonymous_huge_bytes=0,
+                               process_peak_rss_bytes=48 * 1024**2, process_anonymous_bytes=24 * 1024**2))
             for policy in policies() for operation in ('blur', 'sharpen')]
 
 
@@ -26,6 +27,14 @@ class AllocatorDiagnosticsTests(unittest.TestCase):
         entries[-1]['output_sha256'] = 'c' * 64
         with self.assertRaises(ValueError):
             validate(entries)
+
+    def test_resident_memory_counters_cannot_be_missing_or_impossible(self):
+        for field, value in [('process_peak_rss_bytes', 0), ('process_anonymous_bytes', True),
+                             ('process_anonymous_bytes', 64 * 1024**2)]:
+            entries = observations()
+            entries[0]['metadata'][field] = value
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate(entries)
 
     def test_missing_duplicate_or_wrong_policies_fail(self):
         for entries in (observations()[:-1], observations() + [observations()[0]],
