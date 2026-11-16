@@ -53,6 +53,8 @@ The container builds/checks both feature configurations and includes all optiona
 
 ## Performance benchmarks
 
+The current published-image pins live in `benchmarks/released-versions.json`; `benchmarks/versions.json` remains the immutable 0.3.0 baseline. The runner defaults to the published pins and requires Docker buildx for read-only OCI inspection. Before measuring, it binds raw index/platform manifest digests, release version/source annotations, native image config identity and runtime capabilities. This proof is independent of the harness commit and is retained without rebuilding the published image.
+
 Native changes must also pass `python3 scripts/native_pool_check.py --binary target/debug/pixstride`. It exercises reuse without image caching, mixed requests, invalid input, child crashes, wall-clock timeouts, bounded recycling/concurrency, cumulative CPU-budget renewal and shutdown cleanup. This check runs in native CI and the container build.
 
 Use the reusable [25-case Linux benchmark](BENCHMARKS.md) for performance comparisons. Its shared public corpus, immutable image pins, signed HTTP requests, balanced batches, child-inclusive cgroup CPU and peak-memory accounting are separate from compatibility qualification. Compare the complete case set and include pixel differences/output sizes; do not turn a fast error or different-quality output into a win. Run the same prepared inputs on native AMD64 and ARM64 hosts. The standalone workflow retains raw measurements and does not impose noisy timing thresholds on ordinary PRs.

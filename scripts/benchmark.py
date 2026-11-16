@@ -15,6 +15,7 @@ import uuid
 
 from benchmark_fixtures import ROOT, load_cases, sha256, verify_fixtures
 from benchmark_metrics import balanced_orders, pixel_agreement, read_counters, summarize_batches
+from benchmark_release import capture_release
 from benchmark_runtime import (Docker, ENGINES, MEMORY_BYTES, Server, architecture,
                                counter_delta, request, signed_path, validate_response)
 
@@ -179,6 +180,8 @@ def run_isolated(args, cpus, available_cpus, client_cpus):
         raise ValueError('Pixstride image version differs from the pinned version')
     if not args.imgproxy_image and versions['imgproxy']['version'] not in images['imgproxy']['version']:
         raise ValueError('imgproxy image version differs from the pinned version')
+    if versions['pixstride'].get('published') and not args.candidate_revision:
+        capture_release(docker, images['pixstride'], versions['pixstride'])
     revision = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
     dirty = subprocess.run(['git', '-C', str(ROOT), 'diff', '--quiet', 'HEAD']).returncode != 0
     report = {'schema_version': 1, 'status': 'running', 'profile': 'full' if full else 'preflight-or-partial',
@@ -224,7 +227,7 @@ def main():
     parser.add_argument('--fixtures', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
     parser.add_argument('--cases', type=Path, default=ROOT / 'benchmarks/cases.json')
-    parser.add_argument('--versions', type=Path, default=ROOT / 'benchmarks/versions.json')
+    parser.add_argument('--versions', type=Path, default=ROOT / 'benchmarks/released-versions.json')
     parser.add_argument('--docker', default='docker')
     parser.add_argument('--architecture', choices=['amd64', 'arm64'])
     parser.add_argument('--pixstride-image')

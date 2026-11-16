@@ -1,6 +1,6 @@
 # Linux performance benchmarks
 
-The suite measures 25 predefined HTTP image-processing cases on native Linux AMD64 and ARM64. [versions.json](benchmarks/versions.json) pins default published images by immutable multi-platform digest; the initial snapshot compares Pixstride 0.3.0 and imgproxy 4.0.24. Raw reports retain the actual image identities for overrides and future runs. Pixstride default routing and forced-native mode are separate observations. Default routing can select native processing when an input or option requires it.
+The suite measures 25 predefined HTTP image-processing cases on native Linux AMD64 and ARM64. [released-versions.json](benchmarks/released-versions.json) pins the current published images by immutable multi-platform digest; [versions.json](benchmarks/versions.json) preserves the initial Pixstride 0.3.0/imgproxy 4.0.24 baseline. Raw reports retain actual image identities and published OCI proof independently of the harness source. Pixstride default routing and forced-native mode are separate observations. Default routing can select native processing when an input or option requires it.
 
 New candidate qualification requires every CPU/p50/p95/peak-memory comparison to win in both default and forced-native modes, in every retained run. Per-mode tables and counts remain separate; one mode cannot replace a loss in the other. Historical default-only snapshots below retain their original target and source labels.
 

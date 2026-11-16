@@ -20,6 +20,7 @@
 !/benchmarks/allocator_profile.c
 !/benchmarks/allocator_diagnostics.h
 !/benchmarks/versions.json
+!/benchmarks/released-versions.json
 !/benchmarks/results/
 !/benchmarks/results/*.json
 !/benchmarks/results/*.json.gz
