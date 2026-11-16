@@ -208,7 +208,7 @@ fn filter_strip_rows(width: i32, bands: i32) -> i32 {
     // This route admits only 1..=4 uchar bands. Wider strips avoid repeated
     // filter halo work; cap the output strip at 4 MiB for very wide images.
     let bytes_per_row = i64::from(width.max(1)) * i64::from(bands.max(1));
-    ((4 * 1024 * 1024) / bytes_per_row).clamp(1, 64) as i32
+    ((4 * 1024 * 1024) / bytes_per_row).clamp(1, 32) as i32
 }
 
 pub(super) fn save(
@@ -391,9 +391,9 @@ mod filter_stream_tests {
         for width in [640, 16384, 65536, 100000] {
             for bands in [1, 3, 4] {
                 let rows = filter_strip_rows(width, bands);
-                assert!((1..=64).contains(&rows));
+                assert!((1..=32).contains(&rows));
                 assert!(width * bands * rows <= 4 * 1024 * 1024);
-                if rows < 64 {
+                if rows < 32 {
                     assert!(width * bands * (rows + 1) > 4 * 1024 * 1024);
                 }
             }

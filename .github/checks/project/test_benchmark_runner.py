@@ -19,6 +19,49 @@ from benchmark_runtime import Docker, ENGINES
 
 
 class BenchmarkRunnerTests(unittest.TestCase):
+    @unittest.skipUnless(sys.platform == 'linux', 'Native Linux affinity is checked by Linux CI')
+    def test_kernel_affinity_and_subprocess_inheritance(self):
+        original = benchmark.os.sched_getaffinity(0)
+        self.assertGreaterEqual(len(original), 3, 'Linux CI needs a spare client CPU')
+        service = sorted(original)[:2]
+        with benchmark.isolate_client(service) as client:
+            self.assertEqual(benchmark.os.sched_getaffinity(0), set(client))
+            inherited = subprocess.check_output(
+                [sys.executable, '-c', 'import json,os; print(json.dumps(sorted(os.sched_getaffinity(0))))'],
+                text=True)
+            self.assertEqual(json.loads(inherited), client)
+            self.assertFalse(set(service) & set(client))
+        self.assertEqual(benchmark.os.sched_getaffinity(0), original)
+
+    def test_client_affinity_is_disjoint_and_restored_after_measurement_failure(self):
+        current = {0, 1, 2, 3}
+        changes = []
+        def set_affinity(pid, cpus):
+            self.assertEqual(pid, 0)
+            current.clear()
+            current.update(cpus)
+            changes.append(set(cpus))
+        with patch.object(benchmark.os, 'sched_getaffinity', side_effect=lambda _: current.copy(), create=True), \
+                patch.object(benchmark.os, 'sched_setaffinity', side_effect=set_affinity, create=True):
+            with self.assertRaisesRegex(RuntimeError, 'measurement failed'):
+                with benchmark.isolate_client([0, 1]) as client:
+                    self.assertEqual(client, [2, 3])
+                    self.assertEqual(current, {2, 3})
+                    raise RuntimeError('measurement failed')
+        self.assertEqual(changes, [{2, 3}, {0, 1, 2, 3}])
+
+    def test_client_isolation_requires_spare_cpu_and_verifies_kernel_result(self):
+        with patch.object(benchmark.os, 'sched_getaffinity', return_value={0, 1}, create=True):
+            with self.assertRaisesRegex(ValueError, 'spare'):
+                with benchmark.isolate_client([0, 1]):
+                    self.fail('Shared service/client CPUs must not be measured')
+        with patch.object(benchmark.os, 'sched_getaffinity', return_value={0, 1, 2}, create=True), \
+                patch.object(benchmark.os, 'sched_setaffinity', create=True) as setter:
+            with self.assertRaisesRegex(ValueError, 'affinity'):
+                with benchmark.isolate_client([0, 1]):
+                    self.fail('Unapplied affinity must not be reported as isolated')
+            self.assertEqual(setter.call_args.args, (0, {0, 1, 2}))
+
     @unittest.skipUnless(importlib.util.find_spec('PIL'), 'Pillow is installed by the benchmark workflow')
     def test_http_failure_after_first_batch_keeps_partial_case_and_context(self):
         from PIL import Image

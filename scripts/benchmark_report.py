@@ -16,7 +16,21 @@ from benchmark_runtime import ENGINES, MEMORY_BYTES, require_native_image, valid
 LABELS = {'pixstride_default': 'Pixstride default', 'pixstride_native': 'Pixstride native', 'imgproxy': 'imgproxy'}
 
 
-def validate_report(report):
+def validate_client_affinity(report):
+    if report['protocol'].get('client_affinity') != 'disjoint from service cpuset':
+        raise ValueError('New qualification requires separate client CPU affinity')
+    host = report['host']
+    service, client = host.get('selected_cpus'), host.get('client_cpus')
+    valid = lambda cpus: (isinstance(cpus, list) and bool(cpus)
+                          and all(type(c) is int and c >= 0 for c in cpus)
+                          and len(set(cpus)) == len(cpus))
+    if (not valid(service) or not valid(client) or len(service) != 2
+            or set(service) & set(client) or type(host.get('available_cpus')) is not int
+            or host['available_cpus'] != len(service) + len(client)):
+        raise ValueError('Invalid or overlapping service/client CPU affinity evidence')
+
+
+def validate_report(report, *, require_client_isolation=False):
     if (report.get('schema_version') != 1 or report.get('status') != 'success'
             or report.get('profile') != 'full' or report.get('harness_dirty') is not False):
         raise ValueError('Only complete full-protocol reports from committed harnesses can be published')
@@ -31,6 +45,8 @@ def validate_report(report):
         raise ValueError('Corpus manifest is inconsistent')
     if report['host']['architecture'] not in {'amd64', 'arm64'}:
         raise ValueError('Unsupported report architecture')
+    if require_client_isolation or 'client_affinity' in protocol:
+        validate_client_affinity(report)
     for product in ['pixstride', 'imgproxy']:
         image = report.get('images', {}).get(product, {})
         if not {'architecture', 'os'}.issubset(image):

@@ -28,6 +28,7 @@ The subsequent forced-native work also rejected complete six-run cohorts rather 
 | `6fecbfee441b` | [43798474537](https://github.com/lansbe/pixstride/actions/runs/43798474537) | Immediate purging reduced memory but introduced timing losses and still lost sharpen peak memory |
 | `70726e0ac196` | [43800922455](https://github.com/lansbe/pixstride/actions/runs/43800922455) | End-of-request allocator collection still lost JPEG/WebP memory and several timing comparisons |
 | `0a33aef385ac` | [43807416642](https://github.com/lansbe/pixstride/actions/runs/43807416642) | Forced-native won all 25 in every run; one ARM64 default sharpen p95 loss rejected the entire both-mode cohort |
+| `7dc1d103c167` | [43812425608](https://github.com/lansbe/pixstride/actions/runs/43812425608) | One AMD64 native thumbnail p95 loss and a sharpen peak-memory loss in both modes with 64-row strips |
 
 These failed measurements remain available in workflow artifacts and are not mixed into a qualified snapshot. Artifact retention is finite; the committed published cohorts retain compressed raw samples independently.
 
@@ -45,6 +46,8 @@ Alpha shapes, flat graphics and a restricted SVG are deterministic synthetic fix
 The manifest records input dimensions, sizes, hashes, attribution and generator/encoder versions. CI generates the corpus once and sends the identical artifact to both architectures. For manual two-host comparisons, copy that prepared directory instead of regenerating it: different codec builds can produce different input bytes. Media/source caches remain untracked; attribution accompanies the shared corpus artifact.
 
 ## Protocol and interpretation
+
+New runs pin the Python HTTP client and its subprocesses to the remaining available logical CPUs, disjoint from the two service CPUs, and record the kernel-verified affinity. At least three available CPUs are required. Both services retain their identical two-CPU allocation; corpus, requests, ordering, counters and quality criteria are unchanged. Older snapshots, including the rejected cohorts above, did not constrain client affinity. Their samples remain intact. This removes a possible harness contention source; it does not establish the cause of their latency spikes or remove shared-host noise. Cross-cohort timing changes cannot be attributed solely to the service when the client placement differs.
 
 Each case starts fresh containers for Pixstride default, Pixstride native and imgproxy. Each receives the same two logical CPUs, a two-CPU quota, 1 GiB memory with no additional swap, a 128-process limit, read-only root and dropped capabilities. There is one active request. `VIPS_CONCURRENCY=1` and `GOMAXPROCS=2` are configured; imgproxy's maximum clients is one. Metadata probes run in separate containers so they cannot inflate measured peaks.
 
@@ -66,7 +69,7 @@ Shared GitHub VMs have uncontrolled scheduling/frequency/noisy-neighbor conditio
 
 ## Rerun
 
-Use a native AMD64/ARM64 Linux host with a local Docker daemon, cgroup v2, two available logical CPUs, Python 3.11+ and room for three 1-GiB containers plus the client. A remote daemon cannot provide the local host's container accounting.
+Use a native AMD64/ARM64 Linux host with a local Docker daemon, cgroup v2, at least three available logical CPUs (two service CPUs and the remaining client CPUs), Python 3.11+ and room for three 1-GiB containers plus the client. A remote daemon cannot provide the local host's container accounting.
 
 ```sh
 python3 -m venv .venv-benchmark
@@ -138,7 +141,7 @@ The workflow defaults to the `filters` profile on branch pushes; manual dispatch
 python3 scripts/allocator_diagnostics.py --profile filters --fixtures .benchmark-data --output /tmp/filter-diagnostics.json
 ```
 
-The service selects up to 64 rows for eligible JPEG filter output, bounded to 4 MiB per output strip for very wide images. This trades temporary working regions against repeated filter/halo preparation; input admission, requested filters, encoder quality and pixel math remain the same. The complete HTTP cohort, rather than this primitive diagnostic, establishes any comparison with imgproxy.
+The service selects up to 32 rows for eligible JPEG filter output, bounded to 4 MiB per output strip for very wide images. This trades temporary working regions against repeated filter/halo preparation; input admission, requested filters, encoder quality and pixel math remain the same. The complete HTTP cohort, rather than this primitive diagnostic, establishes any comparison with imgproxy.
 
 The C adapter is compiled only into diagnostic probes; it is absent from the service. Its glibc collection adapter calls `malloc_trim` only for a requested collection trial. Huge-page suppression starts in the allocator environment before exec, then a process-local control disables later promotion; these settings affect each probe process, not the host. JSON is explicitly diagnostic and cannot qualify the 25 HTTP cases. After choosing a runtime policy, repeat the complete six-run HTTP cohort; diagnostic rankings cannot substitute for that evidence. The glibc 2.43 [release discussion](https://sourceware.org/pipermail/libc-alpha/2026-January/173985.html) records default AArch64 huge-page support; the [kernel controls](https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html) explain per-process disabling.
 

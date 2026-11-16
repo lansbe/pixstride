@@ -43,6 +43,21 @@ def evidence(repeats=2, ratio=.7):
 
 
 class QualificationTests(unittest.TestCase):
+    def test_new_both_mode_cohorts_require_verified_separate_client_cpus(self):
+        for bad in ('missing', 'overlap', 'duplicate', 'empty', 'wrong-service-count', 'wrong-capacity'):
+            reports, baseline = evidence()
+            host = reports[0]['host']
+            if bad == 'missing':
+                for report in reports:
+                    report['protocol'].pop('client_affinity')
+            elif bad == 'overlap': host['client_cpus'] = [1, 2]
+            elif bad == 'duplicate': host['client_cpus'] = [2, 2]
+            elif bad == 'empty': host['client_cpus'] = []
+            elif bad == 'wrong-service-count': host['selected_cpus'] = [0]
+            else: host['available_cpus'] = 2
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, 'client|affinity'):
+                qualify(reports, baseline)
+
     def test_forced_native_losses_block_an_otherwise_winning_cohort(self):
         for metric in ('cpu', 'p50', 'p95', 'memory'):
             reports, baseline = evidence(repeats=3)

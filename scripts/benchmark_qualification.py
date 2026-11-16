@@ -43,7 +43,7 @@ def qualify(reports, baselines, performance_modes=MODES):
         raise ValueError('Require at least two complete native runs on each architecture')
     for report in reports:
         arch = report['host']['architecture']
-        validate_report(report)
+        validate_report(report, require_client_isolation=performance_modes == MODES)
         other = cohorts['arm64' if arch == 'amd64' else 'amd64'][0]
         validate_pair([report, other])
         if not report['images']['pixstride'].get('candidate'):

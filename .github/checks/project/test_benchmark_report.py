@@ -21,9 +21,11 @@ def measured_report(architecture='amd64'):
     manifest['corpus_sha256'] = corpus_hash(manifest)
     report = {'schema_version': 1, 'status': 'success', 'profile': 'full', 'harness_dirty': False,
               'harness_revision': 'b' * 40, 'cases_sha256': 'c' * 64, 'fixtures': manifest,
-              'host': {'architecture': architecture},
+              'host': {'architecture': architecture, 'available_cpus': 4,
+                       'selected_cpus': [0, 1], 'client_cpus': [2, 3]},
               'protocol': {'batches': 6, 'requests_per_batch': 24, 'warmups': 5,
-                           'concurrency': 1, 'cpus': 2, 'memory_bytes': MEMORY_BYTES},
+                           'concurrency': 1, 'cpus': 2, 'memory_bytes': MEMORY_BYTES,
+                           'client_affinity': 'disjoint from service cpuset'},
               'images': {name: {'reference': name + '@sha256:' + 'd' * 64, 'architecture': architecture, 'os': 'linux'} for name in ['pixstride', 'imgproxy']},
               'cases': []}
     orders = balanced_orders(ENGINES, 6)

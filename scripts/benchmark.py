@@ -26,7 +26,23 @@ def write_report(path, report):
     temporary.replace(path)
 
 
-def host_metadata(cpus):
+@contextlib.contextmanager
+def isolate_client(cpus):
+    original = os.sched_getaffinity(0)
+    spare = original - set(cpus)
+    if len(cpus) != 2 or len(set(cpus)) != 2 or not set(cpus) <= original or not spare:
+        raise ValueError('The benchmark requires two service CPUs and at least one spare client CPU')
+    try:
+        os.sched_setaffinity(0, spare)
+        actual = os.sched_getaffinity(0)
+        if actual != spare:
+            raise ValueError('The kernel did not apply the separate client CPU affinity')
+        yield sorted(actual)
+    finally:
+        os.sched_setaffinity(0, original)
+
+
+def host_metadata(cpus, available_cpus, client_cpus):
     cpuinfo = Path('/proc/cpuinfo').read_text()
     model = sorted({line.split(':', 1)[1].strip() for line in cpuinfo.splitlines()
                     if line.startswith(('model name', 'Hardware', 'CPU part')) and ':' in line})
@@ -37,7 +53,7 @@ def host_metadata(cpus):
             if key in {'ID', 'VERSION_ID', 'PRETTY_NAME'}:
                 release[key] = value.strip('"')
     return {'architecture': architecture(), 'cpu_model': model, 'logical_cpus': os.cpu_count(),
-            'available_cpus': len(os.sched_getaffinity(0)), 'selected_cpus': cpus,
+            'available_cpus': len(available_cpus), 'selected_cpus': cpus, 'client_cpus': client_cpus,
             'kernel': platform.release(), 'os_release': release,
             'python': platform.python_version(), 'docker': None,
             'runner_label': os.environ.get('BENCHMARK_RUNNER', 'unspecified native Linux host')}
@@ -120,9 +136,13 @@ def run(args):
         raise ValueError('Run this benchmark on a native Linux host; macOS timings are not Linux results')
     if args.architecture and args.architecture != architecture():
         raise ValueError('Runner architecture does not match the requested architecture')
-    cpus = sorted(os.sched_getaffinity(0))[:2]
-    if len(cpus) != 2:
-        raise ValueError('The benchmark requires two available logical CPUs')
+    available_cpus = sorted(os.sched_getaffinity(0))
+    cpus = available_cpus[:2]
+    with isolate_client(cpus) as client_cpus:
+        return run_isolated(args, cpus, available_cpus, client_cpus)
+
+
+def run_isolated(args, cpus, available_cpus, client_cpus):
     if not 1 <= args.batches <= 60 or not 1 <= args.requests <= 1000 or not 0 <= args.warmups <= 100:
         raise ValueError('Benchmark counts exceed the bounded supported ranges')
     manifest = verify_fixtures(args.fixtures)
@@ -137,6 +157,7 @@ def run(args):
     full = len(cases) == 25 and args.batches >= 6 and args.batches % 6 == 0 and args.requests >= 24 and args.warmups >= 5
     protocol = {'batches': args.batches, 'requests_per_batch': args.requests, 'warmups': args.warmups,
                 'concurrency': 1, 'cpus': 2, 'memory_bytes': MEMORY_BYTES, 'pids_limit': 128,
+                'client_affinity': 'disjoint from service cpuset',
                 'cpu_tail_seconds': .05, 'case_order_seed': 0x504958,
                 'engine_schedule': 'all six permutations, repeated', 'http_connection': 'fresh per request',
                 'source_cache': 'warm OS page cache, no application result cache',
@@ -163,7 +184,7 @@ def run(args):
     report = {'schema_version': 1, 'status': 'running', 'profile': 'full' if full else 'preflight-or-partial',
               'started_at': dt.datetime.now(dt.timezone.utc).isoformat(),
               'harness_revision': revision, 'harness_dirty': dirty,
-              'workflow_url': None, 'host': host_metadata(cpus), 'images': images,
+              'workflow_url': None, 'host': host_metadata(cpus, available_cpus, client_cpus), 'images': images,
               'protocol': protocol, 'fixtures': manifest, 'cases_sha256': sha256(args.cases.read_bytes()),
               'case_order': [], 'cases': [],
               'limitations': ['Shared-host observations, not universal guarantees or an ISA comparison.',
@@ -182,6 +203,8 @@ def run(args):
             result = {'id': case['id'], 'status': 'running', 'engines': {}}
             report['cases'].append(result)
             write_report(args.output, report)
+            if sorted(os.sched_getaffinity(0)) != client_cpus:
+                raise ValueError('Client CPU affinity changed during measurement')
             case_measurement(case, docker, images, args.fixtures, cpus, owner, index, protocol, progress=result)
             write_report(args.output, report)
         report['status'] = 'success'
