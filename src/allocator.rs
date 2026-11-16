@@ -1,33 +1,39 @@
-//! GNU native builds share one allocator across Rust and dynamic C codecs.
+//! GNU native workers use the system heap with one arena and base pages.
+pub(crate) const WORKER_ARENAS: &str = "1";
+pub(crate) const WORKER_TUNABLES: &str = "glibc.malloc.hugetlb=0";
 
-#[global_allocator]
-static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
-pub(crate) const WORKER_ARENA_RESERVE: &str = "64MiB";
-pub(crate) const WORKER_PURGE_DELAY: &str = "1000";
-
-pub(crate) struct RequestCleanup;
-impl Drop for RequestCleanup {
-    fn drop(&mut self) {
-        // SAFETY: the process-wide allocator is initialized before worker
-        // requests. Collection retires free pages; it never moves/frees live
-        // Rust/C allocations, including the response that has to remain live.
-        unsafe { libmimalloc_sys::mi_collect(true) };
+/// Request base pages for this process; a denied optimization is nonfatal.
+pub(crate) fn prefer_base_pages() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        // SAFETY: this changes only the calling process's page policy, takes
+        // no pointers, and never changes host settings or resource ceilings.
+        unsafe {
+            libc::prctl(
+                libc::PR_SET_THP_DISABLE,
+                1 as libc::c_ulong,
+                0 as libc::c_ulong,
+                0 as libc::c_ulong,
+                0 as libc::c_ulong,
+            ) == 0
+        }
     }
+    #[cfg(not(target_os = "linux"))]
+    false
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn request_cleanup_preserves_live_rust_and_foreign_allocations() {
+    fn page_policy_preserves_live_rust_and_foreign_allocations() {
         let rust = vec![0x5au8; 8192];
-        // SAFETY: allocate initialized foreign bytes, retain them across heap
-        // collection, inspect only the live extent and pair with GLib free.
+        // SAFETY: allocate initialized foreign bytes, retain them across
+        // page-policy changes, inspect only the live extent and pair with GLib free.
         unsafe {
             let pointer = libvips::bindings::g_try_malloc(8192).cast::<u8>();
             assert!(!pointer.is_null());
             pointer.write_bytes(0x37, 8192);
-            drop(super::RequestCleanup);
+            let _ = super::prefer_base_pages();
             assert!(std::slice::from_raw_parts(pointer, 8192)
                 .iter()
                 .all(|b| *b == 0x37));
@@ -37,10 +43,10 @@ mod tests {
     }
 
     #[test]
-    fn rust_libc_and_dynamic_glib_allocations_share_the_same_heap() {
+    fn rust_libc_and_dynamic_glib_keep_the_system_heap() {
         let rust = vec![0x5au8; 4096];
         // SAFETY: this live allocation is only inspected for allocator ownership.
-        assert!(unsafe { libmimalloc_sys::mi_is_in_heap_region(rust.as_ptr().cast()) });
+        assert!(!unsafe { libmimalloc_sys::mi_is_in_heap_region(rust.as_ptr().cast()) });
         // SAFETY: allocate a small block through libc, inspect it without
         // dereferencing, then release it through the matching C allocator API.
         let c_owned = unsafe {
@@ -50,7 +56,7 @@ mod tests {
             libc::free(pointer);
             owned
         };
-        assert!(c_owned, "libc allocations were not interposed");
+        assert!(!c_owned, "libc allocations unexpectedly use mimalloc");
         // SAFETY: GLib is dynamically linked; pair its allocation and free APIs
         // while the allocation remains live for the ownership query.
         let glib_owned = unsafe {
@@ -60,7 +66,7 @@ mod tests {
             libvips::bindings::g_free(pointer);
             owned
         };
-        assert!(glib_owned, "dynamic codecs still use a different heap");
+        assert!(!glib_owned, "dynamic codecs unexpectedly use mimalloc");
         // SAFETY: these dynamic GLib APIs use their matching sized/slice free
         // entry points, with the exact sizes used for allocation.
         unsafe {
@@ -68,16 +74,16 @@ mod tests {
             assert!(!pointer.is_null());
             let owned = libmimalloc_sys::mi_is_in_heap_region(pointer);
             libvips::bindings::g_free_sized(pointer, 4096);
-            assert!(owned);
+            assert!(!owned);
             let pointer = libvips::bindings::g_slice_alloc0(112);
             assert!(!pointer.is_null());
             let owned = libmimalloc_sys::mi_is_in_heap_region(pointer);
             libvips::bindings::g_slice_free1(112, pointer);
-            assert!(owned);
+            assert!(!owned);
         }
     }
     #[test]
-    fn interposed_alignment_zeroing_and_reallocation_keep_their_c_contracts() {
+    fn system_alignment_zeroing_and_reallocation_keep_their_c_contracts() {
         // SAFETY: nonzero allocation sizes and a valid power-of-two alignment;
         // dereference only initialized calloc bytes and pair every C allocation
         // with its matching free API after the ownership checks.
@@ -89,7 +95,7 @@ mod tests {
             let owned = libmimalloc_sys::mi_is_in_heap_region(aligned);
             libc::free(aligned);
             assert_eq!(alignment, 0);
-            assert!(owned);
+            assert!(!owned);
             let initial = libc::calloc(3, 256).cast::<u8>();
             assert!(!initial.is_null());
             assert!(std::slice::from_raw_parts(initial, 768)
@@ -109,19 +115,19 @@ mod tests {
             #[cfg(target_os = "linux")]
             assert!(libc::malloc_usable_size(grown.cast()) >= 8192);
             libc::free(grown.cast());
-            assert!(owned);
+            assert!(!owned);
         }
     }
 
     #[cfg(target_os = "linux")]
     #[test]
-    fn worker_arena_supports_the_inherited_address_space_ceiling() {
+    fn system_heap_preserves_source_budget_and_inherited_address_space_ceiling() {
         const MARKER: &str = "NATIVE_ALLOCATOR_TEST_CHILD";
         if std::env::var_os(MARKER).is_none() {
             let mut child = std::process::Command::new(std::env::current_exe().unwrap());
             child.args([
                 "--exact",
-                "allocator::tests::worker_arena_supports_the_inherited_address_space_ceiling",
+                "allocator::tests::system_heap_preserves_source_budget_and_inherited_address_space_ceiling",
                 "--test-threads=1",
             ]);
             for (name, _) in std::env::vars_os() {
@@ -131,13 +137,33 @@ mod tests {
             }
             let status = child
                 .env(MARKER, "1")
-                .env("MIMALLOC_ARENA_RESERVE", super::WORKER_ARENA_RESERVE)
-                .env("MIMALLOC_PURGE_DELAY", super::WORKER_PURGE_DELAY)
+                // Only this test binary links mimalloc for negative ownership
+                // queries. Bound its diagnostic reservation; service builds
+                // have no mimalloc code or reservation.
+                .env("MIMALLOC_ARENA_RESERVE", "64MiB")
+                .env("MALLOC_ARENA_MAX", super::WORKER_ARENAS)
+                .env("MALLOC_MMAP_THRESHOLD_", "4194304")
+                .env("MALLOC_TRIM_THRESHOLD_", "4194304")
+                .env("GLIBC_TUNABLES", super::WORKER_TUNABLES)
                 .status()
                 .unwrap();
             assert!(status.success());
             return;
         }
+        assert!(super::prefer_base_pages());
+        // SAFETY: reads this isolated child's page-policy flag, no pointers.
+        assert_eq!(
+            unsafe {
+                libc::prctl(
+                    libc::PR_GET_THP_DISABLE,
+                    0 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                    0 as libc::c_ulong,
+                )
+            },
+            1
+        );
         let pages: u64 = std::fs::read_to_string("/proc/self/statm")
             .unwrap()
             .split_whitespace()
@@ -159,7 +185,7 @@ mod tests {
             limit.rlim_max = limit.rlim_max.min(1024 * 1024 * 1024);
             assert!(
                 pages * (page_size as u64) < limit.rlim_cur,
-                "allocator reservation exceeds the worker ceiling before admission"
+                "initial mappings exceed the worker ceiling before admission"
             );
             assert_eq!(libc::setrlimit(libc::RLIMIT_AS, &limit), 0);
         }
@@ -170,10 +196,7 @@ mod tests {
         bytes.resize(crate::MAX_FILE, 0x5a_u8);
         assert_eq!(bytes[crate::MAX_FILE - 1], 0x5a);
         // SAFETY: the allocation is live and its address is only inspected.
-        assert!(unsafe { libmimalloc_sys::mi_is_in_heap_region(bytes.as_ptr().cast()) });
-        drop(bytes);
-        let chunks: Vec<_> = (0..4096).map(|_| vec![0x5au8; 8192]).collect();
-        std::hint::black_box(&chunks);
+        assert!(!unsafe { libmimalloc_sys::mi_is_in_heap_region(bytes.as_ptr().cast()) });
         let resident = || {
             std::fs::read_to_string("/proc/self/statm")
                 .unwrap()
@@ -183,12 +206,12 @@ mod tests {
                 .parse::<u64>()
                 .unwrap()
         };
+        std::hint::black_box(&bytes);
         let before = resident();
-        drop(chunks);
-        drop(super::RequestCleanup);
-        // SAFETY: sysconf takes no pointers. This child is isolated from the
-        // concurrent unit suite, so heap activity cannot mask reclamation.
+        drop(bytes);
+        // SAFETY: sysconf takes no pointers. The isolated child admits a
+        // maximum-sized source and returns its pages without forced collection.
         let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u64;
-        assert!(resident() * page_size + 16 * 1024 * 1024 < before * page_size);
+        assert!(resident() * page_size + 32 * 1024 * 1024 < before * page_size);
     }
 }

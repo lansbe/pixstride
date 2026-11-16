@@ -13,7 +13,7 @@ from benchmark_fixtures import ROOT, load_cases, verify_fixtures
 from benchmark_runtime import Docker, Server, architecture, request, signed_path, validate_response, require_native_image
 
 FIELDS = {'Size': 'virtual_bytes', 'Rss': 'rss_bytes', 'Pss': 'pss_bytes',
-          'Anonymous': 'anonymous_bytes', 'Private_Dirty': 'private_dirty_bytes',
+          'Anonymous': 'anonymous_bytes', 'AnonHugePages': 'anonymous_huge_bytes', 'Private_Dirty': 'private_dirty_bytes',
           'Private_Clean': 'private_clean_bytes'}
 HEADER = re.compile(r'^[0-9a-f]+-[0-9a-f]+\s+([-rwxps]{4})\s+\S+\s+\S+\s+\d+(?:\s+(.*))?$')
 

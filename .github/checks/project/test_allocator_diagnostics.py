@@ -5,7 +5,7 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
-from allocator_diagnostics import policies, validate
+from allocator_diagnostics import policies, validate, config_environment
 
 
 def observations():
@@ -21,6 +21,14 @@ def observations():
 
 
 class AllocatorDiagnosticsTests(unittest.TestCase):
+    def test_huge_page_policy_is_present_before_libc_startup_and_keeps_cache_setting(self):
+        config = next(p for p in policies() if p['allocator'] == 'glibc' and p['tcache_count'] == '4')
+        env = config_environment(config)
+        self.assertEqual(env['GLIBC_TUNABLES'], 'glibc.malloc.hugetlb=0:glibc.malloc.tcache_count=4')
+        self.assertEqual(env['MALLOC_ARENA_MAX'], str(config['arenas']))
+        control = next(p for p in policies() if p['id'] == 'glibc-original-control')
+        self.assertNotIn('GLIBC_TUNABLES', config_environment(control))
+
     def test_complete_matrix_keeps_identical_outputs(self):
         entries = observations()
         validate(entries)

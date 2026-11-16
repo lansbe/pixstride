@@ -78,6 +78,23 @@ def validate(entries):
         raise ValueError('Incomplete matrix or policies changed encoded output')
 
 
+def config_environment(config):
+    environment = dict(PROFILE_DISABLE_THP=str(int(config['disable_thp'])),
+                       MALLOC_ARENA_MAX=str(config['arenas']),
+                       MALLOC_TRIM_THRESHOLD_=str(config.get('trim_threshold', 4194304)),
+                       MIMALLOC_ARENA_RESERVE='64MiB', VIPS_DISC_THRESHOLD='1073741824')
+    tunables = ['glibc.malloc.hugetlb=0'] if config['disable_thp'] else []
+    if config['allocator'] == 'glibc':
+        environment['MALLOC_MMAP_THRESHOLD_'] = str(config['mmap_threshold'])
+        if config['tcache_count'] != 'default':
+            tunables.append('glibc.malloc.tcache_count=' + config['tcache_count'])
+    else:
+        environment['MIMALLOC_PURGE_DELAY'] = str(config['purge_delay_ms'])
+    if tunables:
+        environment['GLIBC_TUNABLES'] = ':'.join(tunables)
+    return environment
+
+
 def run(args):
     if sys.platform != 'linux' or not hasattr(os, 'sched_getaffinity'):
         raise ValueError('Use native Linux and a local Docker daemon')
@@ -127,16 +144,7 @@ RUN --network=none set -eu; set -- /usr/local/cargo/registry/src/*/libmimalloc-s
         random.Random(943).shuffle(configs)
         for config in configs:
             for operation in ('blur', 'sharpen'):
-                environment = dict(PROFILE_DISABLE_THP=str(int(config['disable_thp'])),
-                                   MALLOC_ARENA_MAX=str(config['arenas']),
-                                   MALLOC_TRIM_THRESHOLD_=str(config.get('trim_threshold', 4194304)),
-                                   MIMALLOC_ARENA_RESERVE='64MiB', VIPS_DISC_THRESHOLD='1073741824')
-                if config['allocator'] == 'glibc':
-                    environment['MALLOC_MMAP_THRESHOLD_'] = str(config['mmap_threshold'])
-                    if config['tcache_count'] != 'default':
-                        environment['GLIBC_TUNABLES'] = 'glibc.malloc.tcache_count=' + config['tcache_count']
-                else:
-                    environment['MIMALLOC_PURGE_DELAY'] = str(config['purge_delay_ms'])
+                environment = config_environment(config)
                 argv = ['docker', 'run', '--rm', '--network', 'none', '--read-only', '--no-healthcheck',
                         '--cpuset-cpus', ','.join(map(str, cpus)), '--cpus', '2', '--memory', '1g',
                         '--memory-swap', '1g', '--pids-limit', '128', '--cap-drop', 'ALL',

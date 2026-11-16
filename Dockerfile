@@ -22,7 +22,7 @@ RUN --network=none sh .github/checks/abi/run-abi-check.sh . \
     && cargo clippy --all-features --locked --offline -- -D warnings \
     && cargo test --all-features --locked --offline \
     && cargo build --release --all-features --locked --offline \
-    && nm -D --defined-only target/release/pixstride | awk '$3 ~ /^(malloc|calloc|realloc|reallocarray|free|cfree|posix_memalign|aligned_alloc|memalign|valloc|pvalloc|strdup|strndup|malloc_usable_size)$/ { seen[$3]=1 } END { for (s in seen) n++; exit(n != 14) }' \
+    && nm -D --defined-only target/release/pixstride | awk '$3 ~ /^(mi_|malloc$|calloc$|realloc$|reallocarray$|free$|cfree$|posix_memalign$|aligned_alloc$|memalign$|valloc$|pvalloc$|strdup$|strndup$|malloc_usable_size$)/ { bad=1 } END { exit(bad) }' \
     && python3 scripts/native_check.py --binary target/release/pixstride \
     && python3 scripts/native_pool_check.py --binary target/release/pixstride \
     && python3 scripts/telemetry_check.py --binary target/release/pixstride \
@@ -36,13 +36,12 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-reco
     libheif-plugin-x265 libheif-plugin-libde265 fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=build /build/target/release/pixstride /usr/local/bin/pixstride
-COPY THIRD_PARTY_NOTICES.md /usr/share/doc/pixstride/THIRD_PARTY_NOTICES.md
 LABEL org.opencontainers.image.source="https://github.com/lansbe/pixstride" \
       org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.description="Bounded image transformation server written in Rust"
 USER 65532:65532
-ENV PIXSTRIDE_BIND=0.0.0.0 PIXSTRIDE_PORT=8080 MALLOC_ARENA_MAX=2 \
-    MALLOC_MMAP_THRESHOLD_=4194304 MALLOC_TRIM_THRESHOLD_=4194304 MIMALLOC_ARENA_RESERVE=64MiB MIMALLOC_PURGE_DELAY=1000
+ENV PIXSTRIDE_BIND=0.0.0.0 PIXSTRIDE_PORT=8080 MALLOC_ARENA_MAX=1 \
+    MALLOC_MMAP_THRESHOLD_=4194304 MALLOC_TRIM_THRESHOLD_=4194304 GLIBC_TUNABLES=glibc.malloc.hugetlb=0
 EXPOSE 8080
 STOPSIGNAL SIGTERM
 HEALTHCHECK --interval=30s --timeout=3s --start-period=3s --retries=3 CMD ["pixstride", "healthcheck"]

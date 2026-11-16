@@ -77,6 +77,10 @@ def check(binary):
             initial = children(process.pid)
             assert len(initial) == 1, 'A completed native request must leave one reusable isolated worker'
             original = next(iter(initial))
+            status_path = Path('/proc') / str(original) / 'status'
+            if status_path.exists():
+                fields = dict(line.split(':', 1) for line in status_path.read_text().splitlines() if ':' in line)
+                assert fields.get('THP_enabled', '').strip() == '0', 'Native worker did not request base pages'
             for path, color in [(blue, [0, 0, 255]), (red, [255, 0, 0])] * 4:
                 result = request(port, path)
                 assert result[0] == 200 and read_png(result[2])[1][:3] == color

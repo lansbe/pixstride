@@ -206,15 +206,7 @@ impl Drop for ThreadCleanup {
     }
 }
 
-pub(super) fn process(data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeResult, Error> {
-    // The inner call releases all request-owned graphs/source buffers and
-    // libvips thread state before collection, including error and Rust routes.
-    #[cfg(all(target_os = "linux", target_env = "gnu"))]
-    let _allocator_cleanup = crate::allocator::RequestCleanup;
-    process_inner(data, r, mark)
-}
-
-fn process_inner(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeResult, Error> {
+pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeResult, Error> {
     if data.len() > r.extra.max_source_bytes.min(crate::MAX_FILE) {
         return Err("native source exceeds byte limit");
     }

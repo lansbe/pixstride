@@ -1,6 +1,6 @@
 # Additional third-party notices
 
-The GNU Linux `native-codecs` allocation backend includes [mimalloc 0.1.52](https://crates.io/crates/mimalloc/0.1.52) and [libmimalloc-sys 0.1.49](https://crates.io/crates/libmimalloc-sys/0.1.49), whose bundled native allocator is mimalloc 3.3.2. These components use the MIT license. This file accompanies the container binary in `/usr/share/doc/pixstride/`.
+The separate allocator diagnostic probes use the C mimalloc 3.3.2 source bundled with development dependency [libmimalloc-sys 0.1.49](https://crates.io/crates/libmimalloc-sys/0.1.49), under the MIT license. The service retains System allocation and does not link these components in its release dependency graph. This file accompanies diagnostic images in `/usr/share/doc/pixstride/`. The wrapper notice below also retains the attribution for historical mimalloc development comparisons.
 
 ## Native mimalloc 3.3.2
 

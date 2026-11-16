@@ -5,30 +5,6 @@ fn main() {
     if std::env::var_os("CARGO_FEATURE_NATIVE_CODECS").is_none() {
         return;
     }
-    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("linux")
-        && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("gnu")
-    {
-        // Preserve the complete standard C allocation family for dynamic codec
-        // libraries even when Rust does not call a particular entry point.
-        for symbol in [
-            "malloc",
-            "calloc",
-            "realloc",
-            "reallocarray",
-            "free",
-            "cfree",
-            "posix_memalign",
-            "aligned_alloc",
-            "memalign",
-            "valloc",
-            "pvalloc",
-            "strdup",
-            "strndup",
-            "malloc_usable_size",
-        ] {
-            println!("cargo:rustc-link-arg=-Wl,--export-dynamic-symbol={symbol}");
-        }
-    }
     let executable = std::env::var_os("PKG_CONFIG").unwrap_or_else(|| "pkg-config".into());
     let version = std::process::Command::new(&executable)
         .args(["--atleast-version=8.18", "vips"])

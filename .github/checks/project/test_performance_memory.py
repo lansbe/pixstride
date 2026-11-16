@@ -9,6 +9,17 @@ from performance_memory import parse_smaps
 
 
 class PerformanceMemoryTests(unittest.TestCase):
+    def test_huge_page_bytes_are_recorded_separately_from_total_anonymous_memory(self):
+        result = parse_smaps('''10000000-10400000 rw-p 00000000 00:00 0 [heap]
+Size: 4096 kB
+Rss: 2048 kB
+Pss: 2048 kB
+Anonymous: 2048 kB
+AnonHugePages: 2048 kB
+''')
+        self.assertEqual(result['totals']['anonymous_huge_bytes'], 2 * 1024**2)
+        self.assertEqual(result['categories']['heap']['anonymous_huge_bytes'], 2 * 1024**2)
+
     def test_aggregate_heap_anonymous_and_file_without_private_identifiers(self):
         sample = '''10000000-10002000 rw-p 00000000 00:00 0 [heap]
 Size: 8 kB
