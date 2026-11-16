@@ -67,7 +67,7 @@ The reusable suite compares Pixstride (default routing and forced native) with i
 Version 0.4.0 includes the processing implementation measured below. These immutable reports describe pre-release source/image identities; the new 0.4.0 image has not itself been rebenchmarked. The published 0.3.0 baseline and both observed cohorts remain unchanged.
 
 <!-- observed:summary:start -->
-Latest measured cohort: **target not met**. Every retained run is included; these observations do not replace the historical qualified snapshot.
+Retained pre-release source cohort: **target not met**. Every retained run is included; these observations do not replace the historical qualified snapshot.
 
 Unreleased [candidate `20f202a5b5e1`](https://github.com/lansbe/pixstride/commit/20f202a5b5e17eb0d8e61795e87d04a77a0cac77); default and forced-native, all retained native Linux runs. The published 0.3.0 baseline below is unchanged.
 

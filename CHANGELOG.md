@@ -7,6 +7,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 ### Added
 
 - Verify published benchmark image identities against raw OCI index/platform digests, release version/source annotations, native image configs and runtime capabilities, independently of the harness revision. Default new runs to the current release pins while retaining the immutable 0.3.0 baseline.
+- Record/check published-image comparisons separately from pre-release source cohorts, retaining all six native reports and every failed comparison. Share the strict CPU/p50/p95/peak and decoded-pixel gates, generate both-mode tables and median reductions, and run three independent native VMs per architecture without rebuilding the release.
 
 ## [0.4.0] - 2026-11-16
 

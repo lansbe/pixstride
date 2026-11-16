@@ -68,10 +68,11 @@ def generated(reports, result):
     return {'README.md': summary, 'BENCHMARKS.md': details}
 
 
-def generated_both(reports, result):
-    revision = result['candidate']['revision']
-    intro = (f'Unreleased [candidate `{revision[:12]}`](https://github.com/lansbe/pixstride/commit/{revision}); '
-             'default and forced-native, all retained native Linux runs. The published 0.3.0 baseline below is unchanged.\n\n')
+def generated_both(reports, result, *, intro=None, index=INDEX, heading='## Unreleased candidate confirmation'):
+    if intro is None:
+        revision = result['candidate']['revision']
+        intro = (f'Unreleased [candidate `{revision[:12]}`](https://github.com/lansbe/pixstride/commit/{revision}); '
+                 'default and forced-native, all retained native Linux runs. The published 0.3.0 baseline below is unchanged.\n\n')
     summary = intro + '| Linux | Mode | Confirmed cases | Runs | CPU ratio range | HTTP p50 range | HTTP p95 range | Peak cgroup range |\n'
     summary += '|---|---|---:|---:|---:|---:|---:|---:|\n'
     for arch, cohort in sorted(result['architectures'].items()):
@@ -83,7 +84,7 @@ def generated_both(reports, result):
                 'peak cgroup memory in every retained run, with at least three independent runs per architecture. '
                 'Encoded files and pixels can differ; the published agreement envelope is checked, without certifying '
                 'perceptual equivalence. See [all cases and limits](BENCHMARKS.md) and [raw evidence](benchmarks/results/candidate-index.json).\n')
-    details = '## Unreleased candidate confirmation\n\n' + intro + markdown(result)
+    details = heading + '\n\n' + intro + markdown(result)
     for arch in sorted(result['architectures']):
         models = sorted({m for r in reports if r['host']['architecture'] == arch for m in r['host'].get('cpu_model', [])})
         details += f'\n{arch} CPU: ' + ', '.join(models or ['see raw metadata']) + '. Two CPUs are assigned per service.\n'
@@ -106,7 +107,8 @@ def generated_both(reports, result):
     workflows = sorted({r.get('workflow_url', '') for r in reports} - {''})
     if workflows:
         details += '\nRetained workflow evidence: ' + ', '.join(f'[run {i + 1}]({url})' for i, url in enumerate(workflows)) + '.\n'
-    return {'README.md': summary, 'BENCHMARKS.md': details}
+    return {name: body.replace('benchmarks/results/' + INDEX, 'benchmarks/results/' + index)
+            for name, body in {'README.md': summary, 'BENCHMARKS.md': details}.items()}
 
 
 def with_block(text, kind, anchor, body, *, namespace='candidate', anchor_namespace='benchmark'):
@@ -207,6 +209,9 @@ def main():
         from candidate_observations import check as check_observations
         if check_observations():
             print('Latest observed cohort, including losses, is consistent')
+        from release_snapshot import check as check_release
+        if check_release():
+            print('Published release evidence, including losses, is consistent')
     print('Qualified candidate evidence and documentation are consistent' if result else 'No candidate snapshot published')
 
 

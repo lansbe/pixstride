@@ -102,7 +102,7 @@ python3 -m venv .venv-benchmark
 
 Copy the same prepared corpus to the second architecture. Image overrides via `--pixstride-image` / `--imgproxy-image` require immutable `@sha256:` references. `--case`, lower sample counts and `--preflight` support development trials and cannot pass full-publication validation.
 
-The [Benchmarks workflow](.github/workflows/benchmark.yml) shares one corpus between native `ubuntu-24.04` and `ubuntu-24.04-arm` jobs. Qualification pushes on the benchmark branch trigger it; `workflow_dispatch` supports manual reruns after integration. Timing ratios do not gate unrelated PRs. Correctness, input integrity and accounting do gate a benchmark run. Failures retain diagnostics and available partial JSON; owned containers are cleaned. Raw report artifacts have 90-day retention; corpus media have seven days.
+The [Benchmarks workflow](.github/workflows/benchmark.yml) shares one corpus across three native `ubuntu-24.04` and three `ubuntu-24.04-arm` jobs, measuring the pinned published images without rebuilding them. Pushes on `codex/benchmark-release-*` or the original benchmark branch trigger it; `workflow_dispatch` supports manual reruns after integration. Timing ratios do not gate unrelated PRs. Correctness, input integrity and accounting do gate a benchmark run. Failures retain diagnostics and available partial JSON; owned containers are cleaned. Raw report artifacts have 90-day retention; corpus media have seven days.
 
 The [Candidate benchmarks workflow](.github/workflows/benchmark-candidate.yml) builds the current clean checkout independently on three AMD64 and three ARM64 runners. It uses the same shared corpus, pinned imgproxy image, 25 cases, three modes and full measurement protocol. Candidate images stay local to their runners; there is no registry or release publication. Each is addressed by its inspected immutable Docker image ID and labelled with the exact Git revision. Reports retain source tree, Dockerfile and Cargo.lock hashes; cross-architecture validation requires identical source provenance while allowing platform-specific image IDs. Manual candidate runs use `--pixstride-image sha256:<local-image-id> --candidate-revision <full-clean-commit-sha>` after building with `--label org.opencontainers.image.revision=<full-clean-commit-sha>`.
 
@@ -183,9 +183,9 @@ The C adapter is compiled only into diagnostic probes; it is absent from the ser
 Evidence: [AMD64 summary](benchmarks/results/linux-amd64.json) / [complete samples](benchmarks/results/linux-amd64.raw.json.gz), [ARM64 summary](benchmarks/results/linux-arm64.json) / [complete samples](benchmarks/results/linux-arm64.raw.json.gz). Each summary records the compressed archive and decoded JSON hashes. These are the final qualification run's results; earlier development trials are not mixed into this snapshot.
 
 <!-- observed:details:start -->
-Latest measured cohort: **target not met**. Every retained run is included; these observations do not replace the historical qualified snapshot.
+Retained pre-release source cohort: **target not met**. Every retained run is included; these observations do not replace the historical qualified snapshot.
 
-## Latest measured cohort
+## Retained pre-release source cohort
 
 Unreleased [candidate `20f202a5b5e1`](https://github.com/lansbe/pixstride/commit/20f202a5b5e17eb0d8e61795e87d04a77a0cac77); default and forced-native, all retained native Linux runs. The published 0.3.0 baseline below is unchanged.
 
