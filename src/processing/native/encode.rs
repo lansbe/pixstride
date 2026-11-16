@@ -204,6 +204,13 @@ pub(super) fn optimized_png(image: &Image) -> Result<Vec<u8>, Error> {
     Ok(bytes)
 }
 
+fn filter_strip_rows(width: i32, bands: i32) -> i32 {
+    // This route admits only 1..=4 uchar bands. Wider strips avoid repeated
+    // filter halo work; cap the output strip at 4 MiB for very wide images.
+    let bytes_per_row = i64::from(width.max(1)) * i64::from(bands.max(1));
+    ((4 * 1024 * 1024) / bytes_per_row).clamp(1, 64) as i32
+}
+
 pub(super) fn save(
     image: VipsImage,
     r: &Request,
@@ -235,10 +242,13 @@ pub(super) fn save(
         && super::shared::fits_memory(&stripped)
     {
         if r.extra.max_bytes == 0 {
-            // Thin output strips bound upstream filter working regions. Only
+            // Bounded output strips limit upstream filter working regions. Only
             // a single saver pass may consume this sequential image.
             let stream = stripped
-                .sequential_with_opts(VOption::new().set("tile_height", 16))
+                .sequential_with_opts(VOption::new().set(
+                    "tile_height",
+                    filter_strip_rows(stripped.get_width(), stripped.get_bands()),
+                ))
                 .map_err(|_| "native JPEG filter streaming failed")?;
             drop(stripped);
             stream
@@ -370,4 +380,64 @@ fn gif(image: &VipsImage, page_height: i32) -> Result<Vec<u8>, Error> {
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod filter_stream_tests {
+    use super::*;
+
+    #[test]
+    fn filter_strips_fill_but_never_exceed_the_memory_budget() {
+        for width in [640, 16384, 65536, 100000] {
+            for bands in [1, 3, 4] {
+                let rows = filter_strip_rows(width, bands);
+                assert!((1..=64).contains(&rows));
+                assert!(width * bands * rows <= 4 * 1024 * 1024);
+                if rows < 64 {
+                    assert!(width * bands * (rows + 1) > 4 * 1024 * 1024);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn wider_strips_preserve_native_blur_and_sharpen_jpeg_bytes() {
+        super::super::engine::initialize().unwrap();
+        let data: Vec<u8> = (0..97 * 61 * 3)
+            .map(|v| ((v * 71 + v / 97) % 256) as u8)
+            .collect();
+        for filter in ["bl:2", "sh:1"] {
+            let request = crate::request::parse(
+                &format!("/unsafe/{filter}/q:85/plain/local:///fixture.jpg@jpg"),
+                &crate::request::Config::unsafe_local(),
+            )
+            .unwrap();
+            let mut outputs = Vec::new();
+            for rows in [16, filter_strip_rows(73, 3)] {
+                let image = VipsImage::new_from_memory_copy(&data, 97, 61, 3, BandFormat::Uchar)
+                    .unwrap()
+                    .copy_with_opts(
+                        VOption::new().set("interpretation", Interpretation::Srgb as i32),
+                    )
+                    .unwrap()
+                    .resize(0.75)
+                    .unwrap();
+                let image = if filter == "bl:2" {
+                    image.gaussblur(2.0).unwrap()
+                } else {
+                    image
+                        .sharpen_with_opts(VOption::new().set("sigma", 1.0))
+                        .unwrap()
+                };
+                let image = super::super::metadata::strip(&image, &request).unwrap();
+                let image = image
+                    .sequential_with_opts(VOption::new().set("tile_height", rows))
+                    .unwrap();
+                outputs.push(
+                    attempt(&image, &request, OutputFormat::Jpeg, 85, image.get_height()).unwrap(),
+                );
+            }
+            assert_eq!(outputs[0], outputs[1], "{filter} changed encoded samples");
+        }
+    }
 }

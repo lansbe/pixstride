@@ -8,8 +8,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
 from allocator_diagnostics import policies, validate, config_environment
 
 
-def observations():
+def observations(profile='allocators'):
     return [dict(policy=policy['id'], operation=operation, samples=48,
+                 tile_height=policy.get('tile_height', 16),
                  allocator_version=30302 if policy['allocator'] == 'mimalloc' else 20043,
                  processing_p50_ms=20., processing_p95_ms=22., cpu_mean_ms=21.,
                  cgroup_peak_memory_bytes=32 * 1024**2,
@@ -17,10 +18,20 @@ def observations():
                  metadata=dict(allocator=policy['allocator'], libc_version='2.43',
                                thp_disabled=int(policy['disable_thp']), anonymous_huge_bytes=0,
                                process_peak_rss_bytes=48 * 1024**2, process_anonymous_bytes=24 * 1024**2))
-            for policy in policies() for operation in ('blur', 'sharpen')]
+            for policy in policies(profile) for operation in ('blur', 'sharpen')]
 
 
 class AllocatorDiagnosticsTests(unittest.TestCase):
+    def test_filter_profile_requires_every_strip_height_and_both_operations(self):
+        entries = observations('filters')
+        validate(entries, 'filters')
+        self.assertEqual(len(entries), 10)
+        self.assertEqual(config_environment(policies('filters')[3])['PROFILE_TILE_HEIGHT'], '64')
+        with self.assertRaises(ValueError):
+            validate(entries[:-1], 'filters')
+        with self.assertRaises(ValueError):
+            validate(entries, 'allocators')
+
     def test_huge_page_policy_is_present_before_libc_startup_and_keeps_cache_setting(self):
         config = next(p for p in policies() if p['allocator'] == 'glibc' and p['tcache_count'] == '4')
         env = config_environment(config)
@@ -43,6 +54,12 @@ class AllocatorDiagnosticsTests(unittest.TestCase):
             entries[0]['metadata'][field] = value
             with self.subTest(field=field), self.assertRaises(ValueError):
                 validate(entries)
+
+    def test_the_reported_filter_strip_height_must_match_the_requested_policy(self):
+        entries = observations()
+        entries[0]['tile_height'] = 128
+        with self.assertRaises(ValueError):
+            validate(entries)
 
     def test_missing_duplicate_or_wrong_policies_fail(self):
         for entries in (observations()[:-1], observations() + [observations()[0]],

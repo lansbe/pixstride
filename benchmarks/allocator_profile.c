@@ -38,6 +38,14 @@ int main(int argc, char **argv) {
     if ((argc != 3 && argc != 4) || (strcmp(argv[2], "blur") && strcmp(argv[2], "sharpen")) ||
         (argc == 4 && strcmp(argv[3], "collect"))) return 2;
     int collect = argc == 4;
+    int tile_height = 16;
+    const char *setting = getenv("PROFILE_TILE_HEIGHT");
+    if (setting) {
+        char *end = NULL;
+        long rows = strtol(setting, &end, 10);
+        if (end == setting || *end || (rows != 8 && rows != 16 && rows != 32 && rows != 64 && rows != 128)) return 2;
+        tile_height = (int)rows;
+    }
 #ifdef __linux__
     struct rlimit limit;
     if (getrlimit(RLIMIT_AS, &limit)) return 2;
@@ -75,7 +83,7 @@ int main(int argc, char **argv) {
             ? vips_sharpen(resized, &filtered, "sigma", 1.0, NULL)
             : vips_gaussblur(resized, &filtered, 2.0, NULL);
         g_object_unref(resized);
-        if (error || vips_sequential(filtered, &stream, "tile_height", 16, NULL)) return failure(__LINE__);
+        if (error || vips_sequential(filtered, &stream, "tile_height", tile_height, NULL)) return failure(__LINE__);
         g_object_unref(filtered);
         void *output = NULL; size_t size = 0;
         if (vips_jpegsave_buffer(stream, &output, &size, "Q", 85, "strip", TRUE, NULL)) return failure(__LINE__);
@@ -101,10 +109,10 @@ int main(int argc, char **argv) {
     if (!counter || fscanf(counter, "%llu", &peak) != 1) return 5;
     fclose(counter);
 #endif
-    printf("{\"operation\":\"%s\",\"collection\":\"%s\",\"samples\":%d,\"allocator_version\":%d,"
+    printf("{\"operation\":\"%s\",\"collection\":\"%s\",\"samples\":%d,\"allocator_version\":%d,\"tile_height\":%d,"
         "\"processing_p50_ms\":%.6f,\"processing_p95_ms\":%.6f,\"cpu_mean_ms\":%.6f,"
         "\"cgroup_peak_memory_bytes\":%llu,\"output_sha256\":\"%s\"}\n",
-        argv[2], collect ? "request" : "none", SAMPLES, mi_version(), wall[(SAMPLES - 1) / 2], wall[(95 * SAMPLES + 99) / 100 - 1],
+        argv[2], collect ? "request" : "none", SAMPLES, mi_version(), tile_height, wall[(SAMPLES - 1) / 2], wall[(95 * SAMPLES + 99) / 100 - 1],
         sum / SAMPLES, peak, digest);
     g_free(source); g_free(digest); vips_shutdown(); return 0;
 }

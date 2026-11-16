@@ -13,6 +13,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Reduce repeated native JPEG filter preparation with up to 64-row output strips, capped at 4 MiB per strip for wide images. Preserve native blur/sharpen samples and byte-target fallback; add reusable native filter-strip diagnostics.
+
 - Retain System allocation and use one glibc arena for GNU Linux native workers, suppressing allocator huge-page promotion before exec and requesting process base pages. Preserve small allocation caches, fixed 4 MiB thresholds, the continuous native filter pipeline, quality, deadlines, the 1 GiB address-space ceiling and recycling. Add reusable allocator/page-policy diagnostics with development-only pinned mimalloc; no custom service allocation override or per-request heap sweep.
 
 - Require every default and forced-native CPU/p50/p95/peak-memory comparison to win across all retained native Linux runs. Publish schema2 per-mode evidence while preserving historical default-only snapshots.

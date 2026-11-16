@@ -18,7 +18,13 @@ from benchmark_runtime import architecture, candidate_source, require_native_ima
 from performance_allocator import command
 
 
-def policies():
+def policies(profile='allocators'):
+    if profile == 'filters':
+        return [dict(id=f'filter-rows{rows}', allocator='glibc', disable_thp=True, arenas=1,
+                     mmap_threshold=4194304, trim_threshold=4194304, tcache_count='default',
+                     collect=False, tile_height=rows) for rows in (8, 16, 32, 64, 128)]
+    if profile != 'allocators':
+        raise ValueError('Unknown diagnostic profile')
     entries = []
     for arenas in (1, 2):
         for threshold in (131072, 4194304):
@@ -37,8 +43,8 @@ def policies():
     return entries
 
 
-def validate(entries):
-    configs = {p['id']: p for p in policies()}
+def validate(entries, profile='allocators'):
+    configs = {p['id']: p for p in policies(profile)}
     expected = {(key, operation) for key in configs for operation in ('blur', 'sharpen')}
     seen, hashes = set(), {'blur': set(), 'sharpen': set()}
     for entry in entries:
@@ -47,6 +53,8 @@ def validate(entries):
             raise ValueError('Unknown or duplicate diagnostic policy')
         seen.add(key)
         config, metadata = configs[key[0]], entry.get('metadata', {})
+        if type(entry.get('tile_height')) is not int or entry['tile_height'] != config.get('tile_height', 16):
+            raise ValueError('Reported strip height differs from the requested policy')
         if type(entry.get('samples')) is not int or entry['samples'] != 48:
             raise ValueError('Incomplete diagnostic sample count')
         for field in ('processing_p50_ms', 'processing_p95_ms', 'cpu_mean_ms', 'cgroup_peak_memory_bytes'):
@@ -92,6 +100,7 @@ def config_environment(config):
         environment['MIMALLOC_PURGE_DELAY'] = str(config['purge_delay_ms'])
     if tunables:
         environment['GLIBC_TUNABLES'] = ':'.join(tunables)
+    environment['PROFILE_TILE_HEIGHT'] = str(config.get('tile_height', 16))
     return environment
 
 
@@ -113,9 +122,9 @@ def run(args):
     args.output.parent.mkdir(parents=True, exist_ok=True)
     owner = 'allocator-matrix-' + uuid.uuid4().hex[:12]
     builder, image = 'pixstride:builder-' + owner, 'pixstride:probe-' + owner
-    result = dict(kind='allocator-comparison-not-performance-qualification', schema_version=1, complete=False,
+    result = dict(kind='allocator-comparison-not-performance-qualification', schema_version=1, complete=False, profile=args.profile,
                   architecture=architecture(), host=host_metadata(cpus), source=source, corpus_sha256=manifest['corpus_sha256'],
-                  policy_configurations=policies(),
+                  policy_configurations=policies(args.profile),
                   host_thp_mode=Path('/sys/kernel/mm/transparent_hugepage/enabled').read_text().strip(),
                   scope='Native primitives: 6 warmups/48 samples; no HTTP/Rust IPC/imgproxy.', observations=[])
     try:
@@ -140,7 +149,7 @@ RUN --network=none set -eu; set -- /usr/local/cargo/registry/src/*/libmimalloc-s
         inspected = json.loads(command('docker', 'image', 'inspect', image, capture=True))[0]
         require_native_image(inspected['Architecture'], inspected['Os'])
         image_id = result['image_id'] = inspected['Id']
-        configs = policies()
+        configs = policies(args.profile)
         random.Random(943).shuffle(configs)
         for config in configs:
             for operation in ('blur', 'sharpen'):
@@ -166,7 +175,7 @@ RUN --network=none set -eu; set -- /usr/local/cargo/registry/src/*/libmimalloc-s
                 result['observations'].append(observation)
                 args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + '\n')
                 print(config['id'], operation, observation['cpu_mean_ms'], observation['cgroup_peak_memory_bytes'], flush=True)
-        validate(result['observations'])
+        validate(result['observations'], args.profile)
         result['complete'] = True
         args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + '\n')
     finally:
@@ -187,4 +196,5 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fixtures', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--profile', choices=('allocators', 'filters'), default='allocators')
     run(parser.parse_args())

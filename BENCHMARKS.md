@@ -27,6 +27,7 @@ The subsequent forced-native work also rejected complete six-run cohorts rather 
 | `df9caf100d5c` | [43791983997](https://github.com/lansbe/pixstride/actions/runs/43791983997) | All timings won, but the allocator's default page retention lost peak memory in several cases |
 | `6fecbfee441b` | [43798474537](https://github.com/lansbe/pixstride/actions/runs/43798474537) | Immediate purging reduced memory but introduced timing losses and still lost sharpen peak memory |
 | `70726e0ac196` | [43800922455](https://github.com/lansbe/pixstride/actions/runs/43800922455) | End-of-request allocator collection still lost JPEG/WebP memory and several timing comparisons |
+| `0a33aef385ac` | [43807416642](https://github.com/lansbe/pixstride/actions/runs/43807416642) | Forced-native won all 25 in every run; one ARM64 default sharpen p95 loss rejected the entire both-mode cohort |
 
 These failed measurements remain available in workflow artifacts and are not mixed into a qualified snapshot. Artifact retention is finite; the committed published cohorts retain compressed raw samples independently.
 
@@ -130,6 +131,14 @@ python3 scripts/allocator_diagnostics.py --fixtures .benchmark-data --output /tm
 ```
 
 It compares 26 policies, each in fresh containers for JPEG blur and sharpen: glibc with one/two arenas, fixed 128-KiB/4-MiB mmap and trim thresholds, partial/default thread caches and disabled transparent huge pages; original glibc and pinned mimalloc controls retain inherited page policy. All 52 observations must contain valid counters, actual allocator/libc versions, process huge-page state, peak resident/current anonymous bytes and identical per-operation output hashes. Policy configurations are included in the report. The earlier 24-policy diagnostic also tested fully disabled thread caches and allocator collection; it remains in its workflow artifacts and does not qualify HTTP performance. Configurations run in a recorded deterministic shuffle, with the same prepared corpus on each runner, two CPUs and 1 GiB. The checked inputs and host/source identities accompany the diagnostic JSON; independently prepared architecture corpora are not a cross-architecture qualification cohort.
+
+The workflow defaults to the `filters` profile on branch pushes; manual dispatch can choose `allocators`. The filter profile compares 8/16/32/64/128-row output strips with the selected System/one-arena/default-cache policy, two operations and ten fresh containers. It checks the reported strip height against each requested policy and requires identical encoded output across all heights. Run it locally on native Linux with:
+
+```sh
+python3 scripts/allocator_diagnostics.py --profile filters --fixtures .benchmark-data --output /tmp/filter-diagnostics.json
+```
+
+The service selects up to 64 rows for eligible JPEG filter output, bounded to 4 MiB per output strip for very wide images. This trades temporary working regions against repeated filter/halo preparation; input admission, requested filters, encoder quality and pixel math remain the same. The complete HTTP cohort, rather than this primitive diagnostic, establishes any comparison with imgproxy.
 
 The C adapter is compiled only into diagnostic probes; it is absent from the service. Its glibc collection adapter calls `malloc_trim` only for a requested collection trial. Huge-page suppression starts in the allocator environment before exec, then a process-local control disables later promotion; these settings affect each probe process, not the host. JSON is explicitly diagnostic and cannot qualify the 25 HTTP cases. After choosing a runtime policy, repeat the complete six-run HTTP cohort; diagnostic rankings cannot substitute for that evidence. The glibc 2.43 [release discussion](https://sourceware.org/pipermail/libc-alpha/2026-January/173985.html) records default AArch64 huge-page support; the [kernel controls](https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html) explain per-process disabling.
 
