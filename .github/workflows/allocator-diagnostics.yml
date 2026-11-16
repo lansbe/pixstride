@@ -1,0 +1,43 @@
+name: Allocator diagnostics
+on:
+  workflow_dispatch:
+  push:
+    branches: [codex/performance-all-cases]
+    paths:
+      - .github/workflows/allocator-diagnostics.yml
+      - scripts/allocator_diagnostics.py
+      - benchmarks/allocator_diagnostics.h
+      - .github/checks/project/test_allocator_diagnostics.py
+permissions:
+  contents: read
+jobs:
+  profile:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Prepare checked corpus and validate diagnostic accounting
+        run: |
+          python3 -m venv "$RUNNER_TEMP/benchmark-env"
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m unittest discover -s .github/checks/project -v
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_fixtures.py --output "$RUNNER_TEMP/corpus" --cache "$RUNNER_TEMP/source-cache"
+      - name: Compare allocator and huge-page policies in fresh containers
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/allocator_diagnostics.py --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/allocator-diagnostics.json"
+      - name: Verify owned diagnostic containers were cleaned
+        if: always()
+        run: test -z "$(docker ps -aq --filter label=io.pixstride.benchmark.run)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: allocator-diagnostics-${{ matrix.runner }}
+          path: ${{ runner.temp }}/allocator-diagnostics.json
+          if-no-files-found: warn
+          retention-days: 90

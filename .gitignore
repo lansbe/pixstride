@@ -18,6 +18,7 @@
 !/benchmarks/
 !/benchmarks/cases.json
 !/benchmarks/allocator_profile.c
+!/benchmarks/allocator_diagnostics.h
 !/benchmarks/versions.json
 !/benchmarks/results/
 !/benchmarks/results/*.json
@@ -45,6 +46,7 @@
 !/.github/workflows/container.yml
 !/.github/workflows/benchmark.yml
 !/.github/workflows/benchmark-candidate.yml
+!/.github/workflows/allocator-diagnostics.yml
 !/.github/dependabot.yml
 !/.github/checks/
 !/.github/checks/abi/

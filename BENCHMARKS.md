@@ -10,7 +10,7 @@ This compares packaged services, including their different libraries and deploym
 
 The qualified `6145080e14a5` cohort retains all three runs on each architecture. Default routing wins every CPU/p50/p95/peak-memory comparison in the 25 cases. Its smallest memory difference is case 09 (sharpen) on ARM64: ratio 0.99950006, only 16 KiB. Treat that memory result as near parity on shared VMs.
 
-Forced-native mode remains a separate diagnostic. In one AMD64 run, case 21 (flat PNG identity) uses 8.7% more CPU and has p50/p95 29.5%/29.2% higher than imgproxy. In one ARM64 run, case 09 uses 8.9% more peak memory. Those losses are retained in the raw reports; the 25/25 target concerns the default configuration with its general routing rules.
+In that historical cohort, forced-native was a separate diagnostic. In one AMD64 run, case 21 (flat PNG identity) uses 8.7% more CPU and has p50/p95 29.5%/29.2% higher than imgproxy. In one ARM64 run, case 09 uses 8.9% more peak memory. Those losses remain in its raw reports; that historical 25/25 target covered the default configuration with its general routing rules.
 
 RGBA8 PNG-to-JPEG resizing uses premultiplied Lanczos3 from a different implementation, with the same requested JPEG quality. In case 19, its worst composite pixel MAE/RMSE are approximately 1.308/1.967 in 8-bit channel units, within the predeclared envelope. It preserves 48 other default/native encoded outputs from the preceding implementation; these macOS development checks supplement the full Linux pixel checks. PNG alpha identity output is 17.6% larger than imgproxy. Every case's sizes/errors are listed below.
 
@@ -26,6 +26,7 @@ The subsequent forced-native work also rejected complete six-run cohorts rather 
 | `508e96fd1404` | [43781284541](https://github.com/lansbe/pixstride/actions/runs/43781284541) | Sharpen latency and some ARM64 CPU/memory losses with native raster materialization |
 | `df9caf100d5c` | [43791983997](https://github.com/lansbe/pixstride/actions/runs/43791983997) | All timings won, but the allocator's default page retention lost peak memory in several cases |
 | `6fecbfee441b` | [43798474537](https://github.com/lansbe/pixstride/actions/runs/43798474537) | Immediate purging reduced memory but introduced timing losses and still lost sharpen peak memory |
+| `70726e0ac196` | [43800922455](https://github.com/lansbe/pixstride/actions/runs/43800922455) | End-of-request allocator collection still lost JPEG/WebP memory and several timing comparisons |
 
 These failed measurements remain available in workflow artifacts and are not mixed into a qualified snapshot. Artifact retention is finite; the committed published cohorts retain compressed raw samples independently.
 
@@ -119,6 +120,18 @@ python3 scripts/performance_allocator.py --fixtures .benchmark-data --output /tm
 ```
 
 The tool builds the current native builder stage and a local probe using the pinned allocator C source. It retains CPU/processing percentiles and lifetime cgroup peaks, removes owned containers/images, and never publishes an image. Formal qualification still requires the entire six-run, 25-case HTTP cohort after every runtime policy change.
+
+### Allocator and Linux page-policy matrix
+
+The separate [Allocator diagnostics workflow](.github/workflows/allocator-diagnostics.yml) runs a reusable primitive-only comparison on each native architecture:
+
+```sh
+python3 scripts/allocator_diagnostics.py --fixtures .benchmark-data --output /tmp/allocator-diagnostics.json
+```
+
+It compares 24 policies, each in fresh containers for JPEG blur and sharpen: glibc with four fixed mmap thresholds, default/disabled thread caches and inherited/disabled transparent huge pages; pinned mimalloc with two purge delays, optional collection and inherited/disabled huge pages. All 48 observations must contain valid counters, actual allocator/libc versions, process huge-page state and identical per-operation output hashes. Configurations run in a recorded deterministic shuffle, with the same prepared corpus on each runner, two CPUs and 1 GiB. The checked inputs and host/source identities accompany the diagnostic JSON; independently prepared architecture corpora are not a cross-architecture qualification cohort.
+
+The C adapter is compiled only into diagnostic probes; it is absent from the service. Its glibc collection adapter calls `malloc_trim` only for a requested collection trial. Huge-page controls affect each probe process, not the host. JSON is explicitly diagnostic and cannot qualify the 25 HTTP cases. After choosing a runtime policy, repeat the complete six-run HTTP cohort; diagnostic rankings cannot substitute for that evidence. The glibc 2.43 [release discussion](https://sourceware.org/pipermail/libc-alpha/2026-January/173985.html) records default AArch64 huge-page support; the [kernel controls](https://www.kernel.org/doc/html/latest/admin-guide/mm/transhuge.html) explain per-process disabling.
 
 ## Measured results
 
