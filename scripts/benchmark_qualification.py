@@ -36,6 +36,7 @@ def qualify(reports, baselines, performance_modes=MODES):
     performance_modes = tuple(performance_modes)
     if performance_modes not in ((MODES[0],), MODES):
         raise ValueError("Invalid performance-mode qualification target")
+    minimum_runs = 3 if performance_modes == MODES else 2
     validate_pair(baselines)
     baseline = {b['host']['architecture']: b for b in baselines}
     cohorts = {arch: [r for r in reports if r['host']['architecture'] == arch] for arch in baseline}
@@ -59,7 +60,7 @@ def qualify(reports, baselines, performance_modes=MODES):
             raise ValueError('Case options/definitions differ from the published baseline')
     result = {'schema_version': 1, 'qualified': True,
               'candidate': reports[0]['images']['pixstride']['candidate'],
-              'criteria': {'default_metrics': METRICS, 'minimum_runs_per_architecture': 2,
+              'criteria': {'default_metrics': METRICS, 'minimum_runs_per_architecture': minimum_runs,
                            'close_ratio': .95, 'close_minimum_runs': 3, 'pixel_tolerance': .01},
               'architectures': {}}
     if performance_modes == MODES:
@@ -104,8 +105,9 @@ def qualify(reports, baselines, performance_modes=MODES):
                 ratios = observation['ratios']
                 loss = any(max(v) >= 1 for v in ratios.values())
                 close = any(max(ratios[m]) >= .95 for m in METRICS[:3])
+                needs_repeats = len(runs) < minimum_runs or ((close or observation['noisy_cpu']) and len(runs) < 3)
                 observation['status'] = ('quality-regression' if mode_quality[mode] else 'loss' if loss
-                    else 'repeat-required' if (close or observation['noisy_cpu']) and len(runs) < 3 else 'confirmed-win')
+                    else 'repeat-required' if needs_repeats else 'confirmed-win')
             severity = {'confirmed-win': 0, 'repeat-required': 1, 'loss': 2, 'quality-regression': 3}
             status = 'quality-regression' if quality_failures else max(
                 (v['status'] for v in by_mode.values()), key=severity.get)
@@ -132,7 +134,7 @@ def markdown(result):
         text = f'Candidate `{result["candidate"]["revision"]}`: '
         text += '**25/25 confirmed in both modes on both architectures**.\n\n' if result['qualified'] else '**target not met**.\n\n'
         text += ('Default and forced-native CPU, HTTP p50/p95 and peak cgroup memory must be lower in every retained run. '
-                 'Near timing parity or noisy CPU requires three independent runs. Both modes retain the published '
+                 'At least three independent runs per architecture are required, including near/noisy timings. Both modes retain the published '
                  'pixel-agreement envelope; PNG identities stay exact. This does not certify perceptual equivalence.\n\n')
         for arch, cohort in sorted(result['architectures'].items()):
             for mode in MODES:

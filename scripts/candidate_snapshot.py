@@ -80,7 +80,7 @@ def generated_both(reports, result):
             cells = [span([v for c in cohort['cases'] for v in c['modes'][mode]['ratios'][metric]]) for metric in METRICS]
             summary += f'| {arch} | {label} | {cohort["confirmed_cases_by_mode"][mode]}/25 | {cohort["runs"]} | ' + ' | '.join(cells) + ' |\n'
     summary += ('\nRatios are Pixstride/imgproxy; lower is better. Both modes must have lower CPU, p50, p95 and '
-                'peak cgroup memory in every retained run; close/noisy timings require extra repeats. '
+                'peak cgroup memory in every retained run, with at least three independent runs per architecture. '
                 'Encoded files and pixels can differ; the published agreement envelope is checked, without certifying '
                 'perceptual equivalence. See [all cases and limits](BENCHMARKS.md) and [raw evidence](benchmarks/results/candidate-index.json).\n')
     details = '## Unreleased candidate confirmation\n\n' + intro + markdown(result)

@@ -113,7 +113,8 @@ def run(args):
         raise ValueError('Require a local Docker daemon')
     daemon = json.loads(command('docker', 'info', '--format', '{{json .}}', capture=True))
     require_native_image(daemon['Architecture'], daemon['OSType'])
-    cpus = sorted(os.sched_getaffinity(0))[:2]
+    available_cpus = sorted(os.sched_getaffinity(0))
+    cpus = available_cpus[:2]
     if len(cpus) != 2:
         raise ValueError('Require two logical CPUs')
     manifest = verify_fixtures(args.fixtures)
@@ -123,7 +124,8 @@ def run(args):
     owner = 'allocator-matrix-' + uuid.uuid4().hex[:12]
     builder, image = 'pixstride:builder-' + owner, 'pixstride:probe-' + owner
     result = dict(kind='allocator-comparison-not-performance-qualification', schema_version=1, complete=False, profile=args.profile,
-                  architecture=architecture(), host=host_metadata(cpus), source=source, corpus_sha256=manifest['corpus_sha256'],
+                  architecture=architecture(), host=host_metadata(cpus, available_cpus, available_cpus),
+                  source=source, corpus_sha256=manifest['corpus_sha256'],
                   policy_configurations=policies(args.profile),
                   host_thp_mode=Path('/sys/kernel/mm/transparent_hugepage/enabled').read_text().strip(),
                   scope='Native primitives: 6 warmups/48 samples; no HTTP/Rust IPC/imgproxy.', observations=[])

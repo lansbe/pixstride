@@ -4210,7 +4210,7 @@
         "latency_p95_ms",
         "cgroup_peak_memory_bytes"
       ],
-      "minimum_runs_per_architecture": 2,
+      "minimum_runs_per_architecture": 3,
       "performance_modes": [
         "pixstride_default",
         "pixstride_native"

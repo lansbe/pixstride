@@ -9,9 +9,47 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
 from benchmark_report import publish_results
 from test_benchmark_qualification import evidence
 from candidate_snapshot import check, publish
+import candidate_snapshot as snapshot
+from benchmark_qualification import load_baselines, qualify
 
 
 class CandidateSnapshotTests(unittest.TestCase):
+    def test_schema_two_reading_rejects_previously_accepted_two_run_snapshot(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths, directory = self.fixture(root)
+            publish(paths, root)
+            index_path = directory / 'candidate-index.json'
+            index = json.loads(index_path.read_text())
+            index['reports'] = index['reports'][:2] + index['reports'][3:5]
+            reports = [snapshot.load(directory / e['file'])[0] for e in index['reports']]
+            result = qualify(reports, load_baselines(directory))
+            # Reconstruct the old, permissive schema2 result and its matching
+            # tables. Raw samples/hashes are still valid; only repeats are short.
+            result['qualified'] = True
+            result['criteria']['minimum_runs_per_architecture'] = 2
+            for cohort in result['architectures'].values():
+                cohort['confirmed_cases'] = 25
+                cohort['confirmed_cases_by_mode'] = {'pixstride_default': 25, 'pixstride_native': 25}
+                for row in cohort['cases']:
+                    row['status'] = 'confirmed-win'
+                    for mode in row['modes'].values(): mode['status'] = 'confirmed-win'
+            index['qualification'] = result
+            index_path.write_bytes(snapshot.encoded(index))
+            for name, body in snapshot.generated(reports, result).items():
+                path = root / name
+                path.write_text(snapshot.with_block(path.read_text(), *snapshot.DOCS[name], body))
+            with self.assertRaises(ValueError):
+                check(root)
+
+    def test_new_schema_two_publication_rejects_two_clear_winning_runs_per_architecture(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            paths, results = self.fixture(root)
+            with self.assertRaises(ValueError):
+                publish(paths[:2] + paths[3:5], root)
+            self.assertFalse((results / 'candidate-index.json').exists())
+
     def test_new_publication_requires_native_performance_and_schema_two(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

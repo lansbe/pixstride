@@ -76,7 +76,7 @@ Unreleased [candidate `47fa85d33c40`](https://github.com/lansbe/pixstride/commit
 | arm64 | default | 25/25 | 3 | 0.1078–0.9376× | 0.1318–0.9813× | 0.1292–0.9500× | 0.1485–0.7903× |
 | arm64 | forced-native | 25/25 | 3 | 0.1103–0.9350× | 0.1340–0.9731× | 0.1318–0.9603× | 0.2554–0.7919× |
 
-Ratios are Pixstride/imgproxy; lower is better. Both modes must have lower CPU, p50, p95 and peak cgroup memory in every retained run; close/noisy timings require extra repeats. Encoded files and pixels can differ; the published agreement envelope is checked, without certifying perceptual equivalence. See [all cases and limits](BENCHMARKS.md) and [raw evidence](benchmarks/results/observed-index.json).
+Ratios are Pixstride/imgproxy; lower is better. Both modes must have lower CPU, p50, p95 and peak cgroup memory in every retained run, with at least three independent runs per architecture. Encoded files and pixels can differ; the published agreement envelope is checked, without certifying perceptual equivalence. See [all cases and limits](BENCHMARKS.md) and [raw evidence](benchmarks/results/observed-index.json).
 <!-- observed:summary:end -->
 
 ### Historical default-only qualified cohort

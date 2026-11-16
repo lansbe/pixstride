@@ -1,11 +1,17 @@
 """Allocator selection needs a complete native diagnostic, never selected samples."""
 import copy
+import json
 from pathlib import Path
 import sys
+import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
 from allocator_diagnostics import policies, validate, config_environment
+import allocator_diagnostics
+from benchmark import host_metadata
 
 
 def observations(profile='allocators'):
@@ -22,6 +28,36 @@ def observations(profile='allocators'):
 
 
 class AllocatorDiagnosticsTests(unittest.TestCase):
+    def test_both_profiles_collect_real_host_metadata_before_the_build_boundary(self):
+        read_text = Path.read_text
+        def read(path, *args, **kwargs):
+            fixtures = {'/proc/cpuinfo': 'model name: synthetic CPU\n',
+                        '/etc/os-release': 'ID=synthetic\nVERSION_ID=1\n',
+                        '/sys/kernel/mm/transparent_hugepage/enabled': '[madvise]\n'}
+            return fixtures[str(path)] if str(path) in fixtures else read_text(path, *args, **kwargs)
+        def command(*args, **_):
+            if args[:2] == ('docker', 'info'):
+                return json.dumps(dict(Architecture=allocator_diagnostics.architecture(), OSType='linux'))
+            if args[0] == 'git': return 'b' * 40
+            if args[:2] == ('docker', 'build'): raise RuntimeError('build boundary reached')
+            if args[:2] == ('docker', 'ps'): return ''
+            raise AssertionError(args)
+        for profile in ('allocators', 'filters'):
+            with self.subTest(profile=profile), tempfile.TemporaryDirectory() as temp, \
+                    patch.object(allocator_diagnostics.sys, 'platform', 'linux'), \
+                    patch.object(allocator_diagnostics.os, 'sched_getaffinity', return_value={0, 1, 2, 3}, create=True), \
+                    patch.dict(allocator_diagnostics.os.environ, {'DOCKER_HOST': 'unix:///synthetic'}), \
+                    patch.object(allocator_diagnostics, 'command', side_effect=command), \
+                    patch.object(allocator_diagnostics, 'verify_fixtures', return_value={'corpus_sha256': 'a' * 64}), \
+                    patch.object(allocator_diagnostics, 'candidate_source', return_value={'revision': 'b' * 40}), \
+                    patch.object(allocator_diagnostics.subprocess, 'run'), \
+                    patch.object(Path, 'read_text', read), \
+                    patch.object(allocator_diagnostics, 'host_metadata', wraps=host_metadata) as metadata:
+                args = SimpleNamespace(fixtures=Path(temp), output=Path(temp) / 'result.json', profile=profile)
+                with self.assertRaisesRegex(RuntimeError, 'build boundary reached'):
+                    allocator_diagnostics.run(args)
+                metadata.assert_called_once_with([0, 1], [0, 1, 2, 3], [0, 1, 2, 3])
+
     def test_filter_profile_requires_every_strip_height_and_both_operations(self):
         entries = observations('filters')
         validate(entries, 'filters')

@@ -13,7 +13,7 @@ import json
 from test_benchmark_report import measured_report
 
 
-def evidence(repeats=2, ratio=.7):
+def evidence(repeats=3, ratio=.7):
     baseline = [measured_report(arch) for arch in ('amd64', 'arm64')]
     reports = []
     for report in baseline:
@@ -43,6 +43,13 @@ def evidence(repeats=2, ratio=.7):
 
 
 class QualificationTests(unittest.TestCase):
+    def test_two_clear_winning_runs_are_not_a_complete_both_mode_cohort(self):
+        reports, baseline = evidence(repeats=2)
+        result = qualify(reports, baseline)
+        self.assertFalse(result['qualified'])
+        self.assertEqual(result['criteria']['minimum_runs_per_architecture'], 3)
+        self.assertTrue(qualify(reports, baseline, performance_modes=('pixstride_default',))['qualified'])
+
     def test_new_both_mode_cohorts_require_verified_separate_client_cpus(self):
         for bad in ('missing', 'overlap', 'duplicate', 'empty', 'wrong-service-count', 'wrong-capacity'):
             reports, baseline = evidence()
@@ -74,18 +81,10 @@ class QualificationTests(unittest.TestCase):
                 self.assertFalse(qualify(reports, baseline)['qualified'])
 
     def test_counts_and_repeat_requirement_are_separate_for_each_mode(self):
-        reports, baseline = evidence()
-        for report in reports:
-            for case in report['cases']:
-                entry = case['engines']['pixstride_native']
-                for batch in entry['batches']:
-                    batch['cpu_usec'] = 23520
-                entry['summary'].update(summarize_batches(entry['batches']))
+        reports, baseline = evidence(repeats=2)
         result = qualify(reports, baseline)
         self.assertEqual(result['architectures']['amd64']['confirmed_cases_by_mode'],
-                         {'pixstride_default': 25, 'pixstride_native': 0})
-        reports, baseline = evidence(ratio=.98)
-        result = qualify(reports, baseline)
+                         {'pixstride_default': 0, 'pixstride_native': 0})
         self.assertFalse(result['qualified'])
         self.assertEqual(result['criteria']['performance_modes'], ['pixstride_default', 'pixstride_native'])
         reports, baseline = evidence(repeats=3, ratio=.98)
@@ -125,7 +124,7 @@ class QualificationTests(unittest.TestCase):
         self.assertFalse(qualify(reports, baseline)['qualified'])
 
     def test_close_wins_require_an_extra_independent_full_run(self):
-        reports, baseline = evidence(ratio=.98)
+        reports, baseline = evidence(repeats=2, ratio=.98)
         result = qualify(reports, baseline)
         self.assertFalse(result['qualified'])
         self.assertEqual(result['architectures']['amd64']['cases'][0]['status'], 'repeat-required')
