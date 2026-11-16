@@ -23,6 +23,8 @@ mod geometry;
 #[cfg(feature = "native-codecs")]
 mod jpeg_decode;
 #[cfg(feature = "native-codecs")]
+mod jpeg_resize;
+#[cfg(feature = "native-codecs")]
 mod metadata;
 #[cfg(feature = "native-codecs")]
 mod palette;

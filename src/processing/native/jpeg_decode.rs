@@ -143,7 +143,7 @@ pub(super) fn try_load(
         [head.get_width(), head.get_height()],
         [image.get_width(), image.get_height()],
     );
-    Ok(Some((image, p)))
+    super::jpeg_resize::apply(image, p, r).map(Some)
 }
 
 #[cfg(test)]
@@ -275,9 +275,14 @@ mod tests {
             "rs:fill:128:16/g:ce",
             "rs:fill:128:16/g:no",
             "rs:auto:64:128/g:ce",
+            "rs:fit:128:64/sh:1",
         ] {
             let mut r = request(options);
-            r.format = Some(crate::request::OutputFormat::Png);
+            r.format = Some(if options.ends_with("sh:1") {
+                crate::request::OutputFormat::Jpeg
+            } else {
+                crate::request::OutputFormat::Png
+            });
             assert!(super::super::engine::process(data.clone(), &r, &[]).is_ok());
             let truncated = data[..data.len() * 9 / 10].to_vec();
             assert!(
