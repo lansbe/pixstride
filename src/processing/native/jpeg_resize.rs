@@ -5,13 +5,8 @@ use crate::{
     request::{OutputFormat, Request},
     Error,
 };
-use fast_image_resize::{
-    images::{Image, ImageRef},
-    PixelType, ResizeOptions, Resizer,
-};
 use libvips::{
     enums::{BandFormat, Interpretation},
-    voption::{Setter, VOption},
     VipsImage,
 };
 
@@ -79,39 +74,14 @@ pub(super) fn apply(
     mut plan: Plan,
     r: &Request,
 ) -> Result<(VipsImage, Plan), Error> {
-    let Some(output) = target(&image, &plan, r) else {
+    if target(&image, &plan, r).is_none() {
         return Ok((image, plan));
-    };
-    // Decode every reduced source row, then drop the decoder and its thread
-    // regions. The exported allocation owns the pixels independently.
-    let pixels = {
-        let source = super::raster::detach(image)?;
-        let input = ImageRef::new(
-            source.width as u32,
-            source.height as u32,
-            &source.memory,
-            PixelType::U8x3,
-        )
-        .map_err(|_| "invalid sharpen resize raster")?;
-        let mut pixels = Vec::new();
-        let len = output[0] as usize * output[1] as usize * 3;
-        pixels
-            .try_reserve_exact(len)
-            .map_err(|_| "sharpen resize allocation failed")?;
-        pixels.resize(len, 0);
-        let mut resized =
-            Image::from_vec_u8(output[0] as u32, output[1] as u32, pixels, PixelType::U8x3)
-                .map_err(|_| "invalid sharpen resize output")?;
-        Resizer::new()
-            .resize(&input, &mut resized, &ResizeOptions::new())
-            .map_err(|_| "sharpen Lanczos resize failed")?;
-        resized.into_vec()
-    };
-    let image = VipsImage::new_from_owned_u8(pixels, output[0], output[1], 3)
-        .and_then(|i| {
-            i.copy_with_opts(VOption::new().set("interpretation", Interpretation::Srgb as i32))
-        })
-        .map_err(|_| "sharpen raster import failed")?;
+    }
+    // Finish the same native Lanczos operation, then release its decoder,
+    // convolution graph and thread regions before constructing the filter.
+    let resized = super::geometry::resize_scale(&image, plan.scale[0], plan.scale[1], false)?;
+    drop(image);
+    let image = super::shared::materialize(resized)?;
     plan.scale = [1.0; 2];
     Ok((image, plan))
 }
@@ -177,6 +147,25 @@ mod tests {
         }
         let p = super::super::scale::Plan::new(32, 24, &base, false).unwrap();
         assert_eq!(super::apply(image(4), p, &base).unwrap().0.get_width(), 32);
+    }
+    #[test]
+    fn separated_resize_preserves_every_native_lanczos_sample() {
+        let r = request("rs:fit:17:17/sh:1");
+        let p = super::super::scale::Plan::new(97, 61, &r, false).unwrap();
+        let pixels = (0..97 * 61 * 3)
+            .map(|i| ((i * 71 + i / 13) % 256) as u8)
+            .collect();
+        super::super::engine::initialize().unwrap();
+        let source = VipsImage::new_from_owned_u8(pixels, 97, 61, 3)
+            .unwrap()
+            .copy_with_opts(VOption::new().set("interpretation", Interpretation::Srgb as i32))
+            .unwrap();
+        let expected =
+            super::super::geometry::resize_scale(&source, p.scale[0], p.scale[1], false).unwrap();
+        let expected = super::super::raster::export(&expected).unwrap();
+        let (actual, _) = super::apply(source, p, &r).unwrap();
+        let actual = super::super::raster::export(&actual).unwrap();
+        assert_eq!(actual.as_ref(), expected.as_ref());
     }
     #[test]
     fn oversized_convolution_scratch_keeps_the_bounded_native_route() {

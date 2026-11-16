@@ -350,6 +350,9 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
             head
         }
     };
+    // Lazy source graphs retain their own Arc; independent rasters can now
+    // release the outer encoded allocation before filtering and encoding.
+    drop(encoded);
     let count = if animated { count } else { 1 };
     let mut frames = Vec::new();
     let mut sum = 0usize;
@@ -433,7 +436,6 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
     }
     drop(input);
     drop(frames);
-    drop(encoded);
     let bytes = encode::save(image, r, format, height as i32)?;
     Ok(NativeResult {
         body: bytes,
