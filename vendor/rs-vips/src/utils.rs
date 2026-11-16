@@ -72,6 +72,28 @@ where
     }
 }
 
+// Ownership lives on the C object, including references retained by lazy
+// downstream operations. The private keys are assigned only to fresh objects.
+pub(crate) unsafe fn keep_owned_bytes(object: *mut bindings::GObject, bytes: Vec<u8>) {
+    unsafe extern "C" fn release(data: *mut std::ffi::c_void) {
+        // SAFETY: set_data_full invokes this once for the matching Box below.
+        unsafe { drop(Box::from_raw(data.cast::<Vec<u8>>())) };
+    }
+    let owner = Box::into_raw(Box::new(bytes)).cast();
+    // SAFETY: caller supplies a live fresh GObject; ownership transfers to it.
+    unsafe { bindings::g_object_set_data_full(object, c"rs-vips-owned-bytes".as_ptr(), owner, Some(release)) };
+}
+
+pub(crate) unsafe fn keep_shared_bytes(object: *mut bindings::GObject, bytes: Arc<Vec<u8>>) {
+    unsafe extern "C" fn release(data: *mut std::ffi::c_void) {
+        // SAFETY: this Box holds the immutable encoded source until finalization.
+        unsafe { drop(Box::from_raw(data.cast::<Arc<Vec<u8>>>())) };
+    }
+    let owner = Box::into_raw(Box::new(bytes)).cast();
+    // SAFETY: caller supplies a live fresh GObject; only read-only source APIs use it.
+    unsafe { bindings::g_object_set_data_full(object, c"rs-vips-shared-bytes".as_ptr(), owner, Some(release)) };
+}
+
 #[inline]
 pub(crate) fn new_c_string(string: impl Into<Vec<u8>>) -> Result<CString> {
     CString::new(string)

@@ -1,50 +1,10 @@
 use super::*;
-#[cfg(not(all(target_arch = "aarch64", target_feature = "crc")))]
-pub(crate) const fn make_crc_table() -> [u32; 256] {
-    let mut table = [0u32; 256];
-    let mut i = 0;
-    while i < 256 {
-        let mut c = i as u32;
-        let mut bit = 0;
-        while bit < 8 {
-            c = if c & 1 != 0 {
-                0xedb8_8320 ^ (c >> 1)
-            } else {
-                c >> 1
-            };
-            bit += 1;
-        }
-        table[i] = c;
-        i += 1;
-    }
-    table
-}
-#[cfg(not(all(target_arch = "aarch64", target_feature = "crc")))]
-pub(crate) fn crc32_update(mut c: u32, bytes: &[u8]) -> u32 {
-    for &byte in bytes {
-        c = CRC_TABLE[((c ^ byte as u32) & 0xff) as usize] ^ (c >> 8);
-    }
-    c
-}
-// Arm CRC32 instructions use the same IEEE polynomial as PNG. The path is
-// compiled only when the target explicitly guarantees the CRC feature; other
-// targets keep the table-based implementation. No runtime library is called.
-#[cfg(all(target_arch = "aarch64", target_feature = "crc"))]
-pub(crate) fn crc32_update(mut c: u32, bytes: &[u8]) -> u32 {
-    use core::arch::aarch64::{__crc32b, __crc32d};
-    let mut groups = bytes.chunks_exact(8);
-    for group in &mut groups {
-        let word = u64::from_le_bytes([
-            group[0], group[1], group[2], group[3], group[4], group[5], group[6], group[7],
-        ]);
-        // SAFETY: this function exists only when the target enables CRC.
-        c = unsafe { __crc32d(c, word) };
-    }
-    for &byte in groups.remainder() {
-        // SAFETY: as above; the data is read as an ordinary checked slice.
-        c = unsafe { __crc32b(c, byte) };
-    }
-    c
+/// The parser carries an unfinalized CRC state; crc32fast accepts finalized
+/// incremental states and selects CPU acceleration at runtime on both ISAs.
+pub(crate) fn crc32_update(c: u32, bytes: &[u8]) -> u32 {
+    let mut hash = crc32fast::Hasher::new_with_initial(!c);
+    hash.update(bytes);
+    !hash.finalize()
 }
 pub(crate) fn crc32(bytes: &[u8]) -> u32 {
     !crc32_update(!0u32, bytes)
@@ -415,5 +375,17 @@ impl InflateOutput for InflateSizeProbe {
     }
     fn checksum(&mut self) -> u32 {
         0
+    }
+}
+
+#[cfg(test)]
+mod checksum_tests {
+    use super::*;
+    #[test]
+    fn ieee_crc_matches_known_vector_and_incremental_parser_state() {
+        assert_eq!(crc32(b"123456789"), 0xcbf4_3926);
+        assert_eq!(crc32(b""), 0);
+        let first = crc32_update(!0, b"1234");
+        assert_eq!(!crc32_update(first, b"56789"), 0xcbf4_3926);
     }
 }

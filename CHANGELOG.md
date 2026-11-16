@@ -4,9 +4,35 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-16
+
 ### Added
 
-- Reusable 25-case image-processing benchmarks for native Linux AMD64 and ARM64, comparing immutable Pixstride default/native and imgproxy images with one shared public corpus, balanced repeated HTTP measurements, child-inclusive CPU, peak cgroup memory, output sizes and decoded-pixel differences. Preserve raw samples and generate checked documentation tables from the measured evidence.
+- Reusable 25-case benchmarks on native Linux AMD64 and ARM64, with one verified public corpus, pinned imgproxy 4.0.24, balanced signed HTTP requests, child-inclusive CPU, lifetime cgroup peaks, output sizes and decoded-pixel checks. Preserve every raw sample and both complete observed cohorts.
+- Strict default/forced-native qualification requiring at least three independent runs per architecture. Keep failed observations separate from qualified snapshots and the published 0.3.0 baseline; verify source/image identities, archive hashes, statistics and generated documentation.
+- Reusable native allocator/page-policy and JPEG filter-strip diagnostics, separate from HTTP performance qualification.
+
+### Changed
+
+- Default to `PIXSTRIDE_ENGINE=auto`: validated opaque PNG identities keep the built-in route, while other eligible transforms use reusable isolated native workers. Explicit `builtin` legacy routing and forced `native` remain available. Native routing/resampling can change pixels, encoded bytes and ETags; change signed cachebusters or invalidate transformed-image caches when upgrading.
+- Reuse workers with bounded nonblocking framed pipes, absolute request deadlines, renewed per-image CPU limits, bounded admission and recycling after 256 successful images. Do not cache images, results or libvips operations.
+- Move Docker builds/runtime from Alpine/musl to digest-pinned Ubuntu 26.04/glibc with distribution libvips/codecs and packaged security updates. Rust 1.100 remains required; the compiler is pinned to 1.100.0. Published 0.3.0 images retain their original Alpine behavior.
+- Accelerate PNG filtering/compression with SSE2/NEON, crc32fast and libdeflate; decode eligible plain eight-bit PNGs with a bounded Rust decoder. Retain complete structure, CRC, DEFLATE, Adler/trailer, filter and original source-budget validation. Metadata/profile/HDR/palette/interlace/animation declarations retain the general route.
+- Validate and move unchanged plain RGB8 PNG frames inside the isolated native worker instead of recompressing them. Keep byte targets, resource limits and fallback behavior.
+- Reduce eligible JPEGs during decoding and stream eligible TIFFs, preserving original dimensions/admission and random access when geometry or quality retries need it. Release redundant source/raster ownership without weakening complete-source validation.
+- Render eligible fontless SVG-to-PNG with resvg inside the bounded worker. Deny external resource resolution and preserve XML/source/pixel/deadline/address-space admission; unsupported declarations retain the native renderer.
+- Use bounded SIMD premultiplied Lanczos3 for eligible plain RGBA8 PNG-to-JPEG downscaling, preserving geometry/DPR, requested quality and the existing pixel-agreement envelope. Other precision, metadata/HDR, linear-light or complex geometry retains the native route.
+- Retain System allocation. GNU native workers use one glibc arena, startup base-page policy, default small allocation caches and fixed 4-MiB mmap/trim thresholds, with existing deadlines, 1-GiB address-space ceiling and recycling. Development-only mimalloc probes do not override service allocation.
+- Stream eligible JPEG blur/sharpen output through up to 32 rows, capped at 4 MiB per strip; preserve native samples and materialized byte-target retries.
+- Pin the benchmark client to spare CPUs outside the services' unchanged two-CPU cpuset. Record kernel-verified affinity and preserve older reports with their original protocol.
+- Record final forced-native wins in all 25 cases on both architectures, in each of three runs. Default routing wins 25/25 AMD64 and 24/25 ARM64: graphics-crop p95 remains 0.71% higher in one ARM64 run, so the complete both-mode target is not met. Preserve the preceding cohort's two AMD64 p95 losses too. These shared-VM observations are not universal or certified equal-quality claims; some encoded files are larger. See [all cases, provenance and limits](BENCHMARKS.md#current-measured-result).
+
+### Fixed
+
+- Enforce exact encoded-byte limits for accelerated SVG-to-PNG output, including targets too small for a lossless result.
+- Keep random source access when JPEG/TIFF geometry can discard rows, including implicit vertical fill/auto crops and fill-down. Reject truncated JPEG tails even when a crop uses only earlier rows.
+- Correct allocator-diagnostic startup after client-affinity metadata changes and reject two-run publication/reading of new both-mode snapshots while retaining historical qualification criteria.
+- Exercise the same host-driven default-routing container smoke checks in ordinary and tagged CI after the Ubuntu migration.
 
 ## [0.3.0] - 2026-11-14
 
@@ -105,7 +131,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Linux AMD64/ARM64 Docker images, MIT licensing and deployment documentation.
 - Historical CPU, loopback HTTP and RAM comparisons with their quality and environment limitations. This is not full imgproxy compatibility.
 
-[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/lansbe/pixstride/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/lansbe/pixstride/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lansbe/pixstride/compare/v0.1.1...v0.2.0
 [0.1.1]: https://github.com/lansbe/pixstride/compare/v0.1.0...v0.1.1

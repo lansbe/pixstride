@@ -4,6 +4,8 @@ import argparse
 import base64
 import json
 import os
+import random
+import struct
 from pathlib import Path
 import subprocess
 import tempfile
@@ -49,6 +51,7 @@ def check(args):
         root = Path(temp)
         source = root / 'fixture.png'
         source.write_bytes(png(32, 24))
+        assert run(binary, root, source) == source.read_bytes(), 'Native worker recompressed an unchanged plain RGB PNG'
         for fmt in ('png', 'jpg', 'webp', 'avif', 'heic', 'jxl', 'gif', 'tiff', 'bmp', 'ico'):
             encoded = run(binary, root, source, output=fmt)
             intermediate = root / ('roundtrip.' + fmt)
@@ -56,6 +59,32 @@ def check(args):
             decoded = run(binary, root, intermediate)
             assert read_png(decoded)[0][:2] == (32, 24), fmt
             passed.append('roundtrip-' + fmt)
+        source.write_bytes(png(101, 71))
+        jpeg = run(binary, root, source, output='jpg')
+        photo = root / 'odd.jpg'
+        photo.write_bytes(jpeg)
+        assert read_png(run(binary, root, photo, options='rs:fit:25:25'))[0][:2] == (25, 18)
+        assert read_png(run(binary, root, photo, options='rs:fill:25:25'))[0][:2] == (25, 25)
+        assert read_png(run(binary, root, photo, options='c:60:40:ce/rs:fit:25:25'))[0][:2] == (25, 17)
+        # Repeated quality attempts must be able to rewind the JPEG pixel source.
+        largest = len(run(binary, root, photo, options='q:95', output='jpg'))
+        smallest = len(run(binary, root, photo, options='q:1', output='jpg'))
+        assert smallest < largest, 'Quality fixture does not exercise byte-target attempts'
+        target = (smallest + largest) // 2
+        assert len(run(binary, root, photo, options=f'q:95/mb:{target}', output='jpg')) <= target
+        large_sharp = len(run(binary, root, photo, options='sh:1/q:95', output='jpg'))
+        small_sharp = len(run(binary, root, photo, options='sh:1/q:1', output='jpg'))
+        sharp_target = (large_sharp + small_sharp) // 2
+        assert small_sharp < large_sharp
+        assert len(run(binary, root, photo, options=f'sh:1/q:95/mb:{sharp_target}', output='jpg')) <= sharp_target
+        metadata = b'Exif\0\0' + exif()
+        photo.write_bytes(jpeg[:2] + b'\xff\xe1' + struct.pack('>H', len(metadata) + 2) + metadata + jpeg[2:])
+        assert read_png(run(binary, root, photo, options='rs:fit:25:25'))[0][:2] == (18, 25)
+        assert read_png(run(binary, root, photo, options='ar:0/rs:fit:25:25'))[0][:2] == (25, 18)
+        auto_crop = read_png(run(binary, root, photo, options='c:60:40:ce/rs:fit:25:25'))[:2]
+        assert auto_crop == read_png(run(binary, root, photo, options='ar:0/rot:90/c:60:40:ce/rs:fit:25:25'))[:2], 'Materialized JPEG crop lost EXIF orientation'
+        run(binary, root, photo, options='rs:fit:25:25', success=False, env={'PIXSTRIDE_MAX_SRC_RESOLUTION':'0.0001'})
+        passed.append('jpeg-reduced-decode-odd-sizes-exif-and-budgets')
         gray = root / 'gray16.png'
         values = [x * 2053 for x in range(16)]
         gray.write_bytes(png(16, 2, channels=1, depth=16, rows=[values, values]))
@@ -161,6 +190,10 @@ def check(args):
         svg = root / 'fixture.svg'
         svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24"><defs><linearGradient id="g"><stop stop-color="red"/><stop offset="1" stop-color="blue"/></linearGradient></defs><rect width="32" height="24" fill="url(#g)"/></svg>')
         assert read_png(run(binary, root, svg))[0][:2] == (32, 24)
+        svg_png = run(binary, root, svg)
+        assert run(binary, root, svg, options=f'mb:{len(svg_png)}') == svg_png
+        run(binary, root, svg, options=f'mb:{len(svg_png) - 1}', success=False)
+        run(binary, root, svg, options='mb:1', success=False)
         for content in ('<g transform="translate(4 4)"><path d="M0 0H16V12H0Z" fill="red"/></g>', '<defs><mask id="m"><rect width="16" height="24" fill="white"/></mask></defs><rect width="32" height="24" fill="blue" mask="url(#m)"/>', '<defs><linearGradient id="g"><stop stop-color="red"/></linearGradient></defs><style>rect{fill:url("#g")}</style><rect width="32" height="24"/>', '<text x="2" y="20" font-family="sans-serif" font-size="18" fill="green">X</text>'):
             svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="32" height="24">'+content+'</svg>')
             raster=read_png(run(binary,root,svg))
@@ -178,13 +211,35 @@ def check(args):
         embedded_png=read_png(run(binary,root,svg))
         assert embedded_png[0][:2]==(32,24) and 255 in embedded_png[1], 'Embedded SVG raster was not rendered'
         passed.append('static-svg-sanitization-and-boundary')
+        portrait = root / 'portrait.png'
+        rng = random.Random(1)
+        portrait.write_bytes(png(512, 2048, rows=(rng.randbytes(512 * 3) for _ in range(2048))))
+        jpeg = run(binary, root, portrait, options='q:90', output='jpg')
+        portrait.write_bytes(jpeg)
+        for options in ('rs:fill:128:16/g:ce', 'rs:fill:128:16/g:no', 'rs:auto:64:128/g:ce'):
+            assert run(binary, root, portrait, options=options).startswith(b'\x89PNG')
+        for fraction in (75, 90):
+            portrait.write_bytes(jpeg[:len(jpeg) * fraction // 100])
+            for options in ('rs:fill:128:16/g:ce', 'rs:fill:128:16/g:no', 'rs:auto:64:128/g:ce'):
+                run(binary, root, portrait, options=options, success=False)
+        passed.append('implicit-vertical-crop-rejects-truncated-jpeg')
         source.write_bytes(png(32, 24))
         run(binary, root, source, options='mb:1', output='jpg', success=False)
+        run(binary, root, source, options='mb:1', output='png', success=False)
+        plain = run(binary, root, source, output='png')
+        assert run(binary, root, source, options=f'mb:{len(plain)}', output='png') == plain
         run(binary, root, source, options='dpr:100000/el:1', success=False)
         corrupt = bytearray(source.read_bytes())
         corrupt[29] ^= 1
         source.write_bytes(corrupt)
         run(binary, root, source, success=False)
+        source.write_bytes(png(32, 24, channels=4))
+        corrupt = bytearray(source.read_bytes())
+        size = int.from_bytes(corrupt[33:37], 'big')
+        corrupt[41 + size - 1] ^= 1  # Wrong zlib Adler32, still-valid IDAT CRC.
+        corrupt[41 + size:45 + size] = zlib.crc32(corrupt[37:41 + size]).to_bytes(4, 'big')
+        source.write_bytes(corrupt)
+        run(binary, root, source, options='c:8:8:ce/rs:fit:4:4', success=False)
         passed.append('resource-and-malformed-input-rejection')
     print(f'{len(passed)} native checks passed: ' + ', '.join(passed))
     if args.report:

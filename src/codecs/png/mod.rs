@@ -6,8 +6,6 @@ mod security_regressions;
 use crate::{Buffer, Error, Image, MAX_FILE, MAX_PIXELS};
 const SIGNATURE: &[u8; 8] = b"\x89PNG\r\n\x1a\n";
 const MAX_DIMENSION: usize = 100_000;
-#[cfg(not(all(target_arch = "aarch64", target_feature = "crc")))]
-const CRC_TABLE: [u32; 256] = make_crc_table();
 pub(crate) struct Bits<'a> {
     data: &'a [u8],
     pos: usize,

@@ -28,9 +28,9 @@ pub(crate) struct Settings {
 impl Settings {
     pub fn from_env() -> Result<Self, Error> {
         match std::env::var("PIXSTRIDE_ENGINE").as_deref() {
-            Err(std::env::VarError::NotPresent) | Ok("builtin") => {}
+            Err(std::env::VarError::NotPresent) | Ok("builtin" | "auto") => {}
             Ok("native") if cfg!(feature = "native-codecs") => {}
-            _ => return Err("engine must be builtin or an enabled native engine"),
+            _ => return Err("engine must be auto, builtin or an enabled native engine"),
         }
         if let Ok(value) = std::env::var("PIXSTRIDE_PROCESS_TIMEOUT") {
             if !value.parse::<u64>().is_ok_and(|n| (1..=120).contains(&n)) {

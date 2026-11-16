@@ -22,6 +22,8 @@ mod network;
 use network::{fetch, local, overload, protocol, request, server};
 mod security;
 use security::signature;
+#[cfg(all(feature = "native-codecs", target_os = "linux", target_env = "gnu"))]
+mod allocator;
 mod buffer;
 mod config;
 mod config_sources;
@@ -37,6 +39,8 @@ pub struct Image {
     pub pixels: Buffer,
 }
 fn main() {
+    #[cfg(all(feature = "native-codecs", target_os = "linux", target_env = "gnu"))]
+    let _ = allocator::prefer_base_pages();
     if let Err(error) = config::run() {
         eprintln!("pixstride: {error}");
         std::process::exit(1);

@@ -11,10 +11,11 @@ use std::{
     ffi::{c_int, c_void},
     io::{Read, Seek, SeekFrom},
     path::Path,
+    sync::Arc,
 };
 
 /// A unified interface for reading, seeking, and mapping data
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct VipsSource {
     pub(crate) ctx: *mut bindings::VipsSource,
 }
@@ -105,6 +106,23 @@ impl VipsSource {
                     "Could not initialise VipsSource from descriptor".to_string(),
                 ),
             )
+        }
+    }
+
+    /// Create a read-only memory source without copying its encoded bytes.
+    /// The source and every lazy image retaining it keep the Arc alive.
+    pub fn new_from_shared_memory(buffer: Arc<Vec<u8>>) -> Result<VipsSource> {
+        unsafe {
+            let ctx = bindings::vips_source_new_from_memory(
+                buffer.as_slice().as_ptr().cast(), buffer.len(),
+            );
+            if ctx.is_null() {
+                return Err(Error::InitializationError("Cannot create shared memory source".to_string()));
+            }
+            // The bytes are immutable and their owner is attached to the C
+            // object, not this Rust wrapper; C image graphs can outlive it.
+            utils::keep_shared_bytes(ctx.cast(), buffer);
+            Ok(VipsSource { ctx })
         }
     }
 
@@ -333,6 +351,16 @@ unsafe extern "C" fn on_seek(
 
 unsafe extern "C" fn source_destroy(data: *mut c_void, _: *mut bindings::_GClosure) {
     let _ = Box::from_raw(data as *mut SourceContext);
+}
+
+impl Clone for VipsSource {
+    fn clone(&self) -> Self {
+        if !self.ctx.is_null() {
+            // SAFETY: each Rust wrapper owns one C reference, including clones.
+            unsafe { bindings::g_object_ref(self.ctx.cast()); }
+        }
+        Self { ctx: self.ctx }
+    }
 }
 
 impl Drop for VipsSource {

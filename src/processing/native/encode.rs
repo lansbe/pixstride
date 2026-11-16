@@ -20,38 +20,9 @@ pub(super) fn raster(image: &VipsImage) -> Result<Image, Error> {
         .cast(BandFormat::Uchar)
         .map_err(|_| "native raster conversion failed")?;
     super::engine::checked(image.get_width(), image.get_height())?;
-    let expected = (image.get_width() as usize)
-        .checked_mul(image.get_height() as usize)
-        .and_then(|n| n.checked_mul(4))
-        .ok_or("native raster overflow")?;
-    let mut size = 0usize;
-    // SAFETY: image remains live; libvips sets size and returns an owned GLib
-    // allocation or NULL. Validate both before reading and always use g_free.
-    let raw =
-        unsafe { libvips::bindings::vips_image_write_to_memory(image.as_mut_ptr(), &mut size) };
-    if raw.is_null() {
-        return Err("native raster export failed");
-    }
-    struct Memory(*mut std::ffi::c_void);
-    impl Drop for Memory {
-        fn drop(&mut self) {
-            unsafe { libvips::bindings::g_free(self.0) };
-        }
-    }
-    let allocation = Memory(raw);
-    if size != expected {
-        return Err("inconsistent native RGBA raster");
-    }
-    let mut pixels = Buffer::new(size)?;
-    // SAFETY: a non-NULL allocation of the validated size is live and disjoint
-    // from the new Rust buffer. Both contain exactly width*height RGBA8 bytes.
-    unsafe {
-        std::ptr::copy_nonoverlapping(
-            allocation.0.cast(),
-            pixels.as_mut_slice().as_mut_ptr(),
-            size,
-        );
-    }
+    let memory = super::raster::export(&image)?;
+    let mut pixels = Buffer::new(memory.len())?;
+    pixels.as_mut_slice().copy_from_slice(&memory);
     Ok(Image {
         width: image.get_width() as usize,
         height: image.get_height() as usize,
@@ -68,6 +39,20 @@ fn attempt(
 ) -> Result<Vec<u8>, Error> {
     if format == OutputFormat::Gif {
         return gif(image, page_height);
+    }
+    if format == OutputFormat::Bmp
+        && image.get_format().ok() == Some(BandFormat::Uchar)
+        && image.get_interpretation().ok() == Some(Interpretation::Srgb)
+        && image.get_bands() == 3
+    {
+        let pixels = super::raster::export(image)?;
+        return Ok(crate::image::encode_bmp_rgb(
+            image.get_width() as usize,
+            image.get_height() as usize,
+            &pixels,
+        )?
+        .as_slice()
+        .to_vec());
     }
     if matches!(format, OutputFormat::Bmp | OutputFormat::Ico) {
         let raster = raster(image)?;
@@ -209,8 +194,25 @@ fn attempt(
     Ok(bytes)
 }
 
+pub(super) fn optimized_png(image: &Image) -> Result<Vec<u8>, Error> {
+    let encoded = crate::png_encode::encode(image)?;
+    let mut bytes = Vec::new();
+    bytes
+        .try_reserve_exact(encoded.as_slice().len())
+        .map_err(|_| "PNG: allocation failed")?;
+    bytes.extend_from_slice(encoded.as_slice());
+    Ok(bytes)
+}
+
+fn filter_strip_rows(width: i32, bands: i32) -> i32 {
+    // This route admits only 1..=4 uchar bands. Wider strips avoid repeated
+    // filter halo work; cap the output strip at 4 MiB for very wide images.
+    let bytes_per_row = i64::from(width.max(1)) * i64::from(bands.max(1));
+    ((4 * 1024 * 1024) / bytes_per_row).clamp(1, 32) as i32
+}
+
 pub(super) fn save(
-    image: &VipsImage,
+    image: VipsImage,
     r: &Request,
     format: OutputFormat,
     page_height: i32,
@@ -232,7 +234,57 @@ pub(super) fn save(
     {
         return Err("selected format cannot preserve high precision");
     }
-    let image = super::metadata::strip(image, r)?;
+    let stripped = super::metadata::strip(&image, r)?;
+    drop(image);
+    let image = if format == OutputFormat::Jpeg
+        && (r.effects.blur_sigma > 0.0 || r.effects.sharpen_sigma > 0.0)
+        && !r.extra.preserve_hdr
+        && super::shared::fits_memory(&stripped)
+    {
+        if r.extra.max_bytes == 0 {
+            // Bounded output strips limit upstream filter working regions. Only
+            // a single saver pass may consume this sequential image.
+            let stream = stripped
+                .sequential_with_opts(VOption::new().set(
+                    "tile_height",
+                    filter_strip_rows(stripped.get_width(), stripped.get_bands()),
+                ))
+                .map_err(|_| "native JPEG filter streaming failed")?;
+            drop(stripped);
+            stream
+        } else {
+            super::shared::materialize(stripped)?
+        }
+    } else {
+        stripped
+    };
+    if format == OutputFormat::Png
+        && r.strip_metadata
+        && r.strip_color_profile
+        && !r.extra.keep_copyright
+        && !r.extra.preserve_hdr
+        && !r.extra.encoding.png_quantize
+        && !r.extra.encoding.png_interlaced
+        && image.get_format().ok() == Some(BandFormat::Uchar)
+        && image.get_interpretation().ok() == Some(Interpretation::Srgb)
+        && matches!(image.get_bands(), 3 | 4)
+        && i64::from(image.get_width()) * i64::from(image.get_height()) * 4
+            <= crate::MAX_FILE as i64
+    {
+        let pixels = super::raster::detach(image)?;
+        let bytes = crate::png_encode::encode_pixels(
+            pixels.width,
+            pixels.height,
+            pixels.memory,
+            pixels.bands,
+        )?
+        .as_slice()
+        .to_vec();
+        if r.extra.max_bytes > 0 && bytes.len() > r.extra.max_bytes {
+            return Err("size target unavailable for this format");
+        }
+        return Ok(bytes);
+    }
     let image = &image;
     let quality = r
         .quality
@@ -328,4 +380,64 @@ fn gif(image: &VipsImage, page_height: i32) -> Result<Vec<u8>, Error> {
         }
     }
     Ok(out)
+}
+
+#[cfg(test)]
+mod filter_stream_tests {
+    use super::*;
+
+    #[test]
+    fn filter_strips_fill_but_never_exceed_the_memory_budget() {
+        for width in [640, 16384, 65536, 100000] {
+            for bands in [1, 3, 4] {
+                let rows = filter_strip_rows(width, bands);
+                assert!((1..=32).contains(&rows));
+                assert!(width * bands * rows <= 4 * 1024 * 1024);
+                if rows < 32 {
+                    assert!(width * bands * (rows + 1) > 4 * 1024 * 1024);
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn wider_strips_preserve_native_blur_and_sharpen_jpeg_bytes() {
+        super::super::engine::initialize().unwrap();
+        let data: Vec<u8> = (0..97 * 61 * 3)
+            .map(|v| ((v * 71 + v / 97) % 256) as u8)
+            .collect();
+        for filter in ["bl:2", "sh:1"] {
+            let request = crate::request::parse(
+                &format!("/unsafe/{filter}/q:85/plain/local:///fixture.jpg@jpg"),
+                &crate::request::Config::unsafe_local(),
+            )
+            .unwrap();
+            let mut outputs = Vec::new();
+            for rows in [16, filter_strip_rows(73, 3)] {
+                let image = VipsImage::new_from_memory_copy(&data, 97, 61, 3, BandFormat::Uchar)
+                    .unwrap()
+                    .copy_with_opts(
+                        VOption::new().set("interpretation", Interpretation::Srgb as i32),
+                    )
+                    .unwrap()
+                    .resize(0.75)
+                    .unwrap();
+                let image = if filter == "bl:2" {
+                    image.gaussblur(2.0).unwrap()
+                } else {
+                    image
+                        .sharpen_with_opts(VOption::new().set("sigma", 1.0))
+                        .unwrap()
+                };
+                let image = super::super::metadata::strip(&image, &request).unwrap();
+                let image = image
+                    .sequential_with_opts(VOption::new().set("tile_height", rows))
+                    .unwrap();
+                outputs.push(
+                    attempt(&image, &request, OutputFormat::Jpeg, 85, image.get_height()).unwrap(),
+                );
+            }
+            assert_eq!(outputs[0], outputs[1], "{filter} changed encoded samples");
+        }
+    }
 }
