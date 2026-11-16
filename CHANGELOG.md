@@ -9,6 +9,10 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Verify published benchmark image identities against raw OCI index/platform digests, release version/source annotations, native image configs and runtime capabilities, independently of the harness revision. Default new runs to the current release pins while retaining the immutable 0.3.0 baseline.
 - Record/check published-image comparisons separately from pre-release source cohorts, retaining all six native reports and every failed comparison. Share the strict CPU/p50/p95/peak and decoded-pixel gates, generate both-mode tables and median reductions, and run three independent native VMs per architecture without rebuilding the release.
 
+### Changed
+
+- Refresh README and benchmark results with the actual published 0.4.0 image: all 25 cases win CPU, p50, p95 and lifetime peak cgroup memory in default and forced-native modes, in every run on three native Linux VMs per architecture. Retain all 64,800 timed requests, output-size/pixel differences, hardware identities and earlier losses separately. These observations do not certify perceptual equivalence or a universal performance guarantee.
+
 ## [0.4.0] - 2026-11-16
 
 ### Added
