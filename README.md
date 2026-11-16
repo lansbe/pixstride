@@ -67,17 +67,20 @@ The reusable suite compares Pixstride (default routing and forced native) with i
 <!-- observed:summary:start -->
 Latest measured cohort: **target not met**. Every retained run is included; these observations do not replace the historical qualified snapshot.
 
-Unreleased [candidate `47fa85d33c40`](https://github.com/lansbe/pixstride/commit/47fa85d33c4047b21f50898998f514ebb9aaad96); default and forced-native, all retained native Linux runs. The published 0.3.0 baseline below is unchanged.
+Unreleased [candidate `20f202a5b5e1`](https://github.com/lansbe/pixstride/commit/20f202a5b5e17eb0d8e61795e87d04a77a0cac77); default and forced-native, all retained native Linux runs. The published 0.3.0 baseline below is unchanged.
 
 | Linux | Mode | Confirmed cases | Runs | CPU ratio range | HTTP p50 range | HTTP p95 range | Peak cgroup range |
 |---|---|---:|---:|---:|---:|---:|---:|
-| amd64 | default | 24/25 | 3 | 0.0750–0.9112× | 0.1006–0.9370× | 0.1093–1.1209× | 0.1588–0.8202× |
-| amd64 | forced-native | 24/25 | 3 | 0.0769–0.9098× | 0.1031–0.9332× | 0.1137–1.1000× | 0.2631–0.8257× |
-| arm64 | default | 25/25 | 3 | 0.1078–0.9376× | 0.1318–0.9813× | 0.1292–0.9500× | 0.1485–0.7903× |
-| arm64 | forced-native | 25/25 | 3 | 0.1103–0.9350× | 0.1340–0.9731× | 0.1318–0.9603× | 0.2554–0.7919× |
+| amd64 | default | 25/25 | 3 | 0.0734–0.9003× | 0.0983–0.9358× | 0.0993–0.9548× | 0.1651–0.8336× |
+| amd64 | forced-native | 25/25 | 3 | 0.0752–0.9021× | 0.1007–0.9360× | 0.1008–0.9358× | 0.2698–0.8350× |
+| arm64 | default | 24/25 | 3 | 0.1075–0.9357× | 0.1315–0.9885× | 0.1304–1.0071× | 0.1562–0.8001× |
+| arm64 | forced-native | 25/25 | 3 | 0.1094–0.9382× | 0.1336–0.9883× | 0.1329–0.9676× | 0.2652–0.7959× |
 
 Ratios are Pixstride/imgproxy; lower is better. Both modes must have lower CPU, p50, p95 and peak cgroup memory in every retained run, with at least three independent runs per architecture. Encoded files and pixels can differ; the published agreement envelope is checked, without certifying perceptual equivalence. See [all cases and limits](BENCHMARKS.md) and [raw evidence](benchmarks/results/observed-index.json).
 <!-- observed:summary:end -->
+
+The [preceding six-run cohort](benchmarks/results/observed-47fa85d33c40-index.json) remains intact, including its two AMD64 p95 losses. The engine and HTTP measurement code are unchanged between those runs and the final post-review campaign above; timing variation is not evidence of a further speed optimization.
+
 
 ### Historical default-only qualified cohort
 
