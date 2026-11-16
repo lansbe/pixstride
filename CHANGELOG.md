@@ -13,7 +13,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
-- Use pinned mimalloc for both Rust and C allocations in GNU Linux native builds, with transparent huge pages disabled, immediate free-page purging and a 64 MiB initial worker arena under the existing 1 GiB address-space ceiling. Preserve the continuous native filter pipeline, image validation, quality, deadlines and recycling. Other builds retain the system allocator; include allocator license notices with the container.
+- Use pinned mimalloc for both Rust and C allocations in GNU Linux native builds, with transparent huge pages disabled, free-page collection after worker request cleanup and a 64 MiB initial worker arena under the existing 1 GiB address-space ceiling. Preserve the continuous native filter pipeline, image validation, quality, deadlines and recycling. Other builds retain the system allocator; include allocator license notices with the container.
 
 - Require every default and forced-native CPU/p50/p95/peak-memory comparison to win across all retained native Linux runs. Publish schema2 per-mode evidence while preserving historical default-only snapshots.
 - Validate and move unchanged plain RGB8 PNG frames inside native workers instead of recompressing them. Preserve full checksums/stream and resource admission, fallback behavior and byte targets.

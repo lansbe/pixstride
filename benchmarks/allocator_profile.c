@@ -35,7 +35,9 @@ static VipsImage *load(GBytes *bytes, int shrink, VipsAccess access) {
     return image;
 }
 int main(int argc, char **argv) {
-    if (argc != 3 || (strcmp(argv[2], "blur") && strcmp(argv[2], "sharpen"))) return 2;
+    if ((argc != 3 && argc != 4) || (strcmp(argv[2], "blur") && strcmp(argv[2], "sharpen")) ||
+        (argc == 4 && strcmp(argv[3], "collect"))) return 2;
+    int collect = argc == 4;
 #ifdef __linux__
     struct rlimit limit;
     if (getrlimit(RLIMIT_AS, &limit)) return 2;
@@ -79,6 +81,7 @@ int main(int argc, char **argv) {
         if (vips_jpegsave_buffer(stream, &output, &size, "Q", 85, "strip", TRUE, NULL)) return failure(__LINE__);
         g_object_unref(stream);
         vips_error_clear(); vips_thread_shutdown();
+        if (collect) mi_collect(true);
         double elapsed = now(CLOCK_MONOTONIC) - begin, used = now(CLOCK_PROCESS_CPUTIME_ID) - cpu_begin;
         /* Verify every body outside timing, then include response deallocation. */
         gchar *hash = g_compute_checksum_for_data(G_CHECKSUM_SHA256, output, size);
@@ -98,10 +101,10 @@ int main(int argc, char **argv) {
     if (!counter || fscanf(counter, "%llu", &peak) != 1) return 5;
     fclose(counter);
 #endif
-    printf("{\"operation\":\"%s\",\"samples\":%d,\"allocator_version\":%d,"
+    printf("{\"operation\":\"%s\",\"collection\":\"%s\",\"samples\":%d,\"allocator_version\":%d,"
         "\"processing_p50_ms\":%.6f,\"processing_p95_ms\":%.6f,\"cpu_mean_ms\":%.6f,"
         "\"cgroup_peak_memory_bytes\":%llu,\"output_sha256\":\"%s\"}\n",
-        argv[2], SAMPLES, mi_version(), wall[(SAMPLES - 1) / 2], wall[(95 * SAMPLES + 99) / 100 - 1],
+        argv[2], collect ? "request" : "none", SAMPLES, mi_version(), wall[(SAMPLES - 1) / 2], wall[(95 * SAMPLES + 99) / 100 - 1],
         sum / SAMPLES, peak, digest);
     g_free(source); g_free(digest); vips_shutdown(); return 0;
 }

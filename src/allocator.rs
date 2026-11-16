@@ -4,10 +4,38 @@
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 pub(crate) const WORKER_ARENA_RESERVE: &str = "64MiB";
-pub(crate) const WORKER_PURGE_DELAY: &str = "0";
+pub(crate) const WORKER_PURGE_DELAY: &str = "1000";
+
+pub(crate) struct RequestCleanup;
+impl Drop for RequestCleanup {
+    fn drop(&mut self) {
+        // SAFETY: the process-wide allocator is initialized before worker
+        // requests. Collection retires free pages; it never moves/frees live
+        // Rust/C allocations, including the response that has to remain live.
+        unsafe { libmimalloc_sys::mi_collect(true) };
+    }
+}
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn request_cleanup_preserves_live_rust_and_foreign_allocations() {
+        let rust = vec![0x5au8; 8192];
+        // SAFETY: allocate initialized foreign bytes, retain them across heap
+        // collection, inspect only the live extent and pair with GLib free.
+        unsafe {
+            let pointer = libvips::bindings::g_try_malloc(8192).cast::<u8>();
+            assert!(!pointer.is_null());
+            pointer.write_bytes(0x37, 8192);
+            drop(super::RequestCleanup);
+            assert!(std::slice::from_raw_parts(pointer, 8192)
+                .iter()
+                .all(|b| *b == 0x37));
+            libvips::bindings::g_free(pointer.cast());
+        }
+        assert!(rust.iter().all(|b| *b == 0x5a));
+    }
+
     #[test]
     fn rust_libc_and_dynamic_glib_allocations_share_the_same_heap() {
         let rust = vec![0x5au8; 4096];
@@ -143,5 +171,24 @@ mod tests {
         assert_eq!(bytes[crate::MAX_FILE - 1], 0x5a);
         // SAFETY: the allocation is live and its address is only inspected.
         assert!(unsafe { libmimalloc_sys::mi_is_in_heap_region(bytes.as_ptr().cast()) });
+        drop(bytes);
+        let chunks: Vec<_> = (0..4096).map(|_| vec![0x5au8; 8192]).collect();
+        std::hint::black_box(&chunks);
+        let resident = || {
+            std::fs::read_to_string("/proc/self/statm")
+                .unwrap()
+                .split_whitespace()
+                .nth(1)
+                .unwrap()
+                .parse::<u64>()
+                .unwrap()
+        };
+        let before = resident();
+        drop(chunks);
+        drop(super::RequestCleanup);
+        // SAFETY: sysconf takes no pointers. This child is isolated from the
+        // concurrent unit suite, so heap activity cannot mask reclamation.
+        let page_size = unsafe { libc::sysconf(libc::_SC_PAGESIZE) } as u64;
+        assert!(resident() * page_size + 16 * 1024 * 1024 < before * page_size);
     }
 }

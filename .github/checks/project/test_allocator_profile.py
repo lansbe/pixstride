@@ -9,11 +9,12 @@ from performance_allocator import validate_observations
 
 
 def observations():
-    return [dict(operation=operation, purge_delay_ms=delay, samples=48,
+    policies = [(delay, 'none') for delay in (0, 1, 10, 100, 1000)] + [(1000, 'request')]
+    return [dict(operation=operation, purge_delay_ms=delay, collection=collection, samples=48,
                  allocator_version=30302, processing_p50_ms=20., processing_p95_ms=22.,
                  cpu_mean_ms=21., cgroup_peak_memory_bytes=32 * 1024**2,
                  output_sha256=('a' if operation == 'blur' else 'b') * 64)
-            for delay in (0, 1, 10, 100, 1000) for operation in ('blur', 'sharpen')]
+            for delay, collection in policies for operation in ('blur', 'sharpen')]
 
 
 class AllocatorProfileTests(unittest.TestCase):
@@ -32,7 +33,7 @@ class AllocatorProfileTests(unittest.TestCase):
 
     def test_invalid_counters_and_provenance_fail_closed(self):
         for field, value in [('samples', 47), ('samples', True), ('allocator_version', 30303),
-                             ('purge_delay_ms', False), ('operation', 'resize'),
+                             ('purge_delay_ms', False), ('operation', 'resize'), ('collection', 'unknown'),
                              ('cpu_mean_ms', float('nan')), ('processing_p50_ms', 0),
                              ('processing_p95_ms', float('inf')), ('cpu_mean_ms', True),
                              ('cgroup_peak_memory_bytes', 0), ('output_sha256', 'x' * 64)]:

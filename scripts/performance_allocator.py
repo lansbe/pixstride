@@ -16,13 +16,14 @@ from benchmark_runtime import architecture, candidate_source, require_native_ima
 
 DELAYS = (0, 1, 10, 100, 1000)
 OPERATIONS = ('blur', 'sharpen')
+POLICIES = [(delay, 'none') for delay in DELAYS] + [(1000, 'request')]
 
 
 def validate_observations(entries):
-    expected = {(delay, operation) for delay in DELAYS for operation in OPERATIONS}
+    expected = {(delay, operation, collection) for delay, collection in POLICIES for operation in OPERATIONS}
     observed, hashes = set(), {operation: set() for operation in OPERATIONS}
     for entry in entries:
-        key = (entry.get('purge_delay_ms'), entry.get('operation'))
+        key = (entry.get('purge_delay_ms'), entry.get('operation'), entry.get('collection'))
         if (type(key[0]) is not int or key not in expected or key in observed or
                 type(entry.get('samples')) is not int or entry['samples'] != 48 or
                 type(entry.get('allocator_version')) is not int or entry['allocator_version'] != 30302):
@@ -89,7 +90,7 @@ ENTRYPOINT ["/usr/local/bin/allocator-profile"]
         inspected = json.loads(command('docker', 'image', 'inspect', image, capture=True))[0]
         require_native_image(inspected['Architecture'], inspected['Os'])
         image_id = result['image_id'] = inspected['Id']
-        for delay in DELAYS:
+        for delay, collection in POLICIES:
             for operation in OPERATIONS:
                 raw = command('docker', 'run', '--rm', '--network', 'none', '--read-only',
                     '--cpuset-cpus', ','.join(map(str, cpus)), '--cpus', '2', '--memory', '1g',
@@ -97,12 +98,13 @@ ENTRYPOINT ["/usr/local/bin/allocator-profile"]
                     '--label', 'io.pixstride.benchmark.run=' + owner, '--security-opt', 'no-new-privileges',
                     '--mount', 'type=bind,src=' + str(args.fixtures.resolve()) + ',dst=/data,readonly',
                     '--env', 'MIMALLOC_ARENA_RESERVE=64MiB', '--env', 'MIMALLOC_PURGE_DELAY=' + str(delay),
-                    '--env', 'VIPS_DISC_THRESHOLD=1073741824', image_id, '/data/landscape.jpg', operation, capture=True)
+                    '--env', 'VIPS_DISC_THRESHOLD=1073741824', image_id, '/data/landscape.jpg', operation,
+                    *(['collect'] if collection == 'request' else []), capture=True)
                 observation = json.loads(raw)
                 observation['purge_delay_ms'] = delay
                 result['policies'].append(observation)
                 args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + '\n')
-                print(operation, delay, observation['cpu_mean_ms'], observation['cgroup_peak_memory_bytes'], flush=True)
+                print(operation, delay, collection, observation['cpu_mean_ms'], observation['cgroup_peak_memory_bytes'], flush=True)
         validate_observations(result['policies'])
         result['complete'] = True
         args.output.write_text(json.dumps(result, indent=2, allow_nan=False) + '\n')

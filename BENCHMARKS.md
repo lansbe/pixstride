@@ -14,7 +14,20 @@ Forced-native mode remains a separate diagnostic. In one AMD64 run, case 21 (fla
 
 RGBA8 PNG-to-JPEG resizing uses premultiplied Lanczos3 from a different implementation, with the same requested JPEG quality. In case 19, its worst composite pixel MAE/RMSE are approximately 1.308/1.967 in 8-bit channel units, within the predeclared envelope. It preserves 48 other default/native encoded outputs from the preceding implementation; these macOS development checks supplement the full Linux pixel checks. PNG alpha identity output is 17.6% larger than imgproxy. Every case's sizes/errors are listed below.
 
-The [preceding corrected-source cohort](https://github.com/lansbe/pixstride/actions/runs/43763779426) was rejected at 24/25 ARM64 because case 19 had a p95 loss. The current snapshot measures the subsequent SIMD implementation and retains its entire six-run cohort. Earlier qualified `fe350b73b784` archives remain available beside the new evidence and in Git history; their source predates the final validation fixes.
+The [preceding corrected-source cohort](https://github.com/lansbe/pixstride/actions/runs/43763779426) was rejected at 24/25 ARM64 because case 19 had a p95 loss. That historical snapshot measures the subsequent SIMD implementation and retains its entire six-run cohort. Earlier qualified `fe350b73b784` archives remain available beside the new evidence and in Git history; their source predates the final validation fixes.
+
+The subsequent forced-native work also rejected complete six-run cohorts rather than promoting their winning subsets:
+
+| Candidate source | Full workflow | Reason for rejection |
+| --- | --- | --- |
+| `c1cec09c0cc7` | [43773116743](https://github.com/lansbe/pixstride/actions/runs/43773116743) | ARM64 sharpen CPU/latency and a native memory loss with per-image glibc reclamation |
+| `150a9b2958d3` | [43775903980](https://github.com/lansbe/pixstride/actions/runs/43775903980) | ARM64 sharpen peak memory with paired reclamation |
+| `25f0f4204589` | [43778666469](https://github.com/lansbe/pixstride/actions/runs/43778666469) | ARM64 sharpen CPU/latency and some memory losses with an independent SIMD JPEG resize |
+| `508e96fd1404` | [43781284541](https://github.com/lansbe/pixstride/actions/runs/43781284541) | Sharpen latency and some ARM64 CPU/memory losses with native raster materialization |
+| `df9caf100d5c` | [43791983997](https://github.com/lansbe/pixstride/actions/runs/43791983997) | All timings won, but the allocator's default page retention lost peak memory in several cases |
+| `6fecbfee441b` | [43798474537](https://github.com/lansbe/pixstride/actions/runs/43798474537) | Immediate purging reduced memory but introduced timing losses and still lost sharpen peak memory |
+
+These failed measurements remain available in workflow artifacts and are not mixed into a qualified snapshot. Artifact retention is finite; the committed published cohorts retain compressed raw samples independently.
 
 ## Corpus
 
@@ -99,7 +112,7 @@ Committed evidence contains losslessly compressed raw samples plus readable summ
 
 ## Allocator diagnostics
 
-After all qualification measurements, one ARM64 runner compares five allocator purge delays in separate fresh containers with the same two-CPU/1-GiB limits. This optional diagnostic runs native JPEG resize/blur/sharpen primitives with 6 warmups and 48 samples. It includes response deallocation and checks identical encoded output across policies; HTTP, Rust IPC and comparison against imgproxy are absent. Its JSON is marked diagnostic and cannot qualify or publish full benchmark results.
+After all qualification measurements, one ARM64 runner compares five allocator purge delays and end-of-request collection in separate fresh containers with the same two-CPU/1-GiB limits. This optional diagnostic runs native JPEG resize/blur/sharpen primitives with 6 warmups and 48 samples. It includes response deallocation and checks identical encoded output across policies; HTTP, Rust IPC and comparison against imgproxy are absent. Its JSON is marked diagnostic and cannot qualify or publish full benchmark results.
 
 ```sh
 python3 scripts/performance_allocator.py --fixtures .benchmark-data --output /tmp/allocator-profile.json
