@@ -5,7 +5,7 @@
 Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/lansbe/pixstride/security/advisories/new). Do not put secrets, private images, internal URLs, or exploit details in public issues.
 
 <!-- generated:support:start -->
-Only the latest stable release receives fixes (currently `0.3.0`). Alpha, beta and release-candidate builds are for testing; no response-time SLA is offered.
+Only the latest stable release receives fixes (currently `0.4.0`). Alpha, beta and release-candidate builds are for testing; no response-time SLA is offered.
 <!-- generated:support:end -->
 
 ## Deployment boundary
@@ -69,7 +69,7 @@ Startup `cloud-config` stages administrator-selected secret documents and bounde
 
 S3 client-side decryption is separately enabled and supports authenticated KMS V2/V3 envelopes. Metadata/encrypted-key/context fields are bounded, algorithm/context checks precede KMS, key commitment is compared in constant time, and the full GCM tag is verified before image processing or raw-range delivery. Decryption mutates the admitted body buffer rather than creating another full plaintext buffer. Plaintext downgrade and unauthenticated legacy algorithms are refused in encrypted mode. Data keys stay in the parent, outside child arguments/environments and telemetry. S3 role/KMS identity exchanges share the bounded source transport; CloudWatch profile acquisition remains inside its one-second export deadline. Administrator-selected PEM roots add trust without disabling TLS hostname verification.
 
-Unreleased native PNG decoding uses png 0.18.1 for plain eight-bit input under a 64 MiB decoder/raster ceiling, with CRC/trailer validation and unchanged original source-pixel admission. Metadata/profile/HDR/animation/interlace declarations retain the native loader. JPEG reduced decoding checks the full original source dimensions before shrinking and preserves the per-image worker deadline and address-space limits.
+Version 0.4.0 native PNG decoding uses png 0.18.1 for plain eight-bit input under a 64 MiB decoder/raster ceiling, with CRC/trailer validation and unchanged original source-pixel admission. Metadata/profile/HDR/animation/interlace declarations retain the native loader. JPEG reduced decoding checks the full original source dimensions before shrinking and preserves the per-image worker deadline and address-space limits.
 
 Sequential JPEG/TIFF admission checks the computed final geometry: implicit vertical crops and fill-down retain random access so discarded rows cannot hide truncated JPEG tails. Accelerated SVG PNG output retains the explicit encoded-byte ceiling.
 
