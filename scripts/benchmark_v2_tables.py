@@ -31,7 +31,7 @@ def summary(result,pins=None):
             f'Source `{source["revision"]}`; tree `{source["tree"]}`; Dockerfile SHA256 `{source["dockerfile_sha256"]}`; '
             f'Cargo.lock SHA256 `{source["cargo_lock_sha256"]}`. '
             +' '.join(f'{arch} local image `{image}`.' for arch,image in sorted(release['images'].items()))+' '
-            +f'Harness `{result["harness_revision"]}`. ')
+            +f'Harness `{result["harness_revision"]}`; campaign started `{result["campaign_started_at"]}`. ')
     else:provenance=(f'Pixstride {release["version"]} / imgproxy {ref["version"]}; published image `{release["image"]}`. '
            f'Runtime source `{release["revision"]}`; harness `{result["harness_revision"]}`. ')
     text+=(provenance+

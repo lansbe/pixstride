@@ -72,7 +72,7 @@ class DocumentationTests(unittest.TestCase):
         shutil.copyfile(ROOT / '.github/workflows/allocator-diagnostics.yml', self.root / '.github/workflows/allocator-diagnostics.yml')
         (self.root / 'scripts').mkdir()
         shutil.copyfile(ROOT / 'scripts/benchmark_fixtures.py', self.root / 'scripts/benchmark_fixtures.py')
-        for name in ('build_native_codecs.sh', 'native_codecs_check.py'):
+        for name in ('build_native_codecs.sh', 'build_native_vips.sh', 'native_codecs_check.py'):
             shutil.copyfile(ROOT / 'scripts' / name, self.root / 'scripts' / name)
         run("git", "init", "-b", "master", cwd=self.root)
         run("git", "config", "user.name", "Fixture", cwd=self.root)

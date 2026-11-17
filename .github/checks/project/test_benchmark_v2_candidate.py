@@ -34,6 +34,7 @@ class CandidateV2Tests(unittest.TestCase):
         reports,pins=candidate_evidence()
         result=aggregate(reports,'preflight',pins)
         self.assertEqual(result['report_count'],80);self.assertIsNone(result['qualified'])
+        self.assertEqual(result.get('campaign_started_at'),'2026-11-17T00:00:00+00:00')
         self.assertFalse(result['pins']['pixstride']['published'])
         broken=copy.deepcopy(pins);broken['pixstride']={'published':False}
         with self.assertRaises(ValueError):target(broken)
@@ -169,3 +170,34 @@ class CandidateV2Tests(unittest.TestCase):
         _,pins=candidate_evidence();text=summary(None,pins)
         self.assertIn('UNRELEASED',text);self.assertIn(SOURCE['revision'],text)
         self.assertIn('not measured',text);self.assertNotIn('published target',text)
+
+    def test_candidate_documentation_uses_the_latest_campaign_across_different_source_revisions(self):
+        import benchmark_v2_snapshot as snapshot
+        published=json.loads((ROOT/'benchmarks/versions-v2.json').read_text())
+        pins=copy.deepcopy(published)
+        pins['pixstride']=dict(published=False,version='0.4.0',candidate=dict(SOURCE),images=dict(IDS))
+        later=copy.deepcopy(pins);later['pixstride']['candidate']['revision']='f'*40
+        results={
+            'candidate-preflight-index':dict(mode='preflight',pins=pins,campaign_started_at='2026-11-17T00:00:00+00:00'),
+            'candidate-measure-index':dict(mode='measure',pins=later,campaign_started_at='2026-11-17T02:00:00+00:00'),
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);directory=root/snapshot.DIRECTORY;directory.mkdir(parents=True)
+            (root/'benchmarks/versions-v2.json').write_text(json.dumps(published))
+            for name in snapshot.DOCS:(root/name).write_text('Before\n')
+            for name in results:(directory/(name+'.json')).touch()
+            def rendered(result,pins=None):
+                return result['mode']+':'+result['pins']['pixstride']['candidate']['revision'] if result else 'Published evidence'
+            with patch.object(snapshot,'_index',side_effect=lambda path,*args:(results[path.stem],set())), \
+                    patch.object(snapshot,'summary',side_effect=rendered):
+                snapshot.sync(root)
+                self.assertIn('f'*40,(root/'README.md').read_text());snapshot.check(root)
+                # A newer preflight must replace an older timing headline, too.
+                results['candidate-preflight-index']['campaign_started_at']='2026-11-17T03:00:00+00:00'
+                snapshot.sync(root)
+                self.assertNotIn('f'*40,(root/'README.md').read_text());snapshot.check(root)
+                results['candidate-measure-index']['campaign_started_at']='2026-11-17T03:00:00+00:00'
+                with self.assertRaises(ValueError):snapshot.sync(root)
+                results['candidate-measure-index']['pins']=pins
+                snapshot.sync(root)
+                self.assertIn('measure:'+SOURCE['revision'],(root/'README.md').read_text());snapshot.check(root)

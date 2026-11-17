@@ -33,6 +33,7 @@
 !/scripts/
 !/scripts/*.py
 !/scripts/build_native_codecs.sh
+!/scripts/build_native_vips.sh
 !/vendor/
 !/vendor/rs-vips/
 !/vendor/rs-vips/Cargo.toml

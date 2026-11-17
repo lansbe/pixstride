@@ -6,25 +6,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY scripts/build_native_codecs.sh /usr/local/bin/build-native-codecs
 RUN sh /usr/local/bin/build-native-codecs /opt/pixstride-codecs
 
-FROM ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96 AS codec-runtime
-RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
-    libcurl4t64 ca-certificates libvips42t64 libde265-0 libx265-215 libsharpyuv0 fonts-dejavu-core \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=codecs-build /runtime/lib/ /opt/pixstride-codecs/lib/
-COPY --from=codecs-build /runtime/share/ /usr/share/
-COPY scripts/build_native_codecs.sh /usr/share/doc/pixstride/codecs/build_native_codecs.sh
-COPY THIRD_PARTY_NOTICES.md /usr/share/doc/pixstride/THIRD_PARTY_NOTICES.md
-ENV LD_LIBRARY_PATH=/opt/pixstride-codecs/lib
-
-FROM codec-runtime AS codec-runtime-check
-USER root
-RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
-COPY scripts/native_codecs_check.py /checks/scripts/native_codecs_check.py
-COPY .github/checks/project/test_native_codecs.py /checks/.github/checks/project/test_native_codecs.py
-RUN PIXSTRIDE_CODEC_TEST_PREFIX=/opt/pixstride-codecs python3 -m unittest discover -s /checks/.github/checks/project -p test_native_codecs.py -v \
-    && python3 /checks/scripts/native_codecs_check.py > /codec-check.json
-
-FROM ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96 AS compile
+FROM ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96 AS vips-build
 COPY --from=toolchain /usr/local/cargo /usr/local/cargo
 COPY --from=toolchain /usr/local/rustup /usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo RUSTUP_HOME=/usr/local/rustup PATH=/usr/local/cargo/bin:$PATH
@@ -34,6 +16,35 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* && rustup component add rustfmt clippy
 COPY --from=codecs-build /opt/pixstride-codecs/ /opt/pixstride-codecs/
 ENV LD_LIBRARY_PATH=/opt/pixstride-codecs/lib PKG_CONFIG_PATH=/opt/pixstride-codecs/lib/pkgconfig
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    meson ninja-build cbindgen git curl libde265-dev libx265-dev libsharpyuv-dev \
+    && rm -rf /var/lib/apt/lists/*
+COPY scripts/build_native_vips.sh /usr/local/bin/build-native-vips
+RUN sh /usr/local/bin/build-native-vips /opt/pixstride-codecs
+ENV VIPS_PLUGIN_PATH=/opt/pixstride-codecs/lib/vips-modules-8.18
+
+FROM ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96 AS codec-runtime
+RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
+    libcurl4t64 ca-certificates libvips42t64 libde265-0 libx265-215 libsharpyuv0 fonts-dejavu-core \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=codecs-build /runtime/lib/ /opt/pixstride-codecs/lib/
+COPY --from=codecs-build /runtime/share/ /usr/share/
+COPY --from=vips-build /vips-runtime/lib/ /opt/pixstride-codecs/lib/
+COPY --from=vips-build /vips-runtime/share/ /usr/share/
+COPY scripts/build_native_vips.sh /usr/share/doc/pixstride/vips/build_native_vips.sh
+COPY scripts/build_native_codecs.sh /usr/share/doc/pixstride/codecs/build_native_codecs.sh
+COPY THIRD_PARTY_NOTICES.md /usr/share/doc/pixstride/THIRD_PARTY_NOTICES.md
+ENV LD_LIBRARY_PATH=/opt/pixstride-codecs/lib VIPS_PLUGIN_PATH=/opt/pixstride-codecs/lib/vips-modules-8.18
+
+FROM codec-runtime AS codec-runtime-check
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends python3 && rm -rf /var/lib/apt/lists/*
+COPY scripts/native_codecs_check.py /checks/scripts/native_codecs_check.py
+COPY .github/checks/project/test_native_codecs.py /checks/.github/checks/project/test_native_codecs.py
+RUN PIXSTRIDE_CODEC_TEST_PREFIX=/opt/pixstride-codecs python3 -m unittest discover -s /checks/.github/checks/project -p test_native_codecs.py -v \
+    && python3 /checks/scripts/native_codecs_check.py > /codec-check.json
+
+FROM vips-build AS compile
 WORKDIR /build
 COPY Cargo.toml Cargo.lock build.rs ./
 COPY vendor ./vendor

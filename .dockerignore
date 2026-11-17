@@ -36,3 +36,4 @@
 !scripts/native_pool_check.py
 !/.github/checks/project/
 !/.github/checks/project/test_native_codecs.py
+!scripts/build_native_vips.sh

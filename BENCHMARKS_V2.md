@@ -120,9 +120,11 @@ For a complete timing campaign, collect all 240 reports (40 shards × two archit
 
 ### Unreleased candidates
 
-The [candidate workflow](.github/workflows/benchmark-v2-candidate.yml) builds the exact clean checkout once on each native Linux architecture and runs the Dockerfile's application and codec checks. Candidate Linux images use the pinned libheif 1.23.7/AOM 3.15.3 stack with libvips 8.18.0; source archives, license notices and runtime-library check results accompany the image. These builds are not a published software release. Docker image archives are distributed as seven-day workflow artifacts, without moving any registry tag.
+The [candidate workflow](.github/workflows/benchmark-v2-candidate.yml) builds the exact clean checkout once on each native Linux architecture and runs the Dockerfile's application and codec checks. Candidate Linux images use pinned libvips 8.18.7, quantizr 1.4.3, libheif 1.23.7 and AOM 3.15.3; source archives, license notices and runtime-library check results accompany the image. These builds are not a published software release. Docker image archives are distributed as seven-day workflow artifacts, without moving any registry tag.
 
 The two native build manifests bind source revision/tree, Dockerfile and Cargo.lock hashes, package version and inspected native image IDs. `benchmark_v2_candidate.py pins` joins them into an explicit generated pins file outside the checkout. Every shard must use that file, the same clean harness revision and the matching architecture's local image ID. Candidate collection cannot use published provenance, and published collection cannot accept a candidate image.
+
+The candidate workflow also requires corpus SHA256 `4b7467347c61684f350a8ab15eca6ec7dc02708e09c17e31a2d80c1e2579ff05`, matching all 120 input files in the retained release preflight. A generator or codec update that changes their bytes stops preparation before any comparison runs.
 
 Preflight runs all 80 shards; full `measure` mode runs all 240 shards with the same sampling, quality and resource rules above. Up to 20 jobs run concurrently. A candidate VM has a 300-minute administrative bound so that 25 individual 600-second case budgets can finish and retain failures; the case deadline remains 600 seconds. Build jobs have a 120-minute bound. The existing published-image workflow retains its original bounds.
 
@@ -135,6 +137,8 @@ The runner additionally requires `--versions candidate-pins.json --pixstride-ima
 ```
 
 Use `--mode preflight` for the complete 80-shard validation cohort. Candidate preflight diagnostics retain reference failures as well as Pixstride failures; inspect all reference/quality counts before proceeding to timings. Candidate indices, history and generated summary markers are separate from published evidence (`candidate-preflight-index.json`, `candidate-measure-index.json`). Full results include every failure, non-winning case and metric ratio; median reductions use all retained comparable observations, including losses and numerical pixel regressions. No candidate result establishes a performance claim for the published 0.4.0 image.
+
+The candidate headline follows the latest complete campaign's first shard start time, derived from validated raw timestamps. A newer measurement replaces an older preflight even when their source commits differ; a newer preflight also supersedes older timings. Equal timestamps with different targets are rejected rather than selecting a favorable result.
 
 ### Published images
 

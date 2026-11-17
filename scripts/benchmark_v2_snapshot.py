@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Archive complete V2 cohorts, including Pixstride failures, without replacing v1 evidence."""
 import argparse
+import datetime as dt
 import gzip
 import json
 from pathlib import Path
@@ -63,6 +64,17 @@ def headline(results,pins):
     return None
 
 
+def candidate_headline(results):
+    if not results:return None
+    started={mode:dt.datetime.fromisoformat(result['campaign_started_at']) for mode,result in results.items()}
+    if any(not value.tzinfo for value in started.values()):raise ValueError('Candidate campaign timestamp needs a timezone')
+    latest=max(started.values());selected={mode:results[mode] for mode,value in started.items() if value==latest}
+    pins=target(next(iter(selected.values()))['pins'])
+    if any(target(result['pins'])!=pins for result in selected.values()):
+        raise ValueError('Ambiguous latest candidate campaigns have different targets')
+    return selected.get('measure') or selected.get('preflight')
+
+
 def check(root=ROOT):
     directory=root/DIRECTORY;results={};referenced=set()
     if directory.exists():
@@ -78,7 +90,7 @@ def check(root=ROOT):
     pins=load_pins(root/'benchmarks/versions-v2.json')
     body=summary(headline(results,pins),pins)
     candidates={key.removeprefix('candidate-'):value for key,value in results.items() if key.startswith('candidate-')}
-    candidate_result=headline(candidates,(candidates.get('preflight') or candidates.get('measure') or {}).get('pins')) if candidates else None
+    candidate_result=candidate_headline(candidates)
     for name in DOCS:
         path=root/name
         if not path.exists():
@@ -100,7 +112,7 @@ def sync(root=ROOT):
             if path.exists():collection[mode]=_index(path,root,True)[0]
     pins=load_pins(root/'benchmarks/versions-v2.json')
     body=summary(headline(results,pins),pins)
-    candidate_result=headline(candidates,(candidates.get('preflight') or candidates.get('measure') or {}).get('pins')) if candidates else None
+    candidate_result=candidate_headline(candidates)
     for name in DOCS:
         path=root/name;text=with_summary(path.read_text(),body)
         if candidate_result is not None:text=with_summary(text,summary(candidate_result),candidate=True)

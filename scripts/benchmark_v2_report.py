@@ -262,6 +262,8 @@ def aggregate(reports,mode,pins=None):
                          for c in r['cases'] for e in c['engines'].values()),
                 catalog_sha256=cohort['catalog_sha256'],harness_revision=cohort['harness_revision'],
                 corpus_sha256=cohort['fixtures']['corpus_sha256'],pins=pins,protocol=cohort['protocol'],architectures={})
+    if pins['pixstride']['published'] is False:
+        result['campaign_started_at']=min(dt.datetime.fromisoformat(r['started_at']) for r in reports).astimezone(dt.timezone.utc).isoformat()
     definitions=verify_catalog()
     for arch in ('amd64','arm64'):
         runs=[]

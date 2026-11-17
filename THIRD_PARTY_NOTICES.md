@@ -73,7 +73,22 @@ the runtime image. Replaceable shared libraries live in `/opt/pixstride-codecs/l
 
 libheif registers its AOM AV1 and x265/libde265 HEVC backends internally;
 external libheif plugin loading is disabled to avoid mixing plugin ABIs.
-The x265, libde265, libsharpyuv and libvips shared libraries remain Ubuntu
+The x265, libde265, libsharpyuv shared libraries remain Ubuntu
 packages, with their distribution copyright and license notices retained under
 `/usr/share/doc/`. These libraries are separate from Pixstride's MIT-licensed
 Rust implementation.
+
+## Native libvips and Quantizr
+
+The Docker image dynamically links unmodified libvips 8.18.7 (LGPL-2.1) and
+Quantizr 1.4.3 (MIT, Sergey Alexandrovich). Quantizr supplies the general PNG
+palette quantization backend. libvips and its modules are rebuilt together;
+all native format capabilities remain checked before packaging.
+
+Exact corresponding source archives, checksums, license texts, upstream source
+URLs and `scripts/build_native_vips.sh` are included under
+`/usr/share/doc/pixstride/vips/`. Development headers and tools stay in build
+stages. Runtime libraries and modules live in `/opt/pixstride-codecs/lib/`.
+
+- libvips source: https://github.com/libvips/libvips/releases/tag/v8.18.7
+- Quantizr source commit: https://github.com/DarthSim/quantizr/tree/cfb26aaf3039ac1179d42a66cc7988c8c6feeba9
