@@ -18,6 +18,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 ### Fixed
 
 - Keep opaque native RGB/grayscale samples unchanged when a background is supplied, and avoid charging convolution scratch to identity geometry such as large flips and quarter-turns. Preserve actual resize computation and pixel limits.
+- Match mirrored integer pixelation blocks, preserve straight RGBA samples in native 32-bit BMP output, and composite transparent JPEG output over the requested background or white by default.
 
 ## [0.4.0] - 2026-11-16
 

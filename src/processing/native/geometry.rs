@@ -330,38 +330,50 @@ pub(super) fn decorate(mut image: VipsImage, r: &Request, d: f64) -> Result<Vips
             )
             .map_err(|_| "native padding failed")?;
     }
-    if let Some(color) = r.options.background.filter(|_| image.hasalpha()) {
-        if image.hasalpha()
-            && (color[0] != color[1] || color[1] != color[2])
-            && matches!(
-                image.get_interpretation(),
-                Ok(libvips::enums::Interpretation::BW | libvips::enums::Interpretation::Grey16)
-            )
-        {
-            image = image
-                .colourspace(if r.extra.preserve_hdr {
-                    libvips::enums::Interpretation::Rgb16
-                } else {
-                    libvips::enums::Interpretation::Srgb
-                })
-                .map_err(|_| "native background colour conversion failed")?;
-        }
-        let scale = if matches!(
-            image.get_interpretation(),
-            Ok(libvips::enums::Interpretation::Rgb16 | libvips::enums::Interpretation::Grey16)
-        ) {
-            257.0
-        } else {
-            1.0
-        };
-        let background = color[..3]
-            .iter()
-            .map(|&c| f64::from(c) * scale)
-            .collect::<Vec<_>>();
-        image = image
-            .flatten_with_opts(VOption::new().set("background", background.as_slice()))
-            .map_err(|_| "native background failed")?;
+    if let Some(color) = r.options.background {
+        image = background(image, color, r.extra.preserve_hdr)?;
     }
+    Ok(image)
+}
+
+pub(super) fn background(
+    mut image: VipsImage,
+    color: [u8; 4],
+    preserve_hdr: bool,
+) -> Result<VipsImage, Error> {
+    if !image.hasalpha() {
+        return Ok(image);
+    }
+    if image.hasalpha()
+        && (color[0] != color[1] || color[1] != color[2])
+        && matches!(
+            image.get_interpretation(),
+            Ok(libvips::enums::Interpretation::BW | libvips::enums::Interpretation::Grey16)
+        )
+    {
+        image = image
+            .colourspace(if preserve_hdr {
+                libvips::enums::Interpretation::Rgb16
+            } else {
+                libvips::enums::Interpretation::Srgb
+            })
+            .map_err(|_| "native background colour conversion failed")?;
+    }
+    let scale = if matches!(
+        image.get_interpretation(),
+        Ok(libvips::enums::Interpretation::Rgb16 | libvips::enums::Interpretation::Grey16)
+    ) {
+        257.0
+    } else {
+        1.0
+    };
+    let background = color[..3]
+        .iter()
+        .map(|&c| f64::from(c) * scale)
+        .collect::<Vec<_>>();
+    image = image
+        .flatten_with_opts(VOption::new().set("background", background.as_slice()))
+        .map_err(|_| "native background failed")?;
     Ok(image)
 }
 

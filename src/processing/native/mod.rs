@@ -7,6 +7,8 @@ use crate::{
     watermark, Error,
 };
 
+#[cfg(feature = "native-codecs")]
+mod bmp_encode;
 pub(crate) mod capabilities;
 #[cfg(feature = "native-codecs")]
 mod composite;

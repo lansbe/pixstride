@@ -5,7 +5,7 @@ use crate::{
     Error,
 };
 use libvips::{
-    enums::{Access, BandFormat, Interpretation, Kernel},
+    enums::{Access, BandFormat, Extend, Interpretation},
     voption::{Setter, VOption},
     Vips, VipsImage,
 };
@@ -168,20 +168,34 @@ fn effects(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
             .sharpen_with_opts(VOption::new().set("sigma", r.effects.sharpen_sigma))
             .map_err(|_| "native sharpen failed")?;
     }
-    if r.effects.pixelate > 1 {
-        let block = r.effects.pixelate as f64;
-        let width = (f64::from(image.get_width()) / block).ceil().max(1.0) as i32;
-        let height = (f64::from(image.get_height()) / block).ceil().max(1.0) as i32;
-        let (w, h) = (image.get_width(), image.get_height());
+    let (w, h) = (image.get_width(), image.get_height());
+    let block = (r.effects.pixelate as i32).min(w.max(h));
+    if block > 1 {
+        let (tw, th) = (
+            ((w + block - 1) / block) * block,
+            ((h + block - 1) / block) * block,
+        );
+        checked(tw, th)?;
+        if tw != w || th != h {
+            image = image
+                .embed_with_opts(
+                    0,
+                    0,
+                    tw,
+                    th,
+                    VOption::new().set("extend", Extend::Mirror as i32),
+                )
+                .map_err(|_| "native pixelation extension failed")?;
+        }
         image = image
-            .resize_with_opts(
-                f64::from(width) / f64::from(w),
-                VOption::new()
-                    .set("vscale", f64::from(height) / f64::from(h))
-                    .set("kernel", Kernel::Linear as i32),
-            )
+            .shrink(f64::from(block), f64::from(block))
+            .and_then(|i| i.zoom(block, block))
             .map_err(|_| "native pixelation failed")?;
-        image = geometry::resize(&image, w, h, true)?;
+        if tw != w || th != h {
+            image = image
+                .extract_area(0, 0, w, h)
+                .map_err(|_| "native pixelation crop failed")?;
+        }
     }
     Ok(image)
 }
@@ -386,6 +400,15 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
         )?;
         let frame = effects(frame, r)?;
         let frame = geometry::decorate(frame, r, dpr)?;
+        let frame = if format == OutputFormat::Jpeg {
+            geometry::background(
+                frame,
+                r.options.background.unwrap_or([255; 4]),
+                r.extra.preserve_hdr,
+            )?
+        } else {
+            frame
+        };
         let mut frame = super::composite::watermark(frame, mark, r, dpr)?;
         let limit = match format {
             OutputFormat::Ico => 256,
@@ -452,6 +475,10 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
         format,
     })
 }
+
+#[cfg(test)]
+#[path = "effects_tests.rs"]
+mod effects_tests;
 
 #[cfg(test)]
 mod cleanup_tests {

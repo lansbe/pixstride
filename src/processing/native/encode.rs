@@ -9,6 +9,10 @@ use libvips::{
     VipsImage,
 };
 
+#[cfg(test)]
+#[path = "encoding_tests.rs"]
+mod encoding_tests;
+
 pub(super) fn raster(image: &VipsImage) -> Result<Image, Error> {
     let mut image = image
         .colourspace(Interpretation::Srgb)
@@ -40,27 +44,12 @@ fn attempt(
     if format == OutputFormat::Gif {
         return gif(image, page_height);
     }
-    if format == OutputFormat::Bmp
-        && image.get_format().ok() == Some(BandFormat::Uchar)
-        && image.get_interpretation().ok() == Some(Interpretation::Srgb)
-        && image.get_bands() == 3
-    {
-        let pixels = super::raster::export(image)?;
-        return Ok(crate::image::encode_bmp_rgb(
-            image.get_width() as usize,
-            image.get_height() as usize,
-            &pixels,
-        )?
-        .as_slice()
-        .to_vec());
+    if format == OutputFormat::Bmp {
+        return super::bmp_encode::save(image);
     }
-    if matches!(format, OutputFormat::Bmp | OutputFormat::Ico) {
+    if format == OutputFormat::Ico {
         let raster = raster(image)?;
-        let b = if format == OutputFormat::Bmp {
-            crate::image::encode_bmp(&raster)?
-        } else {
-            crate::extra_encode::encode_ico(&raster)?
-        };
+        let b = crate::extra_encode::encode_ico(&raster)?;
         return Ok(b.as_slice().to_vec());
     }
     let encoding = &r.extra.encoding;
