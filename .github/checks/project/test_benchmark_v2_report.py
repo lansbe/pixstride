@@ -164,6 +164,9 @@ class ReportV2Tests(unittest.TestCase):
         self.assertTrue(result['qualified']);self.assertEqual(result['report_count'],240)
         for arch in ('amd64','arm64'):
             self.assertEqual(result['architectures'][arch]['by_mode']['pixstride_native']['confirmed_cases'],1000)
+        reports[0]['cases'][0]['deadline_exceeded']=True
+        self.assertFalse(aggregate(reports,'measure',pins=pins)['qualified'])
+        reports[0]['cases'][0].pop('deadline_exceeded')
         row=reports[0]['cases'][0]['engines']['pixstride_native']
         row['final_counters']['memory_peak_bytes']=4194304
         row['summary']['cgroup_peak_memory_bytes']=4194304

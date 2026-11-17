@@ -65,7 +65,18 @@ Version 0.1.1 introduced work limits that can reject expensive valid inputs. The
 The current reusable suite is **benchmark v2: 1,000 distinct workloads**, ordered into ten nominal difficulty tiers. It covers 20 processing families, twelve static input representations/content types and five output codecs, with larger images, alpha, entropy-heavy textures, extreme aspect ratios and long geometry/filter chains. It compares default and forced-native Pixstride against imgproxy on native Linux x86_64 and ARM64. See [BENCHMARKS_V2.md](BENCHMARKS_V2.md) for coverage, resources, fixed quality budgets, complete-cohort rules and rerun commands.
 
 <!-- benchmark-v2:summary:start -->
-Current benchmark: **v2, 1,000 distinct workloads**, 20 processing families and 10 nominal difficulty tiers. Configured published target: Pixstride **0.4.0** / imgproxy **4.0.24**. Native full-catalog preflight is pending; V2 performance is **not measured**. The retained 25-case timings belong to v1. See [the V2 protocol](BENCHMARKS_V2.md).
+Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
+
+Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690`. Runtime source `98868fa66288a2b27a24116f29f82ece11a9cef2`; harness `943d9a0e614a9b331d05e84c6f904fd194b117ca`. Retained accepted timed responses: **0** (decoded preflight only).
+
+| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Performance |
+|---|---|---:|---:|---:|---:|
+| amd64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
+| amd64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
+| arm64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
+| arm64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
+
+Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 preflight index](benchmarks/results/v2/preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
 <!-- benchmark-v2:summary:end -->
 
 <details>

@@ -193,6 +193,8 @@ def _validate_shard(r,pins):
             raise ValueError('V2 case definitions or completed coverage differ')
         if actual['preflight_order']!=list(preflight_order(actual)) or set(actual['engines'])!=set(ENGINES):
             raise ValueError('Wrong V2 engines or first-touch rotation')
+        if 'deadline_exceeded' in actual and type(actual['deadline_exceeded']) is not bool:
+            raise ValueError('Invalid V2 case deadline outcome')
         reference_success=actual['engines']['imgproxy']['status']=='success'
         for engine in ENGINES:validate_entry(actual,engine,actual['engines'][engine],p,mode,reference_success)
     return r
@@ -209,6 +211,9 @@ def _row(definition,cases,mode):
         for rep,case in enumerate(cases,1):
             own,ref=case['engines'][own_mode],case['engines']['imgproxy']
             if own['status']!='success':observation['errors'].append(dict(repetition=rep,**own['error']))
+            elif case.get('deadline_exceeded'):
+                observation['errors'].append(dict(repetition=rep,type='DeadlineExpired',phase='deadline',batch=None,
+                    message='The complete case exceeded its declared wall-clock budget'))
             if own['status']!='success' or ref['status']!='success':continue
             for failure in quality_failures(definition,own):
                 observation['quality_failures'].append(f'run {rep}: {failure}')

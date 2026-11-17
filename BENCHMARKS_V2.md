@@ -3,8 +3,27 @@
 V2 is the current reusable performance suite for Pixstride versus imgproxy on native Linux x86_64 and ARM64. It replaces the 25-case suite as the target for new comparisons. [V1 results and methodology](BENCHMARKS.md) remain intact; their wins do not establish any V2 performance result.
 
 <!-- benchmark-v2:summary:start -->
-Current benchmark: **v2, 1,000 distinct workloads**, 20 processing families and 10 nominal difficulty tiers. Configured published target: Pixstride **0.4.0** / imgproxy **4.0.24**. Native full-catalog preflight is pending; V2 performance is **not measured**. The retained 25-case timings belong to v1. See [the V2 protocol](BENCHMARKS_V2.md).
+Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
+
+Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690`. Runtime source `98868fa66288a2b27a24116f29f82ece11a9cef2`; harness `943d9a0e614a9b331d05e84c6f904fd194b117ca`. Retained accepted timed responses: **0** (decoded preflight only).
+
+| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Performance |
+|---|---|---:|---:|---:|---:|
+| amd64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
+| amd64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
+| arm64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
+| arm64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
+
+Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 preflight index](benchmarks/results/v2/preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
 <!-- benchmark-v2:summary:end -->
+
+## First native validation of Pixstride 0.4.0
+
+The [complete preflight campaign](https://github.com/lansbe/pixstride/actions/runs/43996121837) ran all 40 shards on each architecture from harness `943d9a0e614a9b331d05e84c6f904fd194b117ca`; all 82 workflow jobs completed successfully. All 1,000 imgproxy reference cases per architecture returned independently decoded outputs with the declared format and dimensions.
+
+Both Pixstride modes, on each architecture, completed **967/1000 decoded trials**; **826/1000** also stayed within the predeclared pixel budgets. The remaining 33 cases returned HTTP 422 with `native worker closed output`; another 141 completed but exceeded pixel budgets. The same failure counts occur in default and forced-native mode on both architectures. Their detailed case/family/tier outcomes, error messages, sizes and pixel differences are retained in the [complete preflight index](benchmarks/results/v2/preflight-index.json) and all 80 raw archives. These are observations, not a diagnosis of the worker failures or proof of perceptual quality.
+
+No requests or tolerances were changed after these results, and no failing case was removed. This validates the new workload definitions and exposes limitations in the published service. V2 CPU/p50/p95/memory wins remain **not measured**: the full three-repeat timing campaign is a separate workflow mode. The older v1 25/25 result cannot be extended to this suite.
 
 ## Coverage and increasing difficulty
 

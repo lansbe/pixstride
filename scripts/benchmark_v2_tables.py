@@ -25,7 +25,7 @@ def summary(result,pins=None):
            f'Runtime source `{release["revision"]}`; harness `{result["harness_revision"]}`. '
            f'Retained accepted timed responses: **{result["retained_timed_requests"]:,}**'
            +(' of 2,592,000 planned when all engines complete' if measured else ' (decoded preflight only)')+'.\n\n'
-           '| Linux | Mode | Valid reference cases | Valid HTTP/decoded outputs | Within pixel budgets | '
+           '| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | '
            +('Confirmed CPU/p50/p95/peak wins' if measured else 'Performance')+' |\n'
            '|---|---|---:|---:|---:|---:|\n')
     for arch,cohort in sorted(result['architectures'].items()):
