@@ -239,6 +239,40 @@ impl<'a> BmpView<'a> {
         })
     }
 
+    /// BI_RGB24/32 contain RGB samples; the fourth BI_RGB32 byte is padding.
+    /// Native RGB import avoids expanding these opaque pixels to synthetic alpha.
+    #[cfg(feature = "native-codecs")]
+    pub(crate) fn decode_rgb(&self) -> Result<(usize, usize, Vec<u8>), Error> {
+        let size = self
+            .width
+            .checked_mul(self.height)
+            .and_then(|n| n.checked_mul(3))
+            .filter(|n| *n <= crate::MAX_FILE)
+            .ok_or("BMP RGB raster exceeds limit")?;
+        let mut pixels = Vec::new();
+        pixels
+            .try_reserve_exact(size)
+            .map_err(|_| "BMP RGB allocation failed")?;
+        pixels.resize(size, 0);
+        for y in 0..self.height {
+            let source_y = if self.top_down {
+                y
+            } else {
+                self.height - 1 - y
+            };
+            let row = &self.source
+                [source_y * self.stride..source_y * self.stride + self.width * self.channels];
+            let output = &mut pixels[y * self.width * 3..(y + 1) * self.width * 3];
+            for (bgr, rgb) in row
+                .chunks_exact(self.channels)
+                .zip(output.chunks_exact_mut(3))
+            {
+                rgb.copy_from_slice(&[bgr[2], bgr[1], bgr[0]]);
+            }
+        }
+        Ok((self.width, self.height, pixels))
+    }
+
     /// Normalize a validated, unchanged raster to the exact BMP24 layout used by
     /// encode_bmp. Copy pixels only: source padding/unused alpha are not metadata
     /// that may be forwarded to the newly zero-initialized output.

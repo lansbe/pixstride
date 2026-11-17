@@ -25,6 +25,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Match reduced WebP decoding and scaled SVG rendering before residual geometry, while preserving original source admission, crop coordinates and resource limits.
 - Decode valid indexed PNG fixtures in the independent native smoke-check reader, including packed palette indices and transparency.
 - Validate corrected source against all 1,000 imgproxy cases on native Linux x86_64 and ARM64: both default and forced-native modes complete every trial within the frozen numerical pixel budgets. Retain all 80 raw reports and the original 120-file corpus identity; preflight has no timing-win claim.
+- Import opaque BI_RGB24/32 BMP directly into owned three-band RGB rasters, preserving row order and ignoring RGB32 padding. Avoid synthetic-alpha resampling and AVIF auxiliary alpha encoding while retaining real ICO/PNG alpha. Rounding, encoded representations and ETags can change.
 
 ## [0.4.0] - 2026-11-16
 

@@ -44,7 +44,18 @@ fn load_with_owner(
     if format == Some(OutputFormat::Svg) {
         super::svg::validate(data)?;
     }
-    if matches!(format, Some(OutputFormat::Bmp | OutputFormat::Ico)) || data.starts_with(b"P6") {
+    if format == Some(OutputFormat::Bmp) {
+        if data.len() > crate::MAX_FILE {
+            return Err("input exceeds file limit");
+        }
+        let (width, height, pixels) = crate::image::BmpView::parse(data)?.decode_rgb()?;
+        return VipsImage::new_from_owned_u8(pixels, width as i32, height as i32, 3)
+            .and_then(|i| {
+                i.copy_with_opts(VOption::new().set("interpretation", Interpretation::Srgb as i32))
+            })
+            .map_err(|_| "native RGB import failed");
+    }
+    if format == Some(OutputFormat::Ico) || data.starts_with(b"P6") {
         let img = crate::pipeline::decode(data)?;
         return VipsImage::new_from_memory_copy(
             img.pixels.as_slice(),
@@ -443,6 +454,10 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
 #[cfg(test)]
 #[path = "scaled_pipeline_tests.rs"]
 mod scaled_pipeline_tests;
+
+#[cfg(test)]
+#[path = "bmp_load_tests.rs"]
+mod bmp_load_tests;
 
 #[cfg(test)]
 mod cleanup_tests {

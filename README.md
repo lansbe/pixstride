@@ -66,6 +66,8 @@ The current reusable suite is **benchmark v2: 1,000 distinct workloads**, ordere
 
 Unreleased development corrects opaque-background and large identity-geometry rejections, mirrored pixelation, native BMP/JPEG alpha handling, inherited PNG palettes and WebP/SVG reduced decoding. Linux candidate builds pin libvips 8.18.7, quantizr 1.4.3, libheif 1.23.7 and AOM 3.15.3. The [native preflight](https://github.com/lansbe/pixstride/actions/runs/44029890033) passes all 1,000 cases in default and forced-native modes on both architectures, with zero engine or pixel-budget failures. Full three-repetition timings remain pending. The [candidate workflow](.github/workflows/benchmark-v2-candidate.yml) measures source builds separately; the published 0.4.0 baseline below retains its original failures.
 
+Opaque BI_RGB24/32 BMP input now stays in owned RGB storage through native processing, avoiding synthetic alpha work and an unnecessary AVIF alpha plane. Real ICO/PNG transparency is preserved. Numerical rounding, encoded bytes and ETags can change; each source optimization requires a new complete measurement cohort.
+
 <!-- benchmark-v2-candidate:summary:start -->
 Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
 
