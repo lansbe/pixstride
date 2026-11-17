@@ -12,10 +12,10 @@ from benchmark_v2_tables import summary
 from test_benchmark_v2_report import evidence
 
 
-def revised(report):
+def revised(report, version='2.1'):
     result = copy.deepcopy(report)
-    result.update(schema_version=3, protocol_version='2.1')
-    result['protocol']['case_deadline_seconds'] = 1800
+    result.update(schema_version=3, protocol_version=version)
+    result['protocol']['case_deadline_seconds'] = {'2.1': 1800, '2.2': 3600}[version]
     return result
 
 
@@ -27,7 +27,7 @@ class ProtocolRevisionTests(unittest.TestCase):
             expected = {**legacy, 'case_deadline_seconds': 1800}
             self.assertEqual(runner.protocol(mode, '2.1'), expected)
             self.assertEqual(runner.protocol(mode, '2.0'), legacy)
-        for invalid in ('latest', '2.2', 2.1, None):
+        for invalid in ('latest', '2.3', 2.1, None):
             with self.assertRaises(ValueError):
                 runner.protocol('measure', invalid)
 
@@ -84,13 +84,48 @@ class ProtocolRevisionTests(unittest.TestCase):
         result['protocol'] = {**result['protocol'], 'case_deadline_seconds': 600}
         self.assertEqual(result, old)
 
-    def test_cli_defaults_to_21_and_can_rerun_20(self):
+    def test_cli_defaults_to_22_and_can_rerun_both_previous_protocols(self):
         base = ['benchmark_v2.py', '--fixtures', '/tmp/corpus', '--output', '/tmp/report.json',
                 '--shard-index', '0', '--mode', 'measure']
-        for extra, expected in (([], '2.1'), (['--protocol-version', '2.0'], '2.0')):
+        for extra, expected in (([], '2.2'), (['--protocol-version', '2.0'], '2.0'),
+                                (['--protocol-version', '2.1'], '2.1')):
             with patch.object(sys, 'argv', base + extra), patch.object(runner, 'run') as run:
                 runner.main()
                 self.assertEqual(run.call_args.args[0].protocol_version, expected)
+
+    def test_revision_22_changes_only_collection_deadline(self):
+        for mode in ('preflight', 'measure'):
+            legacy = runner.protocol(mode, '2.0')
+            self.assertEqual(runner.protocol(mode, '2.1'), {**legacy, 'case_deadline_seconds': 1800})
+            self.assertEqual(runner.protocol(mode, '2.2'), {**legacy, 'case_deadline_seconds': 3600})
+
+    def test_revision_22_requires_matching_explicit_identity_and_cannot_mix(self):
+        reports, pins = evidence()
+        newer = revised(reports[0], '2.2')
+        validate_shard(newer, pins)
+        for mismatch in ({**newer, 'protocol_version': '2.1'},
+                         {**newer, 'protocol': revised(reports[0])['protocol']}):
+            with self.assertRaises(ValueError):
+                validate_shard(mismatch, pins)
+        with self.assertRaisesRegex(ValueError, 'Mixed V2'):
+            aggregate([newer, revised(reports[1])], 'preflight', pins)
+
+    def test_revision_22_preserves_all_measurements_and_historical_21_summary(self):
+        reports, pins = evidence('measure')
+        old = aggregate([revised(r) for r in reports], 'measure', pins)
+        old_summary = summary(old)
+        newer = aggregate([revised(r, '2.2') for r in reports], 'measure', pins)
+        self.assertEqual(newer.pop('protocol_version'), '2.2')
+        self.assertEqual(newer['retained_timed_requests'], 2_592_000)
+        self.assertTrue(newer['qualified'])
+        self.assertEqual(newer['protocol']['case_deadline_seconds'], 3600)
+        self.assertIn('**v2.2: 1,000 distinct workloads**', summary({**newer, 'protocol_version': '2.2'}))
+        self.assertIn('3,600 seconds per case', summary({**newer, 'protocol_version': '2.2'}))
+        newer['protocol'] = {**newer['protocol'], 'case_deadline_seconds': 1800}
+        self.assertEqual({**newer, 'protocol_version': '2.1'}, old)
+        self.assertEqual(summary(old), old_summary)
+        self.assertIn('**v2.1: 1,000 distinct workloads**', old_summary)
+        self.assertIn('1,800 seconds per case', old_summary)
 
 
 if __name__ == '__main__':

@@ -165,7 +165,7 @@ def validate_shard(report,pins=None):
 def report_version(report):
     if type(report['schema_version']) is int:
         if report['schema_version']==2 and 'protocol_version' not in report:return '2.0'
-        if report['schema_version']==3 and report.get('protocol_version')=='2.1':return '2.1'
+        if report['schema_version']==3 and report.get('protocol_version') in ('2.1','2.2'):return report['protocol_version']
     raise ValueError('Invalid or inconsistent V2 report/protocol version')
 
 
@@ -270,7 +270,8 @@ def aggregate(reports,mode,pins=None):
                          for c in r['cases'] for e in c['engines'].values()),
                 catalog_sha256=cohort['catalog_sha256'],harness_revision=cohort['harness_revision'],
                 corpus_sha256=cohort['fixtures']['corpus_sha256'],pins=pins,protocol=cohort['protocol'],architectures={})
-    if report_version(indexed['amd64',1,0])=='2.1':result['protocol_version']='2.1'
+    version=report_version(indexed['amd64',1,0])
+    if version!='2.0':result['protocol_version']=version
     if pins['pixstride']['published'] is False:
         result['campaign_started_at']=min(dt.datetime.fromisoformat(r['started_at']) for r in reports).astimezone(dt.timezone.utc).isoformat()
     definitions=verify_catalog()
