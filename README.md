@@ -67,7 +67,7 @@ The current reusable suite is **benchmark v2: 1,000 distinct workloads**, ordere
 <!-- benchmark-v2:summary:start -->
 Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
 
-Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690`. Runtime source `98868fa66288a2b27a24116f29f82ece11a9cef2`; harness `943d9a0e614a9b331d05e84c6f904fd194b117ca`. Retained accepted timed responses: **0** (decoded preflight only).
+Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690`. Runtime source `98868fa66288a2b27a24116f29f82ece11a9cef2`; harness `8222ceb6bc739171bf98b92121a7fe96a03f5dfa`. Retained accepted timed responses: **0** (decoded preflight only).
 
 | Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Performance |
 |---|---|---:|---:|---:|---:|

@@ -5,7 +5,7 @@ V2 is the current reusable performance suite for Pixstride versus imgproxy on na
 <!-- benchmark-v2:summary:start -->
 Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
 
-Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690`. Runtime source `98868fa66288a2b27a24116f29f82ece11a9cef2`; harness `943d9a0e614a9b331d05e84c6f904fd194b117ca`. Retained accepted timed responses: **0** (decoded preflight only).
+Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690`. Runtime source `98868fa66288a2b27a24116f29f82ece11a9cef2`; harness `8222ceb6bc739171bf98b92121a7fe96a03f5dfa`. Retained accepted timed responses: **0** (decoded preflight only).
 
 | Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Performance |
 |---|---|---:|---:|---:|---:|
@@ -17,11 +17,13 @@ Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4
 Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 preflight index](benchmarks/results/v2/preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
 <!-- benchmark-v2:summary:end -->
 
-## First native validation of Pixstride 0.4.0
+## Native validation of Pixstride 0.4.0
 
-The [complete preflight campaign](https://github.com/lansbe/pixstride/actions/runs/43996121837) ran all 40 shards on each architecture from harness `943d9a0e614a9b331d05e84c6f904fd194b117ca`; all 82 workflow jobs completed successfully. All 1,000 imgproxy reference cases per architecture returned independently decoded outputs with the declared format and dimensions.
+The [current complete preflight campaign](https://github.com/lansbe/pixstride/actions/runs/44002136766) ran all 40 shards on each architecture from harness `8222ceb6bc739171bf98b92121a7fe96a03f5dfa`; all 82 workflow jobs completed successfully. All 1,000 imgproxy reference cases per architecture returned independently decoded outputs with the declared format and dimensions. All 119 Python tooling tests passed on Linux before collection.
 
-Both Pixstride modes, on each architecture, completed **967/1000 decoded trials**; **826/1000** also stayed within the predeclared pixel budgets. The remaining 33 cases returned HTTP 422 with `native worker closed output`; another 141 completed but exceeded pixel budgets. The same failure counts occur in default and forced-native mode on both architectures. Their detailed case/family/tier outcomes, error messages, sizes and pixel differences are retained in the [complete preflight index](benchmarks/results/v2/preflight-index.json) and all 80 raw archives. These are observations, not a diagnosis of the worker failures or proof of perceptual quality.
+Both Pixstride modes, on each architecture, completed **967/1000 decoded trials**; **826/1000** also stayed within the predeclared pixel budgets. The remaining 33 cases returned HTTP 422 with `native worker closed output`; another 141 completed but exceeded pixel budgets. The same failure counts occur in default and forced-native mode on both architectures. Their detailed case/family/tier outcomes, error messages, sizes and pixel differences are retained in the [complete preflight index](benchmarks/results/v2/preflight-index.json) and its 80 raw archives. These are observations, not a diagnosis of the worker failures or proof of perceptual quality.
+
+The [first complete campaign](https://github.com/lansbe/pixstride/actions/runs/43996121837), harness `943d9a0e614a9b331d05e84c6f904fd194b117ca`, also passed all 82 jobs and produced the same counts. Its [historical index](benchmarks/results/v2/history-preflight-357e2099eef6-index.json) and all 80 raw archives remain intact. Review regression tests then fixed deadline handling during pixel comparison and protected container cleanup; the current campaign reran every shard using that corrected collector. Neither campaign triggered a case deadline. All 162 native-report/aggregate ZIP digests were verified across the two campaigns, and both local aggregates exactly matched CI.
 
 No requests or tolerances were changed after these results, and no failing case was removed. This validates the new workload definitions and exposes limitations in the published service. V2 CPU/p50/p95/memory wins remain **not measured**: the full three-repeat timing campaign is a separate workflow mode. The older v1 25/25 result cannot be extended to this suite.
 
