@@ -14,6 +14,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Decode complete opaque Indexed8 PNG palettes into bounded owned RGB, preserving palette output policy and native fallbacks for transparency, color management, interlace and other precision requirements.
 - Build pinned libvips 8.18.7, quantizr 1.4.3, libheif 1.23.7 and AOM 3.15.3 for the Linux native worker, retain all native codecs and ship their corresponding sources and notices. Verify loaded SDK/runtime libraries and real codec roundtrips before accepting an image.
 - Materialize eligible bounded byte rasters before SmartCrop analysis and native filters, avoiding repeated upstream evaluation while retaining higher-precision/large-image fallbacks. Identity crops and absent filters keep their direct route.
 - Refresh README and benchmark results with the actual published 0.4.0 image: all 25 cases win CPU, p50, p95 and lifetime peak cgroup memory in default and forced-native modes, in every run on three native Linux VMs per architecture. Retain all 64,800 timed requests, output-size/pixel differences, hardware identities and earlier losses separately. These observations do not certify perceptual equivalence or a universal performance guarantee.

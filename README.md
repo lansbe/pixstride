@@ -70,6 +70,8 @@ Opaque BI_RGB24/32 BMP input now stays in owned RGB storage through native proce
 
 SmartCrop and native filters materialize eligible byte rasters once at their processing boundary to avoid repeated upstream rendering. Materialization uses the existing 64-MiB raster limit; higher-precision and larger images keep their typed processing route.
 
+Complete opaque 8-bit PNG palettes decode into owned RGB while retaining inherited palette encoding. Transparent, packed, interlaced and color-managed palettes use the native codec path; checksum and source-size validation still apply.
+
 <!-- benchmark-v2-candidate:summary:start -->
 Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
 
