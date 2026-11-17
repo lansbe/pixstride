@@ -32,7 +32,7 @@ def deadline(seconds):
 def validate_response(case,status,headers,body,expected_hash=None):
     if status!=200:raise ValueError(f'Expected HTTP 200, received {status}: '+body[:160].decode(errors='replace'))
     mime=headers.get('content-type','').split(';')[0].strip().lower()
-    if mime!=MIMES[case['format']]:raise ValueError('V2 output MIME differs from requested format')
+    if mime!=MIMES[case['format']]:raise ValueError(f'V2 output MIME: expected {MIMES[case["format"]]}, got {mime}')
     digest=sha256(body)
     if expected_hash is not None:
         if digest!=expected_hash:raise ValueError('A timed V2 response differs from decoded preflight')
@@ -40,7 +40,8 @@ def validate_response(case,status,headers,body,expected_hash=None):
         from PIL import Image
         with Image.open(io.BytesIO(body)) as image:
             image.load()
-            if list(image.size)!=case['dimensions']:raise ValueError('V2 output dimensions differ from declared geometry')
+            if list(image.size)!=case['dimensions']:
+                raise ValueError(f'V2 output dimensions: expected {case["dimensions"]}, got {list(image.size)}')
             if image.format!=FORMATS[case['format']] or getattr(image,'n_frames',1)!=1:
                 raise ValueError('V2 output encoded format/static-frame contract differs')
     return dict(bytes=len(body),sha256=digest,mime=mime,dimensions=case['dimensions'])

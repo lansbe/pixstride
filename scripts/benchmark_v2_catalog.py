@@ -60,9 +60,10 @@ def recipe(family,variant,spec):
         dims=[w,h];options=[f'fl:{int(v%2==0)}:{int(v%2==1 or v==4)}']
         output='png' if v%2==0 else 'bmp';interpolated=False
     elif family=='dpr':
-        options.append('dpr:2');dims=[tw*2,th*2]
+        tw=max(8,w//(4+v%2));th=max(8,h//(4+(v+FAMILIES.index(family))%2))
+        options=[f'rs:force:{tw}:{th}','dpr:2'];dims=[tw*2,th*2]
     elif family=='zoom':
-        options.append('z:2:1');dims=[tw*2,th]
+        tw=max(8,tw//2);options=[f'rs:force:{tw}:{th}','z:2:1'];dims=[tw*2,th]
     elif family=='canvas':
         options=[f'rs:fit:{n}:{n}',f'ex:1:{gravity}',f'bg:{color}'];dims=[n,n];passes=4
     elif family=='padding':
@@ -81,7 +82,7 @@ def recipe(family,variant,spec):
     elif family=='pixelate':options.append('pix:'+str(2**(v+1)));passes=4
     elif family=='avif-convert':output='avif'
     elif family=='long-chain':
-        options.extend(['rot:90',f'fl:1:{v%2}','bl:'+sigma,'sh:1',f'pd:{p}','bg:'+color])
+        options=[f'rs:force:{tw}:{th}:1','rot:90',f'fl:1:{v%2}','bl:'+sigma,'sh:1',f'pd:{p}','bg:'+color]
         dims=[tw+2*p,th+2*p];passes=9
     if output in ('jpg','webp','avif'):options.append('q:'+str((65,75,85,90,95)[v]))
     vector=spec['kind']=='vector-curves'
@@ -102,7 +103,8 @@ def catalog():
     for scale in range(1,11):
         for f,family in enumerate(FAMILIES):
             for v in range(5):
-                kind=KINDS[(5*f+v)%len(KINDS)][0];spec=specs[scale,kind]
+                source_index=(3,7,6,10,9)[v] if family=='long-chain' else (5*f+v)%len(KINDS)
+                kind=KINDS[source_index][0];spec=specs[scale,kind]
                 cases.append(dict(family=family,variant=v+1,scale=scale,input_kind=kind,
                                   source=spec['name'],source_dimensions=spec['dimensions'],
                                   **recipe(family,v,spec)))

@@ -11,6 +11,24 @@ from benchmark_v2_catalog import catalog, fixture_specs, select_shard, verify_ca
 
 
 class CatalogV2Tests(unittest.TestCase):
+    def test_long_chains_cover_alpha_entropy_vectors_and_extreme_aspects(self):
+        stress=[c for c in catalog()['cases'] if c['family']=='long-chain' and c['scale']==10]
+        self.assertEqual({c['input_kind'] for c in stress},
+                         {'gradient-alpha','panorama-lossy','texture-lossless','poster-bmp','vector-curves'})
+        for case in stress:
+            resize=next(op for op in case['options'].split('/') if op.startswith('rs:'))
+            self.assertTrue(resize.endswith(':1'),'Rotated extreme aspects must explicitly permit required enlargement')
+
+    def test_dpr_and_zoom_require_actual_resampling_instead_of_resolving_to_identity(self):
+        cases=catalog()['cases']
+        for case in cases:
+            if case['family'] in ('dpr','zoom'):
+                w,h=case['source_dimensions'];ow,oh=case['dimensions']
+                self.assertLess(ow*oh,w*h,case['id'])
+        first=next(c for c in cases if c['family']=='dpr' and c['scale']==1 and c['variant']==1)
+        self.assertEqual(first['source_dimensions'],[256,128])
+        self.assertEqual(first['dimensions'],[128,64])
+
     def test_thousand_semantically_distinct_workloads_with_predeclared_progression(self):
         document=catalog();cases=document['cases']
         self.assertEqual(document['suite_id'],'pixstride-v2-1000')

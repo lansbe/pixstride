@@ -5,6 +5,7 @@ import datetime as dt
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import uuid
@@ -48,11 +49,13 @@ def run(args):
     manifest=verify(args.fixtures);cases,partial=selected_cases(args.shard_index,args.case,verify_catalog(CATALOG,manifest))
     p=protocol(args.mode);available=sorted(os.sched_getaffinity(0));cpus=available[:2]
     docker=Docker(args.docker);owner=uuid.uuid4().hex[:12];versions=json.loads(args.versions.read_text());images={}
+    if versions['pixstride'].get('published') is not True:raise ValueError('V2 requires explicit published image pins')
     with isolate_client(cpus) as client:
         for product in ('pixstride','imgproxy'):images[product]=docker.image(versions[product]['image'])
         images['pixstride']['capabilities']=json.loads(docker.probe(images['pixstride']['reference'],['capabilities'],owner,'pixstride'))
         images['imgproxy']['version']=docker.probe(images['imgproxy']['reference'],['imgproxy','version'],owner,'imgproxy')
-        if versions['imgproxy']['version'] not in images['imgproxy']['version']:raise ValueError('V2 competitor version differs')
+        if not re.search(r'(?<![0-9.])'+re.escape(versions['imgproxy']['version'])+r'(?![0-9.])',images['imgproxy']['version']):
+            raise ValueError('V2 competitor version differs')
         capture_release(docker,images['pixstride'],versions['pixstride'])
         revision=subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD'],text=True).strip()
         dirty=(subprocess.run(['git','-C',str(ROOT),'diff','--quiet','HEAD']).returncode!=0 or
