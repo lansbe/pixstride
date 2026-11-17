@@ -62,7 +62,7 @@ HTTP latency spans fresh TCP request initiation through the complete loopback re
 
 Lifetime cgroup `memory.peak` includes startup, preflight, warmups, workers, page cache and kernel charges. It is not process RSS. File-page charging and shared-host scheduling/frequency remain sources of variation. Services are compared within the same case/VM. Hardware can differ between shards and repetitions; this is not an x86-versus-ARM or programming-language performance claim.
 
-The case deadline is 600 seconds and an individual HTTP request is bounded at 60 seconds. Expected service/codec/resource failures preserve their diagnostics and completed/partial batches; other engines and subsequent cases still run. Infrastructure errors and interruptions retain available partial reports but invalidate complete-coverage claims. Artifact upload after a runner hard kill is best-effort; missing artifacts never become complete results.
+The case deadline is 600 seconds and an individual HTTP request is bounded at 60 seconds. The work alarm is cancelled before ownership-checked container cleanup, so an expected deadline cannot abandon a service; total elapsed time, including cleanup, still determines a budget failure. Expected service/codec/resource failures preserve their diagnostics and completed/partial batches; other engines and subsequent cases still run. Infrastructure errors and interruptions retain available partial reports but invalidate complete-coverage claims. Artifact upload after a runner hard kill is best-effort; missing artifacts never become complete results.
 
 ## Pixel agreement and file size
 

@@ -14,7 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[3]/'scripts'))
 import benchmark_v2_collect as collector
-from benchmark_runtime import ENGINES
+from benchmark_runtime import ENGINES,Server as RealServer
 from benchmark_v2 import protocol,selected_cases
 from benchmark_v2_catalog import catalog
 
@@ -27,9 +27,9 @@ class RunnerV2Tests(unittest.TestCase):
         self.assertTrue(all(set(order)==set(ENGINES) for order in orders))
 
     @contextlib.contextmanager
-    def boundaries(self,failures=None):
+    def boundaries(self,failures=None,size=(16,16)):
         from PIL import Image
-        stream=io.BytesIO();Image.new('RGB',(16,16),'red').save(stream,format='PNG');body=stream.getvalue()
+        stream=io.BytesIO();Image.new('RGB',size,'red').save(stream,format='PNG');body=stream.getvalue()
         servers={};threads=[];closed=[]
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp)
@@ -59,6 +59,7 @@ class RunnerV2Tests(unittest.TestCase):
                 server,group=servers[engine]
                 try:yield SimpleNamespace(port=server.server_port,group=group)
                 finally:closed.append(engine)
+            factory.bindings={e:SimpleNamespace(port=s.server_port,group=g) for e,(s,g) in servers.items()}
             try:yield factory,root,closed
             finally:
                 for server,_ in servers.values():server.shutdown();server.server_close()
@@ -156,6 +157,64 @@ class RunnerV2Tests(unittest.TestCase):
             own=progress['engines']['pixstride_default']
             self.assertEqual(own['status'],'error');self.assertIn('incomplete_batch',own)
             self.assertEqual(len(own['incomplete_batch']['latencies_ns']),2)
+
+    def test_deadline_during_pixels_preserves_explicit_failures_that_still_aggregate(self):
+        from benchmark_v2_report import aggregate
+        from test_benchmark_v2_report import evidence
+        case=next(c for c in catalog()['cases'] if c['format']=='png')
+        self.assertLessEqual(case['rank'],25)
+        with self.boundaries(size=tuple(case['dimensions'])) as (factory,root,closed):
+            images={product:{'reference':'test'} for product in ('pixstride','imgproxy')};progress={}
+            with patch.object(collector,'Server',side_effect=factory), \
+                    patch.object(collector,'pixel_agreement',side_effect=collector.DeadlineExpired('pixel budget')):
+                collector.collect(case,None,images,root,[0,1],'test',0,protocol('preflight'),'preflight',progress,lambda:None)
+            self.assertEqual(set(closed),set(ENGINES));self.assertTrue(progress['deadline_exceeded'])
+            for engine in ENGINES[:-1]:
+                self.assertEqual(progress['engines'][engine]['status'],'error')
+                self.assertEqual(progress['engines'][engine]['error']['phase'],'deadline')
+            reports,pins=evidence();reports[0]['cases'][case['rank']-1]=progress
+            result=aggregate(reports,'preflight',pins=pins)
+            self.assertTrue(result['reference_valid']);self.assertIsNone(result['qualified'])
+            self.assertEqual(result['architectures']['amd64']['by_mode']['pixstride_native']['http_valid_cases'],999)
+
+    def test_case_alarm_cannot_interrupt_owned_cleanup_and_elapsed_budget_still_counts(self):
+        import signal
+        with self.boundaries() as (factory,root,_):
+            class CleanupDocker:
+                alive={'foreign-container':'foreign-owner'}
+                created=[];removed=[];first=True;cleanup_done=False
+                def inspect(self,name):
+                    if name not in self.alive:raise RuntimeError('not found')
+                    if self.first:
+                        self.first=False
+                        # Compress a pending real deadline into cleanup; a protected cleanup has no armed alarm.
+                        if signal.getitimer(signal.ITIMER_REAL)[0]:signal.setitimer(signal.ITIMER_REAL,.01)
+                        time.sleep(.03)
+                    return {'Config':{'Labels':{'io.pixstride.benchmark.run':self.alive[name]}}}
+                def run(self,*args,**_):
+                    if args[0]=='logs':return ''
+                    if args[:2]!=('rm','-f'):raise AssertionError(args)
+                    name=args[-1]
+                    if self.alive[name]!='test':raise AssertionError('foreign removal')
+                    self.removed.append(name);del self.alive[name]
+                    self.cleanup_done=len(self.removed)==3
+                    return ''
+            docker=CleanupDocker()
+            class RunningServer(RealServer):
+                def __enter__(self):
+                    binding=factory.bindings[self.engine];self.port=binding.port;self.group=binding.group
+                    self.docker.alive[self.name]=self.owner;self.docker.created.append(self.name)
+                    return self
+            case=dict(id='test',label='Test',source='input.png',options='',format='png',dimensions=[16,16])
+            images={product:{'reference':'test'} for product in ('pixstride','imgproxy')};progress={}
+            clock=time.monotonic
+            with patch.object(collector,'Server',RunningServer), \
+                    patch.object(collector.time,'monotonic',side_effect=lambda:clock()+(601 if docker.cleanup_done else 0)):
+                collector.collect(case,docker,images,root,[0,1],'test',0,protocol('preflight'),'preflight',progress,lambda:None)
+            self.assertEqual(docker.alive,{'foreign-container':'foreign-owner'})
+            self.assertEqual(set(docker.removed),set(docker.created));self.assertEqual(len(docker.removed),3)
+            self.assertTrue(progress['deadline_exceeded'])
+            self.assertEqual(signal.getitimer(signal.ITIMER_REAL),(0.0,0.0))
 
     def test_selected_case_cannot_masquerade_as_complete_shard(self):
         cases,partial=selected_cases(0,None);self.assertEqual(len(cases),25);self.assertFalse(partial)

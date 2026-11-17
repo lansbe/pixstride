@@ -70,12 +70,13 @@ def collect(case,docker,images,fixtures,cpus,owner,index,protocol,mode,progress,
     result=progress
     result.update({**case,'status':'running','engines':{
         e:dict(status='not-attempted',attempted=False,batches=[]) for e in ENGINES}})
-    bodies={};servers={};path=signed_path(case);latencies=[]
+    bodies={};servers={};path=signed_path(case);latencies=[];case_started=time.monotonic()
     result['preflight_order']=list(preflight_order(case))
     def active(engine,phase,batch=None):
         result['active']=dict(engine=engine,phase=phase,batch=batch);flush()
     try:
-        with deadline(protocol['case_deadline_seconds']),contextlib.ExitStack() as stack:
+        # Cancel the work alarm before ownership-checked container cleanup starts.
+        with contextlib.ExitStack() as stack,deadline(protocol['case_deadline_seconds']):
             # Rotate first-touch order; still try the reference after a Pixstride refusal.
             for engine in preflight_order(case):
                 entry=result['engines'][engine];entry['attempted']=True;active(engine,'preflight')
@@ -142,13 +143,17 @@ def collect(case,docker,images,fixtures,cpus,owner,index,protocol,mode,progress,
         result['status']='complete'
     except DeadlineExpired as error:
         remember_incomplete(result,latencies,protocol)
-        for entry in result['engines'].values():
-            if entry['status'] not in ('success','error'):fail(entry,error,'deadline')
+        for engine,entry in result['engines'].items():
+            missing_pixels=(engine in ENGINES[:-1] and entry['status']=='success'
+                            and 'pixels_vs_imgproxy' not in entry)
+            if entry['status'] not in ('success','error') or missing_pixels:fail(entry,error,'deadline')
         result['status']='complete';result['deadline_exceeded']=True
     except BaseException:
         remember_incomplete(result,latencies,protocol)
         result['status']='interrupted'
         raise
     finally:
+        if time.monotonic()-case_started>=protocol['case_deadline_seconds']:
+            result['deadline_exceeded']=True
         result.pop('active',None);flush()
     return result
