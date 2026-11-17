@@ -23,6 +23,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Install the pinned benchmark decoder for project checks
+        run: |
+          python3 -m venv "$RUNNER_TEMP/project-check-env"
+          "$RUNNER_TEMP/project-check-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
+          echo "$RUNNER_TEMP/project-check-env/bin" >> "$GITHUB_PATH"
       - name: Check release tooling and documentation
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
@@ -35,6 +40,8 @@ jobs:
           python3 scripts/project.py check "${args[@]}"
           python3 scripts/benchmark_report.py --check
           python3 scripts/candidate_snapshot.py --check
+          python3 scripts/benchmark_v2_catalog.py --check
+          python3 scripts/benchmark_v2_snapshot.py --check
           python3 - <<'PY'
           import os, re
           title = os.environ.get('PR_TITLE', '')

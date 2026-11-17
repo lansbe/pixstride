@@ -139,6 +139,24 @@ class RunnerV2Tests(unittest.TestCase):
             self.assertEqual(progress['status'],'interrupted')
             self.assertTrue(all(len(e['batches'])==2 for e in progress['engines'].values()))
 
+    def test_case_deadline_preserves_already_accepted_samples_in_its_incomplete_batch(self):
+        original=collector.request;calls=0;progress={}
+        def expires(*args):
+            nonlocal calls
+            calls+=1
+            if calls==6:raise collector.DeadlineExpired('test case budget')
+            return original(*args)
+        with self.boundaries() as (factory,root,closed):
+            case=dict(id='test',label='Test',source='input.png',options='',format='png',dimensions=[16,16])
+            p={**protocol('measure'),'requests_per_batch':3,'warmups':0,'cpu_tail_seconds':0}
+            images={product:{'reference':'test'} for product in ('pixstride','imgproxy')}
+            with patch.object(collector,'Server',side_effect=factory),patch.object(collector,'request',side_effect=expires):
+                collector.collect(case,None,images,root,[0,1],'test',0,p,'measure',progress,lambda:None)
+            self.assertEqual(set(closed),set(ENGINES));self.assertTrue(progress['deadline_exceeded'])
+            own=progress['engines']['pixstride_default']
+            self.assertEqual(own['status'],'error');self.assertIn('incomplete_batch',own)
+            self.assertEqual(len(own['incomplete_batch']['latencies_ns']),2)
+
     def test_selected_case_cannot_masquerade_as_complete_shard(self):
         cases,partial=selected_cases(0,None);self.assertEqual(len(cases),25);self.assertFalse(partial)
         chosen,partial=selected_cases(0,[cases[0]['id']]);self.assertEqual(len(chosen),1);self.assertTrue(partial)

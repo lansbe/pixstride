@@ -9,9 +9,11 @@ def span(values):
     return '—' if not values else f'{min(values):.6f}–{max(values):.6f}×'
 
 
-def summary(result):
+def summary(result,pins=None):
     if result is None:
-        return ('Current benchmark: **v2, 1,000 distinct workloads**, 20 processing families and 10 nominal difficulty tiers. '
+        configured='' if pins is None else (f'Configured published target: Pixstride **{pins["pixstride"]["version"]}** / '
+                                             f'imgproxy **{pins["imgproxy"]["version"]}**. ')
+        return ('Current benchmark: **v2, 1,000 distinct workloads**, 20 processing families and 10 nominal difficulty tiers. '+configured+
                 'Native full-catalog preflight is pending; V2 performance is **not measured**. '
                 'The retained 25-case timings belong to v1. See [the V2 protocol](BENCHMARKS_V2.md).\n')
     mode=result['mode'];measured=mode=='measure'
@@ -20,7 +22,9 @@ def summary(result):
           'Every workload and every service/quality failure is retained.\n\n')
     release=result['pins']['pixstride'];ref=result['pins']['imgproxy']
     text+=(f'Pixstride {release["version"]} / imgproxy {ref["version"]}; published image `{release["image"]}`. '
-           f'Runtime source `{release["revision"]}`; harness `{result["harness_revision"]}`.\n\n'
+           f'Runtime source `{release["revision"]}`; harness `{result["harness_revision"]}`. '
+           f'Retained accepted timed responses: **{result["retained_timed_requests"]:,}**'
+           +(' of 2,592,000 planned when all engines complete' if measured else ' (decoded preflight only)')+'.\n\n'
            '| Linux | Mode | Valid reference cases | Valid HTTP/decoded outputs | Within pixel budgets | '
            +('Confirmed CPU/p50/p95/peak wins' if measured else 'Performance')+' |\n'
            '|---|---|---:|---:|---:|---:|\n')

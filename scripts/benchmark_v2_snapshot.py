@@ -7,7 +7,7 @@ from pathlib import Path
 import re
 
 from benchmark_fixtures import ROOT,sha256
-from benchmark_v2_report import aggregate,load,load_pins
+from benchmark_v2_report import aggregate,load,load_pins,target
 from benchmark_v2_tables import summary
 
 DOCS=('README.md','BENCHMARKS_V2.md')
@@ -46,10 +46,16 @@ def _index(path,root,current):
         expected=f'v2-{mode}-{report["host"]["architecture"]}-r{report["repetition"]}-s{report["shard_index"]:02d}-{fingerprint[:12]}.raw.json.gz'
         if fingerprint!=entry['raw_sha256'] or name!=expected:raise ValueError('V2 raw archive binding differs')
         reports.append(report)
-    pins=load_pins(root/'benchmarks/released-versions.json') if current else index['result']['pins']
-    result=aggregate(reports,mode,pins)
-    if not result['reference_valid'] or encoded(result)!=encoded(index['result']):raise ValueError('Stale/invalid V2 aggregate')
+    result=aggregate(reports,mode,index['result']['pins'])
+    if ((mode=='preflight' and not result['reference_valid']) or encoded(result)!=encoded(index['result'])):
+        raise ValueError('Stale/invalid V2 aggregate')
     return result,{entry['file'] for entry in index['reports']}
+
+
+def headline(results,pins):
+    for mode in ('measure','preflight'):
+        if mode in results and target(results[mode]['pins'])==target(pins):return results[mode]
+    return None
 
 
 def check(root=ROOT):
@@ -63,7 +69,8 @@ def check(root=ROOT):
                 results[result['mode']]=result
         if {p.name for p in directory.glob('*.raw.json.gz')}!=referenced:
             raise ValueError('V2 raw archives without their complete cohort index')
-    body=summary(results.get('measure',results.get('preflight')))
+    pins=load_pins(root/'benchmarks/versions-v2.json')
+    body=summary(headline(results,pins),pins)
     for name in DOCS:
         path=root/name
         if not path.exists():
@@ -80,15 +87,17 @@ def sync(root=ROOT):
     for mode in ('preflight','measure'):
         path=root/DIRECTORY/(mode+'-index.json')
         if path.exists():results[mode]=_index(path,root,True)[0]
-    body=summary(results.get('measure',results.get('preflight')))
+    pins=load_pins(root/'benchmarks/versions-v2.json')
+    body=summary(headline(results,pins),pins)
     for name in DOCS:
         path=root/name;path.write_text(with_summary(path.read_text(),body))
 
 
 def record(paths,mode,root=ROOT):
     loaded=sorted([load(path) for path in paths],key=lambda item:(item[0]['host']['architecture'],item[0]['repetition'],item[0]['shard_index']))
-    result=aggregate([report for report,_ in loaded],mode,load_pins(root/'benchmarks/released-versions.json'))
-    if not result['reference_valid']:raise ValueError('Invalid reference cases: retain diagnostics; cannot publish a validated 1000-case cohort')
+    result=aggregate([report for report,_ in loaded],mode,load_pins(root/'benchmarks/versions-v2.json'))
+    if mode=='preflight' and not result['reference_valid']:
+        raise ValueError('Invalid reference cases: retain diagnostics; cannot publish a validated 1000-case preflight')
     directory=root/DIRECTORY;directory.mkdir(parents=True,exist_ok=True);entries=[];archives={}
     for report,raw in loaded:
         fingerprint=sha256(raw);arch=report['host']['architecture']

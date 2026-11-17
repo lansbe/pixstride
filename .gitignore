@@ -15,9 +15,11 @@
 !/CHANGELOG.md
 !/COMPATIBILITY.md
 !/BENCHMARKS.md
+!/BENCHMARKS_V2.md
 !/benchmarks/
 !/benchmarks/cases.json
 !/benchmarks/cases-v2.json
+!/benchmarks/versions-v2.json
 !/benchmarks/allocator_profile.c
 !/benchmarks/allocator_diagnostics.h
 !/benchmarks/versions.json
@@ -25,6 +27,9 @@
 !/benchmarks/results/
 !/benchmarks/results/*.json
 !/benchmarks/results/*.json.gz
+!/benchmarks/results/v2/
+!/benchmarks/results/v2/*.json
+!/benchmarks/results/v2/*.json.gz
 !/scripts/
 !/scripts/*.py
 !/vendor/
@@ -47,6 +52,7 @@
 !/.github/workflows/
 !/.github/workflows/container.yml
 !/.github/workflows/benchmark.yml
+!/.github/workflows/benchmark-v1.yml
 !/.github/workflows/benchmark-candidate.yml
 !/.github/workflows/allocator-diagnostics.yml
 !/.github/dependabot.yml

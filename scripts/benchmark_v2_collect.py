@@ -57,11 +57,20 @@ def preflight_order(case):
     return ENGINES[offset:]+ENGINES[:offset]
 
 
+def remember_incomplete(result,latencies,protocol):
+    active=result.get('active',{})
+    if active.get('phase')!='measure':return
+    engine,batch=active['engine'],active['batch'];entry=result['engines'][engine]
+    if len(entry['batches'])==batch:
+        position=balanced_orders(ENGINES,protocol['batches'])[batch].index(engine)
+        entry['incomplete_batch']=dict(index=batch,position=position,latencies_ns=latencies.copy())
+
+
 def collect(case,docker,images,fixtures,cpus,owner,index,protocol,mode,progress,flush):
     result=progress
     result.update({**case,'status':'running','engines':{
         e:dict(status='not-attempted',attempted=False,batches=[]) for e in ENGINES}})
-    bodies={};servers={};path=signed_path(case)
+    bodies={};servers={};path=signed_path(case);latencies=[]
     result['preflight_order']=list(preflight_order(case))
     def active(engine,phase,batch=None):
         result['active']=dict(engine=engine,phase=phase,batch=batch);flush()
@@ -89,7 +98,7 @@ def collect(case,docker,images,fixtures,cpus,owner,index,protocol,mode,progress,
                     for position,engine in enumerate(order):
                         entry=result['engines'][engine]
                         if entry['status']!='ready':continue
-                        active(engine,'measure',batch);latencies=[];server=servers[engine]
+                        latencies=[];active(engine,'measure',batch);server=servers[engine]
                         try:
                             before=read_counters(server.group);started=time.perf_counter_ns()
                             for _ in range(protocol['requests_per_batch']):
@@ -132,10 +141,12 @@ def collect(case,docker,images,fixtures,cpus,owner,index,protocol,mode,progress,
             result['active']=dict(engine=None,phase='cleanup',batch=None);flush()
         result['status']='complete'
     except DeadlineExpired as error:
+        remember_incomplete(result,latencies,protocol)
         for entry in result['engines'].values():
             if entry['status'] not in ('success','error'):fail(entry,error,'deadline')
         result['status']='complete';result['deadline_exceeded']=True
     except BaseException:
+        remember_incomplete(result,latencies,protocol)
         result['status']='interrupted'
         raise
     finally:

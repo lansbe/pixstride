@@ -93,7 +93,7 @@ def run(args):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--fixtures',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
-    parser.add_argument('--versions',type=Path,default=ROOT/'benchmarks/released-versions.json')
+    parser.add_argument('--versions',type=Path,default=ROOT/'benchmarks/versions-v2.json')
     parser.add_argument('--mode',choices=['preflight','measure'],default='preflight')
     parser.add_argument('--shard-index',type=int,required=True);parser.add_argument('--repetition',type=int,default=1)
     parser.add_argument('--architecture',choices=['amd64','arm64']);parser.add_argument('--docker',default='docker')

@@ -14,7 +14,7 @@ from benchmark_v2_catalog import CATALOG,SUITE,catalog,fixture_specs
 from benchmark_v2_collect import MIMES
 from test_benchmark_release import release_fixture
 from benchmark_v2_report import aggregate,validate_shard
-from benchmark_v2_snapshot import record,check,summary,with_summary
+from benchmark_v2_snapshot import record,check,summary,with_summary,sync
 
 
 def evidence(mode='preflight'):
@@ -73,6 +73,28 @@ def service_error(entry):
 
 
 class ReportV2Tests(unittest.TestCase):
+    def test_v2_target_updates_preserve_legacy_pins_and_old_cohorts_without_claiming_new_results(self):
+        reports,pins=evidence()
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'benchmarks/results/v2').mkdir(parents=True)
+            legacy=(ROOT/'benchmarks/released-versions.json').read_bytes()
+            (root/'benchmarks/released-versions.json').write_bytes(legacy)
+            (root/'benchmarks/versions-v2.json').write_text(json.dumps(pins))
+            for name in ('README.md','BENCHMARKS_V2.md'):(root/name).write_text(with_summary('Before',summary(None)))
+            paths=[]
+            for i,r in enumerate(reports):
+                p=root/f'{i}.json';p.write_text(json.dumps(r));paths.append(p)
+            record(paths,'preflight',root)
+            next_pins=copy.deepcopy(pins)
+            next_pins['pixstride'].update(version='0.5.0',revision='8'*40,
+                image='ghcr.io/lansbe/pixstride:0.5.0@sha256:'+'8'*64)
+            (root/'benchmarks/versions-v2.json').write_text(json.dumps(next_pins))
+            sync(root);previous=check(root)['preflight']
+            self.assertEqual(previous['pins']['pixstride']['version'],'0.4.0')
+            self.assertEqual((root/'benchmarks/released-versions.json').read_bytes(),legacy)
+            text=(root/'README.md').read_text()
+            self.assertIn('0.5.0',text);self.assertIn('pending',text);self.assertNotIn('1000/1000',text)
+
     def test_release_provenance_requires_explicit_published_target_and_exact_reference_version(self):
         reports,pins=evidence()
         for kind in ('published','reference-version','counter'):
@@ -154,16 +176,32 @@ class ReportV2Tests(unittest.TestCase):
         # Cloning even one case into another named repetition cannot count as confirmation.
         by_key={(r['host']['architecture'],r['repetition'],r['shard_index']):r for r in reports}
         c1=by_key['arm64',1,0]['cases'][0];c2=by_key['arm64',2,0]['cases'][0]
-        for engine in ENGINES:
+        for engine in ('pixstride_native',):
             c2['engines'][engine]['batches']=c1['engines'][engine]['batches']
             c2['engines'][engine]['summary']=dict(c1['engines'][engine]['summary'])
         with self.assertRaises(ValueError):aggregate(reports,'measure',pins=pins)
+
+    def test_full_reference_failure_is_retained_as_an_observed_failure_not_dropped(self):
+        reports,pins=evidence('measure');service_error(reports[0]['cases'][0]['engines']['imgproxy'])
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);(root/'benchmarks/results/v2').mkdir(parents=True)
+            (root/'benchmarks/versions-v2.json').write_text(json.dumps(pins))
+            for name in ('README.md','BENCHMARKS_V2.md'):(root/name).write_text(with_summary('Before',summary(None)))
+            paths=[]
+            for i,r in enumerate(reports):
+                p=root/f'{i}.json';p.write_text(json.dumps(r));paths.append(p)
+            result=record(paths,'measure',root)
+            self.assertFalse(result['reference_valid']);self.assertFalse(result['qualified'])
+            self.assertEqual(result['retained_timed_requests'],2591856)
+            self.assertEqual(check(root)['measure'],result)
+            self.assertEqual(result['architectures']['amd64']['reference_valid_cases'],999)
+            self.assertIn('999/1000',(root/'README.md').read_text())
 
     def test_snapshot_retains_failure_evidence_hashes_and_recomputes_docs(self):
         reports,pins=evidence();service_error(reports[0]['cases'][0]['engines']['pixstride_native'])
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);(root/'benchmarks/results/v2').mkdir(parents=True)
-            (root/'benchmarks/released-versions.json').write_text(json.dumps(pins))
+            (root/'benchmarks/versions-v2.json').write_text(json.dumps(pins))
             for name in ('README.md','BENCHMARKS_V2.md'):
                 (root/name).write_text('Before\n<!-- benchmark-v2:summary:start -->\npending\n<!-- benchmark-v2:summary:end -->\nAfter\n')
             paths=[]
@@ -185,7 +223,7 @@ class ReportV2Tests(unittest.TestCase):
         reports,pins=evidence()
         with tempfile.TemporaryDirectory() as temp:
             root=Path(temp);(root/'benchmarks/results/v2').mkdir(parents=True)
-            (root/'benchmarks/released-versions.json').write_text(json.dumps(pins))
+            (root/'benchmarks/versions-v2.json').write_text(json.dumps(pins))
             for name in ('README.md','BENCHMARKS_V2.md'):(root/name).write_text(with_summary('Before',summary(None)))
             paths=[]
             for i,r in enumerate(reports):

@@ -12,12 +12,13 @@ import re
 
 from benchmark_fixtures import ROOT,PILLOW_VERSION,SOURCES,corpus_hash,sha256
 from benchmark_metrics import balanced_orders,summarize_batches
-from benchmark_release import validate_release_image
+from benchmark_release import identity,validate_release_image
 from benchmark_report import validate_client_affinity
 from benchmark_runtime import ENGINES,require_native_image
 from benchmark_v2 import protocol
 from benchmark_v2_catalog import CATALOG,SUITE,fixture_specs,select_shard,verify_catalog
 from benchmark_v2_collect import MIMES,preflight_order
+from release_policy import version_key
 
 MODES=ENGINES[:-1]
 METRICS=('cpu_ms_per_request','latency_p50_ms','latency_p95_ms','cgroup_peak_memory_bytes')
@@ -33,7 +34,18 @@ def load(path):
 
 
 def load_pins(path=None):
-    return json.loads((path or ROOT/'benchmarks/released-versions.json').read_text())
+    pins=json.loads((path or ROOT/'benchmarks/versions-v2.json').read_text())
+    target(pins);return pins
+
+
+def target(pins):
+    if (pins.get('schema_version')!=1 or pins['pixstride'].get('published') is not True
+            or pins['pillow']!=PILLOW_VERSION
+            or not re.fullmatch(r'[^\s@]+@sha256:[0-9a-f]{64}',pins['imgproxy']['image'])):
+        raise ValueError('V2 requires explicit published immutable target pins and the fixed decoder')
+    version_key(pins['imgproxy']['version'])
+    return dict(pixstride=identity(pins['pixstride']),imgproxy={k:pins['imgproxy'][k] for k in ('version','image')},
+                pillow=pins['pillow'])
 
 
 def number(value,positive=False):
@@ -96,11 +108,20 @@ def validate_entry(case,engine,entry,p,mode,reference_success):
             raise ValueError('V2 output metadata differs from declared decoded response')
     elif state=='success':raise ValueError('Successful engine has no decoded output')
     if mode=='preflight':
-        if batches or 'summary' in entry:raise ValueError('Preflight cannot masquerade as measured performance')
+        if batches or 'summary' in entry or 'incomplete_batch' in entry:
+            raise ValueError('Preflight cannot masquerade as measured performance')
     else:
         if len(batches)>p['batches'] or (state=='success' and len(batches)!=p['batches']):
             raise ValueError('Incomplete V2 measurement batches')
         orders=balanced_orders(ENGINES,p['batches'])
+        if 'incomplete_batch' in entry:
+            partial=entry['incomplete_batch'];index=partial['index']
+            if (state!='error' or not entry['attempted'] or type(index) is not int
+                    or index!=len(batches) or not 0<=index<p['batches']
+                    or partial['position']!=orders[index].index(engine)
+                    or len(partial['latencies_ns'])>p['requests_per_batch']
+                    or any(type(v) is not int or v<=0 for v in partial['latencies_ns'])):
+                raise ValueError('Invalid retained V2 incomplete batch')
         for index,batch in enumerate(batches):
             if (batch['index']!=index or batch['position']!=orders[index].index(engine)
                     or len(batch['latencies_ns'])!=p['requests_per_batch']
@@ -206,7 +227,7 @@ def _row(definition,cases,mode):
 
 
 def aggregate(reports,mode,pins=None):
-    pins=pins or load_pins();protocol(mode)
+    pins=pins or load_pins();target(pins);protocol(mode)
     repetitions=1 if mode=='preflight' else 3
     expected={(arch,rep,shard) for arch in ('amd64','arm64') for rep in range(1,repetitions+1) for shard in range(40)}
     indexed={};cohort=None;native_ids={}
@@ -225,6 +246,10 @@ def aggregate(reports,mode,pins=None):
     if set(indexed)!=expected:raise ValueError('V2 requires all 1000 cases: 80 preflight or 240 measured native shards')
     result=dict(schema_version=1,suite_id=SUITE,mode=mode,coverage_complete=True,reference_valid=True,
                 qualified=None if mode=='preflight' else True,report_count=len(reports),
+                retained_timed_requests=sum(len(b['latencies_ns']) for r in reports for c in r['cases']
+                                            for e in c['engines'].values() for b in e['batches'])
+                    +sum(len(e.get('incomplete_batch',{}).get('latencies_ns',[])) for r in reports
+                         for c in r['cases'] for e in c['engines'].values()),
                 catalog_sha256=cohort['catalog_sha256'],harness_revision=cohort['harness_revision'],
                 corpus_sha256=cohort['fixtures']['corpus_sha256'],pins=pins,protocol=cohort['protocol'],architectures={})
     definitions=verify_catalog()
@@ -234,12 +259,15 @@ def aggregate(reports,mode,pins=None):
             cases=[c for shard in range(40) for c in indexed[arch,rep,shard]['cases']];runs.append(cases)
         if mode=='measure':
             for index in range(1000):
-                fingerprints=[]
-                for cases in runs:
-                    samples={e:cases[index]['engines'][e]['batches'] for e in ENGINES}
-                    fingerprints.append(hashlib.sha256(json.dumps(samples,sort_keys=True).encode()).hexdigest())
-                if len(set(fingerprints))!=repetitions:
-                    raise ValueError('Duplicated per-case samples are not independent V2 confirmation')
+                for engine in ENGINES:
+                    fingerprints=[]
+                    for cases in runs:
+                        entry=cases[index]['engines'][engine]
+                        samples=dict(batches=entry['batches'],incomplete=entry.get('incomplete_batch'))
+                        if entry['batches'] or entry.get('incomplete_batch',{}).get('latencies_ns'):
+                            fingerprints.append(hashlib.sha256(json.dumps(samples,sort_keys=True).encode()).hexdigest())
+                    if len(set(fingerprints))!=len(fingerprints):
+                        raise ValueError('Duplicated per-case/engine samples are not independent V2 confirmation')
         rows=[_row(d,[run[i] for run in runs],mode) for i,d in enumerate(definitions)]
         reference_valid=sum(not row['reference_errors'] for row in rows)
         modes={}
