@@ -148,6 +148,8 @@ The candidate workflow also requires corpus SHA256 `4b7467347c61684f350a8ab15eca
 
 Preflight runs all 80 shards; full `measure` mode runs all 240 shards with the same sampling, quality and resource rules above. Up to 20 jobs run concurrently. A candidate VM has a 300-minute administrative bound so that 25 individual 600-second case budgets can finish and retain failures; the case deadline remains 600 seconds. Build jobs have a 120-minute bound. The existing published-image workflow retains its original bounds.
 
+After the corrected native preflight passes, candidate-branch pushes default to full `measure` mode. Manual dispatch still offers both `preflight` and `measure`. CLI collection retains its explicit mode and defaults to preflight.
+
 The runner additionally requires `--versions candidate-pins.json --pixstride-image sha256:... --candidate-revision FULL_SHA`. Aggregate and archive candidate reports explicitly:
 
 ```sh

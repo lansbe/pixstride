@@ -6,7 +6,7 @@ on:
         description: 'Preflight all cases, or full three-repetition measurement'
         type: choice
         options: [preflight, measure]
-        default: preflight
+        default: measure
         required: true
   push:
     branches: ['codex/performance-v2-*']
@@ -45,7 +45,7 @@ jobs:
       - name: Select all native shards and repetitions
         id: matrix
         env:
-          BENCHMARK_MODE: ${{ inputs.mode || 'preflight' }}
+          BENCHMARK_MODE: ${{ inputs.mode || 'measure' }}
         run: |
           echo "mode=$BENCHMARK_MODE" >> "$GITHUB_OUTPUT"
           echo "matrix=$(python3 scripts/benchmark_v2_candidate.py matrix --mode "$BENCHMARK_MODE")" >> "$GITHUB_OUTPUT"
