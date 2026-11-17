@@ -16,6 +16,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Encode native BW8 BMP directly with a complete lossless gray palette when its exact file size is no larger than RGB24, retaining small-image byte-target successes. Add bounded native BI_RGB8/DIB40 grayscale-palette input for roundtrips, preserving palette mappings and source budgets before raster allocation; other native/built-in BMP routes stay unchanged.
+- Render eligible bounded byte SVG rasters once, verify every alpha sample and use RGB processing only when all are opaque. Keep true transparency, antialiasing and metadata, with existing HDR/linear/large-raster fallbacks.
 - Retain owned native response frames through HTTP output and encode RGB BMP directly into its output vector, eliminating duplicate payload allocations without changing encoded bytes, raster alignment, frame validation or worker limits.
 - Decode complete opaque Indexed8 PNG palettes into bounded owned RGB, preserving palette output policy and native fallbacks for transparency, color management, interlace and other precision requirements.
 - Build pinned libvips 8.18.7, quantizr 1.4.3, libheif 1.23.7 and AOM 3.15.3 for the Linux native worker, retain all native codecs and ship their corresponding sources and notices. Verify loaded SDK/runtime libraries and real codec roundtrips before accepting an image.

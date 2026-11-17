@@ -7,6 +7,8 @@ use crate::{
 
 #[cfg(feature = "native-codecs")]
 mod bmp_encode;
+#[cfg(feature = "native-codecs")]
+mod bmp_gray;
 pub(crate) mod capabilities;
 #[cfg(feature = "native-codecs")]
 mod composite;
@@ -49,6 +51,8 @@ mod shared;
 #[cfg(feature = "native-codecs")]
 mod svg;
 #[cfg(feature = "native-codecs")]
+mod svg_alpha;
+#[cfg(feature = "native-codecs")]
 mod worker;
 
 pub fn sniff(data: &[u8]) -> Option<OutputFormat> {
@@ -86,6 +90,7 @@ pub fn needs(data: &[u8]) -> bool {
         sniff(data),
         Some(OutputFormat::Avif | OutputFormat::Heic | OutputFormat::Jxl)
     ) || (sniff(data) == Some(OutputFormat::Webp) && data.get(12..16) != Some(b"VP8L"))
+        || (sniff(data) == Some(OutputFormat::Bmp) && data.get(28..30) == Some(b"\x08\0"))
 }
 
 #[cfg(not(feature = "native-codecs"))]

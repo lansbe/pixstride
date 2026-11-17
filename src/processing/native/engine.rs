@@ -45,6 +45,9 @@ fn load_with_owner(
         super::svg::validate(data)?;
     }
     if format == Some(OutputFormat::Bmp) {
+        if let Some(image) = super::bmp_gray::try_load(data)? {
+            return Ok(image);
+        }
         if data.len() > crate::MAX_FILE {
             return Err("input exceeds file limit");
         }
@@ -191,6 +194,12 @@ impl Drop for ThreadCleanup {
 pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<NativeResult, Error> {
     if data.len() > r.extra.max_source_bytes.min(crate::MAX_FILE) {
         return Err("native source exceeds byte limit");
+    }
+    if let Some([width, height]) = super::bmp_gray::source_dimensions(&data)? {
+        let pixels = width.checked_mul(height).ok_or("BMP dimensions overflow")?;
+        if pixels > r.extra.max_source_pixels || pixels > r.extra.max_frame_pixels {
+            return Err("BMP source pixel budget exceeded");
+        }
     }
     if let Some(result) = super::png_identity::try_process(&mut data, r, mark)? {
         return Ok(result);
@@ -347,6 +356,7 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
             head
         }
     };
+    let input = super::svg_alpha::prepare(input, r, source_format)?;
     // Lazy source graphs retain their own Arc; independent rasters can now
     // release the outer encoded allocation before filtering and encoding.
     drop(encoded);

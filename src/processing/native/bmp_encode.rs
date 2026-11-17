@@ -6,6 +6,9 @@ use libvips::{
 };
 
 pub(super) fn save(image: &VipsImage) -> Result<Vec<u8>, Error> {
+    if let Some(bytes) = super::bmp_gray::try_save(image)? {
+        return Ok(bytes);
+    }
     let image = image
         .colourspace(Interpretation::Srgb)
         .and_then(|i| i.cast(BandFormat::Uchar))

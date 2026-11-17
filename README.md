@@ -68,7 +68,11 @@ Unreleased development corrects opaque-background and large identity-geometry re
 
 Opaque BI_RGB24/32 BMP input now stays in owned RGB storage through native processing, avoiding synthetic alpha work and an unnecessary AVIF alpha plane. Real ICO/PNG transparency is preserved. Numerical rounding, encoded bytes and ETags can change; each source optimization requires a new complete measurement cohort.
 
+Opaque eight-bit grayscale BMP output uses a lossless 256-entry gray palette when its complete file is no larger than RGB24. Native decoding accepts that grayscale BMP8 representation; small images and true alpha keep their existing encoding.
+
 SmartCrop and native filters materialize eligible byte rasters once at their processing boundary to avoid repeated upstream rendering. Materialization uses the existing 64-MiB raster limit; higher-precision and larger images keep their typed processing route.
+
+Eligible native SVG rasters are rendered once and checked for actual opacity before removing an unused alpha band. Transparent or antialiased pixels retain alpha; HDR, linear and over-budget rasters keep their existing processing route.
 
 Native responses retain the worker's received encoded allocation through HTTP output, and RGB BMP encoding produces its owned output directly. This removes two payload copies while preserving raster alignment, frame validation and existing resource limits.
 
