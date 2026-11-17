@@ -1,6 +1,4 @@
 //! Reusable isolated native processes: bounded pipes, deadline, no image cache.
-#[cfg(feature = "native-codecs")]
-use crate::Buffer;
 use crate::{
     pipeline::Processed,
     request::{OutputFormat, Request},
@@ -122,7 +120,7 @@ pub fn process(
 }
 
 #[cfg(feature = "native-codecs")]
-fn parse_output(bytes: &[u8]) -> Result<Processed, Error> {
+fn parse_output(bytes: Vec<u8>) -> Result<Processed, Error> {
     if bytes.len() < 41 || &bytes[..4] != b"PXN2" {
         return Err("invalid native output");
     }
@@ -151,8 +149,7 @@ fn parse_output(bytes: &[u8]) -> Result<Processed, Error> {
     if bytes.len() - 37 > crate::MAX_FILE {
         return Err("native output exceeds limit");
     }
-    let mut body = Buffer::new(bytes.len() - 37)?;
-    body.as_mut_slice().copy_from_slice(&bytes[37..]);
+    let body = super::encoded::EncodedBytes::from_native_frame(bytes, 37)?;
     Ok(Processed {
         body,
         mime: format.mime(),
@@ -161,6 +158,9 @@ fn parse_output(bytes: &[u8]) -> Result<Processed, Error> {
         origin,
     })
 }
+
+#[cfg(all(test, feature = "native-codecs"))]
+mod output_tests;
 
 /// Ensures process-owned children are reaped before an operational command exits.
 pub(crate) struct Shutdown;

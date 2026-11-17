@@ -70,6 +70,8 @@ Opaque BI_RGB24/32 BMP input now stays in owned RGB storage through native proce
 
 SmartCrop and native filters materialize eligible byte rasters once at their processing boundary to avoid repeated upstream rendering. Materialization uses the existing 64-MiB raster limit; higher-precision and larger images keep their typed processing route.
 
+Native responses retain the worker's received encoded allocation through HTTP output, and RGB BMP encoding produces its owned output directly. This removes two payload copies while preserving raster alignment, frame validation and existing resource limits.
+
 Complete opaque 8-bit PNG palettes decode into owned RGB while retaining inherited palette encoding. Transparent, packed, interlaced and color-managed palettes use the native codec path; checksum and source-size validation still apply.
 
 New collections use **protocol v2.1**: the shared per-case observation budget is 1,800 seconds instead of 600. The first full v2.0 campaign exceeded 600 seconds on three expensive workloads, including imgproxy. All workloads, samples, pixel budgets, service limits and victory criteria stay fixed; original v2.0 observations and their failures are retained under their original protocol.

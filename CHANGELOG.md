@@ -15,6 +15,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Retain owned native response frames through HTTP output and encode RGB BMP directly into its output vector, eliminating duplicate payload allocations without changing encoded bytes, raster alignment, frame validation or worker limits.
 - Decode complete opaque Indexed8 PNG palettes into bounded owned RGB, preserving palette output policy and native fallbacks for transparency, color management, interlace and other precision requirements.
 - Build pinned libvips 8.18.7, quantizr 1.4.3, libheif 1.23.7 and AOM 3.15.3 for the Linux native worker, retain all native codecs and ship their corresponding sources and notices. Verify loaded SDK/runtime libraries and real codec roundtrips before accepting an image.
 - Materialize eligible bounded byte rasters before SmartCrop analysis and native filters, avoiding repeated upstream evaluation while retaining higher-precision/large-image fallbacks. Identity crops and absent filters keep their direct route.

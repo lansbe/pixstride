@@ -356,12 +356,22 @@ pub(crate) fn encode_bmp(image: &Image) -> Result<Buffer, Error> {
     Ok(buffer)
 }
 #[cfg(any(test, feature = "native-codecs"))]
-pub(crate) fn encode_bmp_rgb(width: usize, height: usize, rgb: &[u8]) -> Result<Buffer, Error> {
+pub(crate) fn encode_bmp_rgb(width: usize, height: usize, rgb: &[u8]) -> Result<Vec<u8>, Error> {
     dimensions(width, height)?;
     if rgb.len() != width * height * 3 {
         return Err("BMP: inconsistent RGB raster");
     }
-    let (mut buffer, stride) = bmp_output(width, height)?;
+    let stride = (width * 3 + 3) & !3;
+    let length = 54 + stride * height;
+    if length > crate::MAX_FILE {
+        return Err("native output exceeds limit");
+    }
+    let mut buffer = Vec::new();
+    buffer
+        .try_reserve_exact(length)
+        .map_err(|_| "BMP allocation failed")?;
+    buffer.resize(length, 0);
+    buffer[..54].copy_from_slice(&bmp_header(width, height, length));
     for y in 0..height {
         let input = &rgb[y * width * 3..(y + 1) * width * 3];
         let at = 54 + (height - 1 - y) * stride;

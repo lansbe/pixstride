@@ -14,9 +14,7 @@ pub(super) fn save(image: &VipsImage) -> Result<Vec<u8>, Error> {
     super::engine::checked(image.get_width(), image.get_height())?;
     let memory = super::raster::export(&image)?;
     if image.get_bands() == 3 {
-        return Ok(crate::image::encode_bmp_rgb(width, height, &memory)?
-            .as_slice()
-            .to_vec());
+        return crate::image::encode_bmp_rgb(width, height, &memory);
     }
     if image.get_bands() != 4 {
         return Err("unsupported native BMP bands");
