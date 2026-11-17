@@ -64,7 +64,25 @@ Version 0.1.1 introduced work limits that can reject expensive valid inputs. The
 
 The current reusable suite is **benchmark v2: 1,000 distinct workloads**, ordered into ten nominal difficulty tiers. It covers 20 processing families, twelve static input representations/content types and five output codecs, with larger images, alpha, entropy-heavy textures, extreme aspect ratios and long geometry/filter chains. It compares default and forced-native Pixstride against imgproxy on native Linux x86_64 and ARM64. See [BENCHMARKS_V2.md](BENCHMARKS_V2.md) for coverage, resources, fixed quality budgets, complete-cohort rules and rerun commands.
 
-Unreleased development corrects opaque-background and large identity-geometry rejections, mirrored pixelation, native BMP/JPEG alpha handling, inherited PNG palettes and WebP/SVG reduced decoding. Linux candidate builds pin libvips 8.18.7, quantizr 1.4.3, libheif 1.23.7 and AOM 3.15.3. The [candidate workflow](.github/workflows/benchmark-v2-candidate.yml) measures that source separately with explicit native image IDs; its correctness and timing results must be collected before claiming a new win. The published 0.4.0 evidence below retains its original failures and has not been relabelled as corrected code.
+Unreleased development corrects opaque-background and large identity-geometry rejections, mirrored pixelation, native BMP/JPEG alpha handling, inherited PNG palettes and WebP/SVG reduced decoding. Linux candidate builds pin libvips 8.18.7, quantizr 1.4.3, libheif 1.23.7 and AOM 3.15.3. The [native preflight](https://github.com/lansbe/pixstride/actions/runs/44029890033) passes all 1,000 cases in default and forced-native modes on both architectures, with zero engine or pixel-budget failures. Full three-repetition timings remain pending. The [candidate workflow](.github/workflows/benchmark-v2-candidate.yml) measures source builds separately; the published 0.4.0 baseline below retains its original failures.
+
+<!-- benchmark-v2-candidate:summary:start -->
+Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
+
+**UNRELEASED candidate**, package version 0.4.0 / imgproxy 4.0.24. Source `8c292ee56eb4373ddce1b16a93af8c5f71da0e51`; tree `7c41d29ddadfc2126dfea8e157b56edfd6a4d9ef`; Dockerfile SHA256 `d472e1042003693278b9371d32b06b1b57692c4a9dd5ac6c06fe6e6c00b54eae`; Cargo.lock SHA256 `1218cb3f213e1ca4108e22534419f415a08b707cb38e8d04af9a01ee6673567a`. amd64 local image `sha256:694c73c1e4a6c7bb69483575f313a8773d88dfdf2881da8f340a4f10aea8eb57`. arm64 local image `sha256:f3534b5a20c2eec1eee5cec2d39740af150d7c6bc386d7ca7bcf0db0421a82bb`. Harness `8c292ee56eb4373ddce1b16a93af8c5f71da0e51`; campaign started `2026-11-17T06:29:34.696191+00:00`. Retained accepted timed responses: **0** (decoded preflight only).
+
+| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Performance |
+|---|---|---:|---:|---:|---:|
+| amd64 | default | 1000/1000 | 1000/1000 | 1000/1000 | not measured |
+| amd64 | forced-native | 1000/1000 | 1000/1000 | 1000/1000 | not measured |
+| arm64 | default | 1000/1000 | 1000/1000 | 1000/1000 | not measured |
+| arm64 | forced-native | 1000/1000 | 1000/1000 | 1000/1000 | not measured |
+
+Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 candidate-preflight index](benchmarks/results/v2/candidate-preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
+<!-- benchmark-v2-candidate:summary:end -->
+
+<details>
+<summary>Published 0.4.0 preflight baseline</summary>
 
 <!-- benchmark-v2:summary:start -->
 Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
@@ -80,6 +98,8 @@ Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4
 
 Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 preflight index](benchmarks/results/v2/preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
 <!-- benchmark-v2:summary:end -->
+
+</details>
 
 <details>
 <summary>Historical v1: 25-case results for the published 0.4.0 image</summary>

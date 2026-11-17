@@ -2,6 +2,24 @@
 
 V2 is the current reusable performance suite for Pixstride versus imgproxy on native Linux x86_64 and ARM64. It replaces the 25-case suite as the target for new comparisons. [V1 results and methodology](BENCHMARKS.md) remain intact; their wins do not establish any V2 performance result.
 
+<!-- benchmark-v2-candidate:summary:start -->
+Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
+
+**UNRELEASED candidate**, package version 0.4.0 / imgproxy 4.0.24. Source `8c292ee56eb4373ddce1b16a93af8c5f71da0e51`; tree `7c41d29ddadfc2126dfea8e157b56edfd6a4d9ef`; Dockerfile SHA256 `d472e1042003693278b9371d32b06b1b57692c4a9dd5ac6c06fe6e6c00b54eae`; Cargo.lock SHA256 `1218cb3f213e1ca4108e22534419f415a08b707cb38e8d04af9a01ee6673567a`. amd64 local image `sha256:694c73c1e4a6c7bb69483575f313a8773d88dfdf2881da8f340a4f10aea8eb57`. arm64 local image `sha256:f3534b5a20c2eec1eee5cec2d39740af150d7c6bc386d7ca7bcf0db0421a82bb`. Harness `8c292ee56eb4373ddce1b16a93af8c5f71da0e51`; campaign started `2026-11-17T06:29:34.696191+00:00`. Retained accepted timed responses: **0** (decoded preflight only).
+
+| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Performance |
+|---|---|---:|---:|---:|---:|
+| amd64 | default | 1000/1000 | 1000/1000 | 1000/1000 | not measured |
+| amd64 | forced-native | 1000/1000 | 1000/1000 | 1000/1000 | not measured |
+| arm64 | default | 1000/1000 | 1000/1000 | 1000/1000 | not measured |
+| arm64 | forced-native | 1000/1000 | 1000/1000 | 1000/1000 | not measured |
+
+Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 candidate-preflight index](benchmarks/results/v2/candidate-preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
+<!-- benchmark-v2-candidate:summary:end -->
+
+<details>
+<summary>Published 0.4.0 preflight baseline</summary>
+
 <!-- benchmark-v2:summary:start -->
 Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
 
@@ -16,6 +34,8 @@ Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4
 
 Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 preflight index](benchmarks/results/v2/preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
 <!-- benchmark-v2:summary:end -->
+
+</details>
 
 ## Native validation of Pixstride 0.4.0
 
