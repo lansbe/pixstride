@@ -19,6 +19,8 @@ mod engine;
 #[cfg(feature = "native-codecs")]
 mod fast_svg;
 #[cfg(feature = "native-codecs")]
+mod filters;
+#[cfg(feature = "native-codecs")]
 mod geometry;
 #[cfg(feature = "native-codecs")]
 mod jpeg_decode;

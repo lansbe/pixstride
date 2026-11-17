@@ -34,6 +34,27 @@ pub(super) fn raster(image: &VipsImage) -> Result<Image, Error> {
     })
 }
 
+fn png_depth(image: &VipsImage, r: &Request) -> Option<i32> {
+    if r.extra.encoding.png_quantize {
+        return Some(match r.extra.encoding.png_colors {
+            2 => 1,
+            3..=4 => 2,
+            5..=16 => 4,
+            _ => 8,
+        });
+    }
+    if image.get_typeof("palette").unwrap_or(0) == 0 || image.get_int("palette").unwrap_or(0) == 0 {
+        return None;
+    }
+    match image.get_int("bits-per-sample").unwrap_or(0) {
+        1 => Some(1),
+        2 => Some(2),
+        3..=4 => Some(4),
+        5..=8 => Some(8),
+        _ => None,
+    }
+}
+
 fn attempt(
     image: &VipsImage,
     r: &Request,
@@ -78,7 +99,6 @@ fn attempt(
             | OutputFormat::Avif
             | OutputFormat::Jxl
             | OutputFormat::Tiff
-            | OutputFormat::Png
     ) {
         options = options.set("Q", i32::from(quality));
     }
@@ -119,23 +139,12 @@ fn attempt(
         );
     }
     if format == OutputFormat::Png {
-        let palette = encoding.png_quantize;
+        let depth = png_depth(image, r);
+        let palette = depth.is_some();
         options = options
             .set("palette", palette)
             .set("interlace", encoding.png_interlaced)
-            .set(
-                "bitdepth",
-                if palette {
-                    match encoding.png_colors {
-                        2 => 1,
-                        3..=4 => 2,
-                        5..=16 => 4,
-                        _ => 8,
-                    }
-                } else {
-                    8
-                },
-            )
+            .set("bitdepth", depth.unwrap_or(8))
             .set(
                 "filter",
                 if palette {
@@ -253,6 +262,7 @@ pub(super) fn save(
         && !r.extra.keep_copyright
         && !r.extra.preserve_hdr
         && !r.extra.encoding.png_quantize
+        && png_depth(&image, r).is_none()
         && !r.extra.encoding.png_interlaced
         && image.get_format().ok() == Some(BandFormat::Uchar)
         && image.get_interpretation().ok() == Some(Interpretation::Srgb)

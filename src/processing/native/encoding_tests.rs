@@ -49,3 +49,74 @@ fn jpeg_defaults_to_white_for_transparency_and_respects_explicit_background() {
         );
     }
 }
+
+#[test]
+fn metadata_stripping_retains_palette_representation_and_removes_private_fields() {
+    let mut source = image(&[20, 40, 60, 255], 1, 1);
+    source.set_int("palette", 1).unwrap();
+    source.set_int("bits-per-sample", 4).unwrap();
+    source
+        .set_string("exif-ifd0-Artist", "private artist")
+        .unwrap();
+    let result = super::super::metadata::strip(&source, &request("", "png")).unwrap();
+    assert_eq!(result.get_int("palette").unwrap_or(0), 1);
+    assert_eq!(result.get_int("bits-per-sample").unwrap(), 4);
+    assert_eq!(result.get_typeof("exif-ifd0-Artist").unwrap_or(0), 0);
+}
+
+#[test]
+fn inherited_palette_uses_native_png_quantizer_defaults_or_native_fallback() {
+    let data: Vec<u8> = (0..16)
+        .flat_map(|y| (0..16).flat_map(move |x| [x * 17, y * 17, (x + y) * 8, 255]))
+        .collect();
+    let mut source = image(&data, 16, 16);
+    source.set_int("palette", 1).unwrap();
+    source.set_int("bits-per-sample", 8).unwrap();
+    let expected = source
+        .write_to_buffer_with_opts(
+            ".png",
+            VOption::new()
+                .set("palette", true)
+                .set("bitdepth", 8)
+                .set("filter", libvips::enums::ForeignPngFilter::None as i32),
+        )
+        .unwrap();
+    let actual = save(source, &request("", "png"), OutputFormat::Png, 16).unwrap();
+    assert_eq!(actual[25] == 3, expected[25] == 3);
+    let decode = |bytes: &[u8]| {
+        let mut image = VipsImage::new_from_buffer(bytes, "")
+            .unwrap()
+            .colourspace(Interpretation::Srgb)
+            .unwrap();
+        if !image.hasalpha() {
+            image = image.addalpha().unwrap();
+        }
+        image.write_to_memory()
+    };
+    assert_eq!(decode(&actual), decode(&expected));
+}
+
+#[test]
+fn inherited_palette_normalizes_source_depth_and_explicit_settings_override_it() {
+    let mut source = image(&[20, 40, 60, 255], 1, 1);
+    let mut r = request("", "png");
+    source.set_int("bits-per-sample", 8).unwrap();
+    assert_eq!(png_depth(&source, &r), None);
+    source.set_int("palette", 1).unwrap();
+    for (bits, want) in [
+        (0, None),
+        (1, Some(1)),
+        (2, Some(2)),
+        (3, Some(4)),
+        (4, Some(4)),
+        (5, Some(8)),
+        (8, Some(8)),
+        (16, None),
+    ] {
+        source.set_int("bits-per-sample", bits).unwrap();
+        assert_eq!(png_depth(&source, &r), want);
+    }
+    r.extra.encoding.png_quantize = true;
+    r.extra.encoding.png_colors = 2;
+    assert_eq!(png_depth(&source, &r), Some(1));
+}

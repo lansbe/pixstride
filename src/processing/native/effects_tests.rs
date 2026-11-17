@@ -1,4 +1,6 @@
+use super::super::engine::initialize;
 use super::*;
+use libvips::enums::{BandFormat, Interpretation};
 
 fn request(block: usize) -> Request {
     crate::request::parse(

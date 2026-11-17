@@ -5,7 +5,7 @@ use crate::{
     Error,
 };
 use libvips::{
-    enums::{Access, BandFormat, Extend, Interpretation},
+    enums::{Access, BandFormat, Interpretation},
     voption::{Setter, VOption},
     Vips, VipsImage,
 };
@@ -152,49 +152,6 @@ fn prepare(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
             image = image
                 .extract_area(x, y, w, h)
                 .map_err(|_| "native trim crop failed")?;
-        }
-    }
-    Ok(image)
-}
-
-fn effects(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
-    if r.effects.blur_sigma > 0.0 {
-        image = image
-            .gaussblur(r.effects.blur_sigma)
-            .map_err(|_| "native blur failed")?;
-    }
-    if r.effects.sharpen_sigma > 0.0 {
-        image = image
-            .sharpen_with_opts(VOption::new().set("sigma", r.effects.sharpen_sigma))
-            .map_err(|_| "native sharpen failed")?;
-    }
-    let (w, h) = (image.get_width(), image.get_height());
-    let block = (r.effects.pixelate as i32).min(w.max(h));
-    if block > 1 {
-        let (tw, th) = (
-            ((w + block - 1) / block) * block,
-            ((h + block - 1) / block) * block,
-        );
-        checked(tw, th)?;
-        if tw != w || th != h {
-            image = image
-                .embed_with_opts(
-                    0,
-                    0,
-                    tw,
-                    th,
-                    VOption::new().set("extend", Extend::Mirror as i32),
-                )
-                .map_err(|_| "native pixelation extension failed")?;
-        }
-        image = image
-            .shrink(f64::from(block), f64::from(block))
-            .and_then(|i| i.zoom(block, block))
-            .map_err(|_| "native pixelation failed")?;
-        if tw != w || th != h {
-            image = image
-                .extract_area(0, 0, w, h)
-                .map_err(|_| "native pixelation crop failed")?;
         }
     }
     Ok(image)
@@ -398,7 +355,7 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
             source_format == OutputFormat::Svg,
             decoded_plan.take(),
         )?;
-        let frame = effects(frame, r)?;
+        let frame = super::filters::effects(frame, r)?;
         let frame = geometry::decorate(frame, r, dpr)?;
         let frame = if format == OutputFormat::Jpeg {
             geometry::background(
@@ -475,10 +432,6 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
         format,
     })
 }
-
-#[cfg(test)]
-#[path = "effects_tests.rs"]
-mod effects_tests;
 
 #[cfg(test)]
 mod cleanup_tests {
