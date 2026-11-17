@@ -57,3 +57,23 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR
 IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
 DEALINGS IN THE SOFTWARE.
 ```
+
+## Native AVIF and HEIC codec libraries
+
+The Docker image dynamically links unmodified libheif 1.23.7 (LGPL-3.0) and
+Alliance for Open Media libaom 3.15.3 (BSD-2-Clause and AOM Patent License 1.0).
+Their exact source archives, SHA256 checksums, license and patent texts, source
+URLs and rebuild script are included under `/usr/share/doc/pixstride/codecs/`.
+The build script also remains available in this repository at
+`scripts/build_native_codecs.sh`. Headers and the build SDK are excluded from
+the runtime image. Replaceable shared libraries live in `/opt/pixstride-codecs/lib/`.
+
+- libheif source: https://github.com/strukturag/libheif/releases/tag/v1.23.7
+- AOM source commit: https://aomedia.googlesource.com/aom/+/b141d9c45db236335351c8a4b2a14b3ade27c937
+
+libheif registers its AOM AV1 and x265/libde265 HEVC backends internally;
+external libheif plugin loading is disabled to avoid mixing plugin ABIs.
+The x265, libde265, libsharpyuv and libvips shared libraries remain Ubuntu
+packages, with their distribution copyright and license notices retained under
+`/usr/share/doc/`. These libraries are separate from Pixstride's MIT-licensed
+Rust implementation.

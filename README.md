@@ -64,6 +64,8 @@ Version 0.1.1 introduced work limits that can reject expensive valid inputs. The
 
 The current reusable suite is **benchmark v2: 1,000 distinct workloads**, ordered into ten nominal difficulty tiers. It covers 20 processing families, twelve static input representations/content types and five output codecs, with larger images, alpha, entropy-heavy textures, extreme aspect ratios and long geometry/filter chains. It compares default and forced-native Pixstride against imgproxy on native Linux x86_64 and ARM64. See [BENCHMARKS_V2.md](BENCHMARKS_V2.md) for coverage, resources, fixed quality budgets, complete-cohort rules and rerun commands.
 
+Unreleased development corrects opaque-background and large identity-geometry rejections, mirrored pixelation, native BMP/JPEG alpha handling, inherited PNG palettes and WebP/SVG reduced decoding. Linux candidate builds pin libheif 1.23.7 and AOM 3.15.3 while retaining libvips 8.18.0. The [candidate workflow](.github/workflows/benchmark-v2-candidate.yml) measures that source separately with explicit native image IDs; its correctness and timing results must be collected before claiming a new win. The published 0.4.0 evidence below retains its original failures and has not been relabelled as corrected code.
+
 <!-- benchmark-v2:summary:start -->
 Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
 

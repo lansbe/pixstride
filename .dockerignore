@@ -30,3 +30,9 @@
 !/.github/checks/abi/abi_harness.rs
 !/.github/checks/abi/abi_probe_tests.rs
 !/.github/checks/abi/run-abi-check.sh
+
+!scripts/build_native_codecs.sh
+!scripts/native_codecs_check.py
+!scripts/native_pool_check.py
+!/.github/checks/project/
+!/.github/checks/project/test_native_codecs.py

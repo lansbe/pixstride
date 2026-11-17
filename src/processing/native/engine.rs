@@ -284,6 +284,7 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
             OutputFormat::Gif | OutputFormat::Webp | OutputFormat::Tiff
         );
     let mut decoded_plan = None;
+    let mut decoded_request = None;
     let input = {
         // Scope the header owner here: a reduced loader must not leave a second
         // source graph alive through encoding.
@@ -296,6 +297,12 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
                 Some(&encoded),
                 Access::Random,
             )?
+        } else if let Some(loaded) =
+            super::scaled_decode::try_load(&encoded, &head, r, source_format)?
+        {
+            decoded_plan = Some(loaded.plan);
+            decoded_request = Some(loaded.request);
+            loaded.image
         } else if source_format == OutputFormat::Jpeg {
             if let Some((image, plan)) = super::jpeg_decode::try_load(&encoded, &head, r)? {
                 decoded_plan = Some(plan);
@@ -351,7 +358,7 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
         let frame = prepare(frame, r)?;
         let (frame, dpr) = geometry::apply(
             frame,
-            r,
+            decoded_request.as_ref().unwrap_or(r),
             source_format == OutputFormat::Svg,
             decoded_plan.take(),
         )?;
@@ -432,6 +439,10 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
         format,
     })
 }
+
+#[cfg(test)]
+#[path = "scaled_pipeline_tests.rs"]
+mod scaled_pipeline_tests;
 
 #[cfg(test)]
 mod cleanup_tests {

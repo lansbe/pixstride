@@ -1,0 +1,235 @@
+name: Unreleased candidate benchmarks v2 (1000 cases)
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Preflight all cases, or full three-repetition measurement'
+        type: choice
+        options: [preflight, measure]
+        default: preflight
+        required: true
+  push:
+    branches: ['codex/performance-v2-*']
+    paths:
+      - src/**
+      - vendor/**
+      - Cargo.toml
+      - Cargo.lock
+      - Dockerfile
+      - .dockerignore
+      - scripts/**
+      - benchmarks/cases-v2.json
+      - benchmarks/versions-v2.json
+      - .github/checks/**
+      - .github/workflows/benchmark-v2-candidate.yml
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+concurrency:
+  group: candidate-v2-${{ github.sha }}
+  cancel-in-progress: false
+jobs:
+  corpus:
+    name: Check tooling and prepare one frozen corpus
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      mode: ${{ steps.matrix.outputs.mode }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Select all native shards and repetitions
+        id: matrix
+        env:
+          BENCHMARK_MODE: ${{ inputs.mode || 'preflight' }}
+        run: |
+          echo "mode=$BENCHMARK_MODE" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(python3 scripts/benchmark_v2_candidate.py matrix --mode "$BENCHMARK_MODE")" >> "$GITHUB_OUTPUT"
+      - name: Verify tooling and generate immutable shared fixtures
+        run: |
+          python3 -m venv "$RUNNER_TEMP/benchmark-env"
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m unittest discover -s .github/checks/project -v
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/project.py check
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/candidate_snapshot.py --check
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_v2_catalog.py --check
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_v2_snapshot.py --check
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_v2_fixtures.py --output "$RUNNER_TEMP/corpus" --cache "$RUNNER_TEMP/source-cache"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: candidate-v2-shared-corpus
+          path: ${{ runner.temp }}/corpus/
+          if-no-files-found: error
+          retention-days: 7
+  build:
+    name: Build candidate once on native ${{ matrix.arch }}
+    needs: corpus
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      BENCHMARK_ARCH: ${{ matrix.arch }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Build exact committed source with full application checks
+        run: |
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain)"
+          docker build --pull --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --iidfile "$RUNNER_TEMP/image-id.txt" -t pixstride:v2-candidate .
+          python3 scripts/benchmark_v2_candidate.py manifest \
+            --image "$(cat "$RUNNER_TEMP/image-id.txt")" --revision "$GITHUB_SHA" \
+            --architecture "$BENCHMARK_ARCH" --output "$RUNNER_TEMP/manifest.json"
+          docker save "$(cat "$RUNNER_TEMP/image-id.txt")" | gzip -1 > "$RUNNER_TEMP/image.tar.gz"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: candidate-v2-image-${{ matrix.arch }}
+          path: ${{ runner.temp }}/image.tar.gz
+          compression-level: 0
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: candidate-v2-manifest-${{ matrix.arch }}
+          path: |
+            ${{ runner.temp }}/manifest.json
+            ${{ runner.temp }}/image-id.txt
+          if-no-files-found: warn
+          retention-days: 90
+  pins:
+    name: Bind both native images to the clean harness source
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: candidate-v2-manifest-*
+          path: ${{ runner.temp }}/manifests
+      - name: Generate explicit unreleased pins outside the source checkout
+        run: |
+          python3 scripts/benchmark_v2_candidate.py pins \
+            --manifests "$RUNNER_TEMP"/manifests/candidate-v2-manifest-*/manifest.json \
+            --revision "$GITHUB_SHA" --output "$RUNNER_TEMP/candidate-pins.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: candidate-v2-pins
+          path: ${{ runner.temp }}/candidate-pins.json
+          if-no-files-found: error
+          retention-days: 90
+  native:
+    name: Candidate V2 ${{ matrix.mode }} ${{ matrix.arch }} r${{ matrix.repetition }} s${{ matrix.shard }}
+    needs: [corpus, pins]
+    strategy:
+      fail-fast: false
+      max-parallel: 20
+      matrix: ${{ fromJson(needs.corpus.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 300
+    env:
+      BENCHMARK_RUNNER: ${{ matrix.runner }}
+      BENCHMARK_MODE: ${{ matrix.mode }}
+      BENCHMARK_ARCH: ${{ matrix.arch }}
+      BENCHMARK_REPETITION: ${{ matrix.repetition }}
+      BENCHMARK_SHARD: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: candidate-v2-shared-corpus
+          path: ${{ runner.temp }}/corpus
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: candidate-v2-pins
+          path: ${{ runner.temp }}/pins
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: candidate-v2-image-${{ matrix.arch }}
+          path: ${{ runner.temp }}/image
+      - name: Load the shared native image and verify its immutable ID
+        run: |
+          gzip -dc "$RUNNER_TEMP/image/image.tar.gz" | docker load
+          IMAGE_ID=$(python3 -c 'import json,os; print(json.load(open(os.environ["RUNNER_TEMP"]+"/pins/candidate-pins.json"))["pixstride"]["images"][os.environ["BENCHMARK_ARCH"]])')
+          test "$(docker image inspect --format '{{.Id}}' "$IMAGE_ID")" = "$IMAGE_ID"
+          echo "CANDIDATE_IMAGE_ID=$IMAGE_ID" >> "$GITHUB_ENV"
+          rm "$RUNNER_TEMP/image/image.tar.gz"
+      - name: Install the pinned independent decoder
+        run: |
+          python3 -m venv "$RUNNER_TEMP/benchmark-env"
+          "$RUNNER_TEMP/benchmark-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
+      - name: Run frozen native shard while retaining every failure
+        run: |
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_v2.py \
+            --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/report.json" \
+            --versions "$RUNNER_TEMP/pins/candidate-pins.json" \
+            --pixstride-image "$CANDIDATE_IMAGE_ID" --candidate-revision "$GITHUB_SHA" \
+            --mode "$BENCHMARK_MODE" --architecture "$BENCHMARK_ARCH" \
+            --repetition "$BENCHMARK_REPETITION" --shard-index "$BENCHMARK_SHARD"
+      - name: Verify owned containers were cleaned
+        if: always()
+        run: test -z "$(docker ps -aq --filter label=io.pixstride.benchmark.run)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: candidate-v2-${{ matrix.mode }}-${{ matrix.arch }}-r${{ matrix.repetition }}-s${{ matrix.shard }}
+          path: ${{ runner.temp }}/report.json
+          if-no-files-found: warn
+          retention-days: 90
+  aggregate:
+    name: Recompute all 1000 cases and strict candidate outcomes
+    needs: [corpus, pins, native]
+    if: always() && needs.corpus.result == 'success' && needs.pins.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: candidate-v2-pins
+          path: ${{ runner.temp }}/pins
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          pattern: candidate-v2-${{ needs.corpus.outputs.mode }}-*
+          path: ${{ runner.temp }}/reports
+      - name: Recompute exact coverage, quality and every performance metric
+        if: always()
+        env:
+          BENCHMARK_MODE: ${{ needs.corpus.outputs.mode }}
+        run: |
+          python3 scripts/benchmark_v2_report.py \
+            --reports "$RUNNER_TEMP"/reports/candidate-v2-*/report.json \
+            --versions "$RUNNER_TEMP/pins/candidate-pins.json" --mode "$BENCHMARK_MODE" \
+            --output "$RUNNER_TEMP/v2-aggregate.json" --markdown "$RUNNER_TEMP/v2-aggregate.md" \
+            2>&1 | tee "$RUNNER_TEMP/v2-aggregate.log"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: candidate-v2-aggregate
+          path: |
+            ${{ runner.temp }}/v2-aggregate.json
+            ${{ runner.temp }}/v2-aggregate.md
+            ${{ runner.temp }}/v2-aggregate.log
+            ${{ runner.temp }}/pins/candidate-pins.json
+          if-no-files-found: warn
+          retention-days: 90

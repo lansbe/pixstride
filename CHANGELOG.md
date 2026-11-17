@@ -6,6 +6,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- Add explicit unreleased V2 candidate campaigns with one native Docker build per architecture, immutable image artifacts, source/tree/Dockerfile/lock provenance and separate complete-cohort archives. Keep published pins and historical evidence intact.
 - Introduce benchmark v2 with 1,000 distinct workloads, 20 processing families, twelve static input representations, five output codecs and ten difficulty tiers ordered before measurement. Add a deterministic shared corpus, failure-preserving native shard collector, complete-cohort/replay/quality validation, separate v2 target pins and immutable result archives. Native preflight validates coverage; full three-repeat timings remain a separate manual campaign. Keep the 25-case v1 evidence and results intact. Native preflight validates all 1,000 reference cases on both architectures and retains Pixstride's 33 engine failures and 141 pixel-budget failures per mode/architecture; it makes no V2 timing-win claim.
 
 - Verify published benchmark image identities against raw OCI index/platform digests, release version/source annotations, native image configs and runtime capabilities, independently of the harness revision. Default new runs to the current release pins while retaining the immutable 0.3.0 baseline.
@@ -13,6 +14,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Build pinned libheif 1.23.7 and AOM 3.15.3 for the Linux native worker, retain HEIC support and ship their corresponding sources and notices. Verify loaded SDK/runtime libraries and real AVIF/HEIC roundtrips before accepting an image.
 - Refresh README and benchmark results with the actual published 0.4.0 image: all 25 cases win CPU, p50, p95 and lifetime peak cgroup memory in default and forced-native modes, in every run on three native Linux VMs per architecture. Retain all 64,800 timed requests, output-size/pixel differences, hardware identities and earlier losses separately. These observations do not certify perceptual equivalence or a universal performance guarantee.
 
 ### Fixed
@@ -20,6 +22,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Keep opaque native RGB/grayscale samples unchanged when a background is supplied, and avoid charging convolution scratch to identity geometry such as large flips and quarter-turns. Preserve actual resize computation and pixel limits.
 - Match mirrored integer pixelation blocks, preserve straight RGBA samples in native 32-bit BMP output, and composite transparent JPEG output over the requested background or white by default.
 - Retain palette representation when stripping private metadata and inherit native PNG palette precision and quantizer defaults instead of silently exporting truecolor pixels.
+- Match reduced WebP decoding and scaled SVG rendering before residual geometry, while preserving original source admission, crop coordinates and resource limits.
+- Decode valid indexed PNG fixtures in the independent native smoke-check reader, including packed palette indices and transparency.
 
 ## [0.4.0] - 2026-11-16
 

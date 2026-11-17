@@ -118,6 +118,26 @@ For a complete timing campaign, collect all 240 reports (40 shards × two archit
 
 ## Native workflow and evidence
 
+### Unreleased candidates
+
+The [candidate workflow](.github/workflows/benchmark-v2-candidate.yml) builds the exact clean checkout once on each native Linux architecture and runs the Dockerfile's application and codec checks. Candidate Linux images use the pinned libheif 1.23.7/AOM 3.15.3 stack with libvips 8.18.0; source archives, license notices and runtime-library check results accompany the image. These builds are not a published software release. Docker image archives are distributed as seven-day workflow artifacts, without moving any registry tag.
+
+The two native build manifests bind source revision/tree, Dockerfile and Cargo.lock hashes, package version and inspected native image IDs. `benchmark_v2_candidate.py pins` joins them into an explicit generated pins file outside the checkout. Every shard must use that file, the same clean harness revision and the matching architecture's local image ID. Candidate collection cannot use published provenance, and published collection cannot accept a candidate image.
+
+Preflight runs all 80 shards; full `measure` mode runs all 240 shards with the same sampling, quality and resource rules above. Up to 20 jobs run concurrently. A candidate VM has a 300-minute administrative bound so that 25 individual 600-second case budgets can finish and retain failures; the case deadline remains 600 seconds. Build jobs have a 120-minute bound. The existing published-image workflow retains its original bounds.
+
+The runner additionally requires `--versions candidate-pins.json --pixstride-image sha256:... --candidate-revision FULL_SHA`. Aggregate and archive candidate reports explicitly:
+
+```sh
+.venv-benchmark/bin/python scripts/benchmark_v2_report.py --reports .benchmark-v2-results/native-*/report.json --versions candidate-pins.json --mode measure --output candidate-measure.json --markdown candidate-measure.md
+.venv-benchmark/bin/python scripts/benchmark_v2_snapshot.py --record .benchmark-v2-results/native-*/report.json --versions candidate-pins.json --mode measure
+.venv-benchmark/bin/python scripts/benchmark_v2_snapshot.py --check
+```
+
+Use `--mode preflight` for the complete 80-shard validation cohort. Candidate preflight diagnostics retain reference failures as well as Pixstride failures; inspect all reference/quality counts before proceeding to timings. Candidate indices, history and generated summary markers are separate from published evidence (`candidate-preflight-index.json`, `candidate-measure-index.json`). Full results include every failure, non-winning case and metric ratio; median reductions use all retained comparable observations, including losses and numerical pixel regressions. No candidate result establishes a performance claim for the published 0.4.0 image.
+
+### Published images
+
 The [current Benchmarks workflow](.github/workflows/benchmark.yml) prepares one corpus and runs the full 80-job preflight on pushes to `codex/benchmark-v2-*` when the measurement/catalog inputs change. It does not launch the expensive full timing campaign automatically. After integration, `workflow_dispatch` offers `preflight` or `measure`; measure produces 240 independent native VM jobs. There are three repetitions **per case**, distributed over 120 VM jobs per architecture, rather than only three VMs for the entire thousand-case suite. Jobs have a 120-minute bound and keep available reports on failure; the matrix uses fail-fast false and up to 20 concurrent jobs.
 
 Aggregation requires every shard exactly once for every expected architecture/repetition, all 1,000 canonical case definitions, identical corpus/pins/harness/protocol, native image identities and separate client CPUs. Replayed raw samples cannot count as another repetition, even for just one case/engine. Neither a preflight nor a partial shard can become performance evidence. JSON/Markdown list all 1,000 cases for each mode and architecture, plus every tier/family count, size ratio, pixel difference and failure.

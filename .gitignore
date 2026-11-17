@@ -32,6 +32,7 @@
 !/benchmarks/results/v2/*.json.gz
 !/scripts/
 !/scripts/*.py
+!/scripts/build_native_codecs.sh
 !/vendor/
 !/vendor/rs-vips/
 !/vendor/rs-vips/Cargo.toml
@@ -54,6 +55,7 @@
 !/.github/workflows/benchmark.yml
 !/.github/workflows/benchmark-v1.yml
 !/.github/workflows/benchmark-candidate.yml
+!/.github/workflows/benchmark-v2-candidate.yml
 !/.github/workflows/allocator-diagnostics.yml
 !/.github/dependabot.yml
 !/.github/checks/

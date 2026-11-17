@@ -17,8 +17,9 @@ DIRECTORY=Path('benchmarks/results/v2')
 def encoded(value):return (json.dumps(value,indent=2,sort_keys=True)+'\n').encode()
 
 
-def with_summary(text,body):
-    start,end='<!-- benchmark-v2:summary:start -->','<!-- benchmark-v2:summary:end -->'
+def with_summary(text,body,candidate=False):
+    prefix='benchmark-v2-candidate' if candidate else 'benchmark-v2'
+    start,end=f'<!-- {prefix}:summary:start -->',f'<!-- {prefix}:summary:end -->'
     block=start+'\n'+body.rstrip()+'\n'+end
     if start not in text and end not in text:return text.rstrip()+'\n\n'+block+'\n'
     if text.count(start)!=1 or text.count(end)!=1:raise ValueError('Invalid V2 documentation markers')
@@ -31,9 +32,13 @@ def with_summary(text,body):
 def _index(path,root,current):
     if path.is_symlink():raise ValueError('V2 index must be a regular file')
     raw_index=path.read_bytes();index=json.loads(raw_index)
-    if index.get('schema_version')!=1 or index.get('kind')!='v2-complete-cohort':raise ValueError('Invalid V2 index schema')
+    candidate=index.get('kind')=='v2-candidate-complete-cohort'
+    if index.get('schema_version')!=1 or index.get('kind') not in ('v2-complete-cohort','v2-candidate-complete-cohort'):
+        raise ValueError('Invalid V2 index schema')
+    prefix='candidate-' if candidate else ''
+    if candidate!=(index['result']['pins']['pixstride'].get('published') is False):raise ValueError('V2 index kind differs from target provenance')
     if not current:
-        expected=f'history-{index["mode"]}-{sha256(raw_index)[:12]}-index.json'
+        expected=f'history-{prefix}{index["mode"]}-{sha256(raw_index)[:12]}-index.json'
         if path.name!=expected:raise ValueError('V2 historical index filename/hash differs')
     mode=index['mode'];reports=[];directory=root/DIRECTORY
     for entry in index['reports']:
@@ -47,7 +52,7 @@ def _index(path,root,current):
         if fingerprint!=entry['raw_sha256'] or name!=expected:raise ValueError('V2 raw archive binding differs')
         reports.append(report)
     result=aggregate(reports,mode,index['result']['pins'])
-    if ((mode=='preflight' and not result['reference_valid']) or encoded(result)!=encoded(index['result'])):
+    if ((mode=='preflight' and not candidate and not result['reference_valid']) or encoded(result)!=encoded(index['result'])):
         raise ValueError('Stale/invalid V2 aggregate')
     return result,{entry['file'] for entry in index['reports']}
 
@@ -62,15 +67,18 @@ def check(root=ROOT):
     directory=root/DIRECTORY;results={};referenced=set()
     if directory.exists():
         for path in sorted(directory.glob('*-index.json')):
-            current=path.name in ('preflight-index.json','measure-index.json')
+            current=path.name in ('preflight-index.json','measure-index.json','candidate-preflight-index.json','candidate-measure-index.json')
             result,files=_index(path,root,current);referenced|=files
             if current:
-                if path.name!=result['mode']+'-index.json':raise ValueError('V2 index mode differs from filename')
-                results[result['mode']]=result
+                key=('candidate-' if result['pins']['pixstride']['published'] is False else '')+result['mode']
+                if path.name!=key+'-index.json':raise ValueError('V2 index mode differs from filename')
+                results[key]=result
         if {p.name for p in directory.glob('*.raw.json.gz')}!=referenced:
             raise ValueError('V2 raw archives without their complete cohort index')
     pins=load_pins(root/'benchmarks/versions-v2.json')
     body=summary(headline(results,pins),pins)
+    candidates={key.removeprefix('candidate-'):value for key,value in results.items() if key.startswith('candidate-')}
+    candidate_result=headline(candidates,(candidates.get('preflight') or candidates.get('measure') or {}).get('pins')) if candidates else None
     for name in DOCS:
         path=root/name
         if not path.exists():
@@ -79,24 +87,32 @@ def check(root=ROOT):
         text=path.read_text()
         if '<!-- benchmark-v2:' in text and text!=with_summary(text,body):raise ValueError('Stale V2 generated documentation')
         if results and '<!-- benchmark-v2:' not in text:raise ValueError('Missing V2 generated documentation')
+        if candidate_result is not None and text!=with_summary(text,summary(candidate_result),candidate=True):
+            raise ValueError('Stale/missing V2 candidate generated documentation')
     return results
 
 
 def sync(root=ROOT):
-    results={}
+    results={};candidates={}
     for mode in ('preflight','measure'):
-        path=root/DIRECTORY/(mode+'-index.json')
-        if path.exists():results[mode]=_index(path,root,True)[0]
+        for prefix,collection in (('',results),('candidate-',candidates)):
+            path=root/DIRECTORY/(prefix+mode+'-index.json')
+            if path.exists():collection[mode]=_index(path,root,True)[0]
     pins=load_pins(root/'benchmarks/versions-v2.json')
     body=summary(headline(results,pins),pins)
+    candidate_result=headline(candidates,(candidates.get('preflight') or candidates.get('measure') or {}).get('pins')) if candidates else None
     for name in DOCS:
-        path=root/name;path.write_text(with_summary(path.read_text(),body))
+        path=root/name;text=with_summary(path.read_text(),body)
+        if candidate_result is not None:text=with_summary(text,summary(candidate_result),candidate=True)
+        path.write_text(text)
 
 
-def record(paths,mode,root=ROOT):
+def record(paths,mode,root=ROOT,pins=None):
     loaded=sorted([load(path) for path in paths],key=lambda item:(item[0]['host']['architecture'],item[0]['repetition'],item[0]['shard_index']))
-    result=aggregate([report for report,_ in loaded],mode,load_pins(root/'benchmarks/versions-v2.json'))
-    if mode=='preflight' and not result['reference_valid']:
+    pins=load_pins(root/'benchmarks/versions-v2.json') if pins is None else pins
+    result=aggregate([report for report,_ in loaded],mode,pins);candidate=pins['pixstride']['published'] is False
+    prefix='candidate-' if candidate else ''
+    if mode=='preflight' and not candidate and not result['reference_valid']:
         raise ValueError('Invalid reference cases: retain diagnostics; cannot publish a validated 1000-case preflight')
     directory=root/DIRECTORY;directory.mkdir(parents=True,exist_ok=True);entries=[];archives={}
     for report,raw in loaded:
@@ -110,10 +126,10 @@ def record(paths,mode,root=ROOT):
         else:archive=gzip.compress(raw,mtime=0)
         archives[name]=archive
         entries.append(dict(file=name,sha256=sha256(archive),raw_sha256=fingerprint))
-    index=dict(schema_version=1,kind='v2-complete-cohort',mode=mode,reports=entries,result=result)
-    target=directory/(mode+'-index.json');new=encoded(index)
+    index=dict(schema_version=1,kind='v2-candidate-complete-cohort' if candidate else 'v2-complete-cohort',mode=mode,reports=entries,result=result)
+    target=directory/(prefix+mode+'-index.json');new=encoded(index)
     if target.exists() and target.read_bytes()!=new:
-        old=target.read_bytes();history=directory/f'history-{mode}-{sha256(old)[:12]}-index.json'
+        old=target.read_bytes();history=directory/f'history-{prefix}{mode}-{sha256(old)[:12]}-index.json'
         if history.exists() and history.read_bytes()!=old:raise ValueError('V2 history fingerprint collision')
         history.write_bytes(old)
     for name,archive in archives.items():(directory/name).write_bytes(archive)
@@ -123,9 +139,10 @@ def record(paths,mode,root=ROOT):
 def main():
     parser=argparse.ArgumentParser(description=__doc__);action=parser.add_mutually_exclusive_group(required=True)
     action.add_argument('--record',type=Path,nargs='+');action.add_argument('--check',action='store_true')
-    action.add_argument('--init',action='store_true');parser.add_argument('--mode',choices=['preflight','measure']);args=parser.parse_args()
+    action.add_argument('--init',action='store_true');parser.add_argument('--mode',choices=['preflight','measure'])
+    parser.add_argument('--versions',type=Path);args=parser.parse_args()
     if bool(args.record)!=bool(args.mode):parser.error('--mode is required only with --record')
-    if args.record:record(args.record,args.mode)
+    if args.record:record(args.record,args.mode,pins=load_pins(args.versions) if args.versions else None)
     elif args.init:sync()
     check();print('V2 archives, complete coverage, outcomes and generated documentation are consistent')
 

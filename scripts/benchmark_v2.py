@@ -14,6 +14,7 @@ from benchmark import host_metadata,isolate_client,write_report
 from benchmark_fixtures import ROOT,sha256
 from benchmark_release import capture_release
 from benchmark_runtime import Docker,MEMORY_BYTES,architecture
+from benchmark_v2_candidate import candidate_identity,validate_image
 from benchmark_v2_catalog import CATALOG,SUITE,select_shard,verify_catalog
 from benchmark_v2_collect import collect
 from benchmark_v2_fixtures import verify
@@ -49,14 +50,24 @@ def run(args):
     manifest=verify(args.fixtures);cases,partial=selected_cases(args.shard_index,args.case,verify_catalog(CATALOG,manifest))
     p=protocol(args.mode);available=sorted(os.sched_getaffinity(0));cpus=available[:2]
     docker=Docker(args.docker);owner=uuid.uuid4().hex[:12];versions=json.loads(args.versions.read_text());images={}
-    if versions['pixstride'].get('published') is not True:raise ValueError('V2 requires explicit published image pins')
+    candidate=versions['pixstride'].get('published') is False
+    image_id=getattr(args,'pixstride_image',None);candidate_revision=getattr(args,'candidate_revision',None)
+    if candidate:
+        selected=candidate_identity(versions['pixstride'])
+        if not image_id or not candidate_revision:raise ValueError('Candidate V2 requires explicit image and revision arguments')
+        if candidate_revision!=selected['candidate']['revision'] or image_id!=selected['images'][architecture()]:
+            raise ValueError('Candidate CLI image/revision differs from explicit pins')
+    elif versions['pixstride'].get('published') is not True or image_id or candidate_revision:
+        raise ValueError('Published V2 cannot accept candidate CLI/image provenance')
     with isolate_client(cpus) as client:
-        for product in ('pixstride','imgproxy'):images[product]=docker.image(versions[product]['image'])
+        images['pixstride']=docker.image(image_id,candidate_revision) if candidate else docker.image(versions['pixstride']['image'])
+        images['imgproxy']=docker.image(versions['imgproxy']['image'])
         images['pixstride']['capabilities']=json.loads(docker.probe(images['pixstride']['reference'],['capabilities'],owner,'pixstride'))
         images['imgproxy']['version']=docker.probe(images['imgproxy']['reference'],['imgproxy','version'],owner,'imgproxy')
         if not re.search(r'(?<![0-9.])'+re.escape(versions['imgproxy']['version'])+r'(?![0-9.])',images['imgproxy']['version']):
             raise ValueError('V2 competitor version differs')
-        capture_release(docker,images['pixstride'],versions['pixstride'])
+        if candidate:validate_image(images['pixstride'],versions['pixstride'],candidate_revision,architecture())
+        else:capture_release(docker,images['pixstride'],versions['pixstride'])
         revision=subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD'],text=True).strip()
         dirty=(subprocess.run(['git','-C',str(ROOT),'diff','--quiet','HEAD']).returncode!=0 or
                bool(subprocess.check_output(['git','-C',str(ROOT),'ls-files','--others','--exclude-standard']).strip()))
@@ -97,6 +108,7 @@ def main():
     parser.add_argument('--mode',choices=['preflight','measure'],default='preflight')
     parser.add_argument('--shard-index',type=int,required=True);parser.add_argument('--repetition',type=int,default=1)
     parser.add_argument('--architecture',choices=['amd64','arm64']);parser.add_argument('--docker',default='docker')
+    parser.add_argument('--pixstride-image');parser.add_argument('--candidate-revision')
     parser.add_argument('--case',action='append');args=parser.parse_args()
     try:run(args)
     except (ValueError,OSError,RuntimeError,subprocess.SubprocessError) as error:parser.exit(1,'V2 benchmark failed: '+str(error)+'\n')
