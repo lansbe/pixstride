@@ -12,19 +12,24 @@ struct Decoded {
     dimensions: [i32; 2],
     bands: i32,
     pixels: Vec<u8>,
+    indexed: bool,
 }
 
 fn plain(info: &Info<'_>) -> bool {
     !info.interlaced
         && info.bit_depth == BitDepth::Eight
-        && matches!(
+        && (matches!(
             info.color_type,
             ColorType::Rgb | ColorType::Rgba | ColorType::Grayscale | ColorType::GrayscaleAlpha
-        )
+        ) && info.palette.is_none()
+            || info.color_type == ColorType::Indexed
+                && info.palette.as_deref().is_some_and(|p| p.len() == 256 * 3))
         && info.icc_profile.is_none()
         && info.exif_metadata.is_none()
         && info.source_gamma.is_none()
         && info.source_chromaticities.is_none()
+        && info.gamma().is_none()
+        && info.chromaticities().is_none()
         && info.srgb.is_none()
         && info.coding_independent_code_points.is_none()
         && info.mastering_display_color_volume.is_none()
@@ -32,9 +37,36 @@ fn plain(info: &Info<'_>) -> bool {
         && info.trns.is_none()
         && info.sbit.is_none()
         && info.bkgd.is_none()
-        && info.palette.is_none()
         && info.animation_control.is_none()
         && info.frame_control.is_none()
+}
+
+// The decoder verifies CRCs in finish(), but may ignore malformed ancillary
+// metadata rather than expose it through Info. A palette import must not erase
+// any profile/precision/animation declaration, even one placed after IDAT.
+fn palette_chunks_plain(data: &[u8]) -> Result<bool, Error> {
+    let mut at = 8usize;
+    let mut palette = false;
+    let mut pixels = false;
+    while let Some(header) = data.get(at..at.saturating_add(8)) {
+        let size = u32::from_be_bytes(header[..4].try_into().unwrap()) as usize;
+        let end = at
+            .checked_add(12)
+            .and_then(|n| n.checked_add(size))
+            .filter(|&n| n <= data.len())
+            .ok_or("invalid PNG chunk framing")?;
+        match &header[4..8] {
+            b"PLTE" if palette || pixels => return Ok(false),
+            b"PLTE" => palette = true,
+            b"IDAT" => pixels = true,
+            b"IEND" => return Ok(true),
+            b"tRNS" | b"iCCP" | b"eXIf" | b"gAMA" | b"cHRM" | b"sRGB" | b"cICP" | b"mDCV"
+            | b"cLLI" | b"sBIT" | b"bKGD" | b"acTL" | b"fcTL" | b"fdAT" => return Ok(false),
+            _ => {}
+        }
+        at = end;
+    }
+    Err("missing PNG end chunk")
 }
 
 fn decode(data: &[u8], r: &Request) -> Result<Option<Decoded>, Error> {
@@ -55,7 +87,9 @@ fn decode(data: &[u8], r: &Request) -> Result<Option<Decoded>, Error> {
     checks.set_ignore_checksums(false);
     checks.set_skip_ancillary_crc_failures(false);
     let mut decoder = Decoder::new_with_options(Cursor::new(data), checks);
-    decoder.set_transformations(Transformations::IDENTITY);
+    // EXPAND leaves admitted8-bit RGB/gray unchanged and expands an opaque
+    // complete Indexed8 palette to RGB. All256 index values are valid.
+    decoder.set_transformations(Transformations::EXPAND);
     decoder.set_limits(Limits {
         bytes: crate::MAX_FILE,
     });
@@ -72,7 +106,12 @@ fn decode(data: &[u8], r: &Request) -> Result<Option<Decoded>, Error> {
     if pixels > r.extra.max_source_pixels || pixels > r.extra.max_frame_pixels {
         return Err("PNG source pixel budget exceeded");
     }
-    let bands = info.color_type.samples();
+    let indexed = info.color_type == ColorType::Indexed;
+    let (output_color, output_depth) = reader.output_color_type();
+    if output_depth != BitDepth::Eight {
+        return Err("inconsistent PNG output precision");
+    }
+    let bands = output_color.samples();
     let expected = pixels
         .checked_mul(bands)
         .ok_or("PNG raster exceeds limit")?;
@@ -93,6 +132,7 @@ fn decode(data: &[u8], r: &Request) -> Result<Option<Decoded>, Error> {
     if output.width as usize != width
         || output.height as usize != height
         || output.bit_depth != BitDepth::Eight
+        || output.color_type != output_color
         || output.buffer_size() != expected
     {
         return Err("inconsistent PNG decoded frame");
@@ -101,13 +141,14 @@ fn decode(data: &[u8], r: &Request) -> Result<Option<Decoded>, Error> {
     reader
         .finish()
         .map_err(|_| "PNG trailer validation failed")?;
-    if !plain(reader.info()) {
+    if !plain(reader.info()) || (indexed && !palette_chunks_plain(data)?) {
         return Ok(None);
     }
     Ok(Some(Decoded {
         dimensions: [width as i32, height as i32],
         bands: bands as i32,
         pixels,
+        indexed,
     }))
 }
 
@@ -119,6 +160,7 @@ pub(super) fn try_load(
         mut dimensions,
         bands,
         mut pixels,
+        indexed,
     }) = decode(data, r)?
     else {
         return Ok(None);
@@ -137,6 +179,13 @@ pub(super) fn try_load(
                     Interpretation::Srgb
                 } as i32,
             ))
+        })
+        .and_then(|mut image| {
+            if indexed {
+                image.set_int("palette", 1)?;
+                image.set_int("bits-per-sample", 8)?;
+            }
+            Ok(image)
         })
         .map(|image| Some((image, plan)))
         .map_err(|_| "native PNG raster import failed")
@@ -243,3 +292,7 @@ mod tests {
         assert!(decode(&source, &r).unwrap().is_none());
     }
 }
+
+#[cfg(test)]
+#[path = "png_palette_decode_tests.rs"]
+mod palette_tests;
