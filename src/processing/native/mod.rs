@@ -43,6 +43,8 @@ mod raster;
 #[cfg(feature = "native-codecs")]
 mod scale;
 #[cfg(feature = "native-codecs")]
+mod scaled_decode;
+#[cfg(feature = "native-codecs")]
 mod shared;
 #[cfg(feature = "native-codecs")]
 mod svg;
