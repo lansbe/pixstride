@@ -68,6 +68,8 @@ Unreleased development corrects opaque-background and large identity-geometry re
 
 Opaque BI_RGB24/32 BMP input now stays in owned RGB storage through native processing, avoiding synthetic alpha work and an unnecessary AVIF alpha plane. Real ICO/PNG transparency is preserved. Numerical rounding, encoded bytes and ETags can change; each source optimization requires a new complete measurement cohort.
 
+SmartCrop and native filters materialize eligible byte rasters once at their processing boundary to avoid repeated upstream rendering. Materialization uses the existing 64-MiB raster limit; higher-precision and larger images keep their typed processing route.
+
 <!-- benchmark-v2-candidate:summary:start -->
 Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
 

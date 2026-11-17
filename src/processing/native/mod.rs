@@ -22,6 +22,8 @@ mod fast_svg;
 mod filters;
 #[cfg(feature = "native-codecs")]
 mod geometry;
+#[cfg(all(test, feature = "native-codecs"))]
+mod graph_boundary_tests;
 #[cfg(feature = "native-codecs")]
 mod jpeg_decode;
 #[cfg(feature = "native-codecs")]

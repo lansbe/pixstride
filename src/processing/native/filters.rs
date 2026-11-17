@@ -8,6 +8,14 @@ use libvips::{
 };
 
 pub(super) fn effects(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
+    let filtered = r.effects.blur_sigma > 0.0
+        || r.effects.sharpen_sigma > 0.0
+        || (r.effects.pixelate > 1 && image.get_width().max(image.get_height()) > 1);
+    if filtered && super::shared::fits_memory(&image) {
+        // Finish the upstream geometry once; filter halos otherwise reevaluate
+        // it while caches are disabled. HDR/large rasters keep their old route.
+        image = super::shared::materialize(image)?;
+    }
     if r.effects.blur_sigma > 0.0 {
         image = image
             .gaussblur(r.effects.blur_sigma)

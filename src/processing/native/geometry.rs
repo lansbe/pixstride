@@ -87,10 +87,17 @@ fn crop(
         width.min(image.get_width()).max(1),
         height.min(image.get_height()).max(1),
     );
-    if !smart && width == image.get_width() && height == image.get_height() {
+    if width == image.get_width() && height == image.get_height() {
         return Ok(image.clone());
     }
     if smart {
+        // Analysis and the eventual crop both consume these pixels. Keep one
+        // bounded raster instead of evaluating the upstream resize twice.
+        let image = if super::shared::fits_memory(image) {
+            super::shared::materialize(image.clone())?
+        } else {
+            image.clone()
+        };
         return image
             .smartcrop(width, height)
             .map_err(|_| "native smart crop failed");
