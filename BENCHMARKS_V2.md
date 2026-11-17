@@ -1,6 +1,6 @@
 # Benchmark v2: 1,000 distinct workloads
 
-V2 is the current reusable performance suite for Pixstride versus imgproxy on native Linux x86_64 and ARM64. It replaces the 25-case suite as the target for new comparisons. [V1 results and methodology](BENCHMARKS.md) remain intact; their wins do not establish any V2 performance result.
+V2 is the current reusable performance suite for Pixstride versus imgproxy on native Linux x86_64 and ARM64. New collections use protocol **2.1** on the unchanged 1,000-case catalog. It replaces the 25-case suite as the target for new comparisons. [V1 results and methodology](BENCHMARKS.md) remain intact; their wins do not establish any V2 performance result.
 
 <!-- benchmark-v2-candidate:summary:start -->
 Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
@@ -76,6 +76,14 @@ The two checksum-pinned public photos and their attribution are retained from v1
 
 Default (`auto`) and forced-native Pixstride are separate observations. Every mode must have lower CPU/request, HTTP p50, HTTP p95 and lifetime peak cgroup memory in every repetition to confirm a case. Qualification requires all 1,000 cases on both architectures, three independent repetitions per case, and all pixel budgets passing. No favorable mode, case, shard, repetition or surviving subset substitutes for a failure.
 
+## Collection protocol revisions
+
+Protocol **2.0** used a shared 600-second wall-clock budget per case. During the first full native candidate campaign, workloads 962, 978 and 999 exceeded that collection budget on x86_64, including imgproxy; their decoded outputs were valid but their timing trials were incomplete. Those failures and all accepted partial samples remain evidence under their original protocol.
+
+Protocol **2.1** allows **1,800 seconds per case**, shared by all engines. This is the only sampling/resource delta: the same 1,000 workloads, corpus, six balanced batches of 24 requests, five warmups, three repetitions, CPU/memory/PID limits, HTTP timeout, pixel budgets and strict victory rules apply. Extra collection time does not make a timeout count as a win.
+
+New schema-3 raw reports explicitly declare `protocol_version: "2.1"`; schema-2 reports without that field remain protocol 2.0. The validator rejects missing, unknown or inconsistent versions and mixed-protocol cohorts. Historical aggregates and hashes are recomputed unchanged. Current CLI collection defaults to 2.1; `--protocol-version 2.0` reproduces the original sampling budget with current tooling. A checkout of an older harness uses its original CLI without this new flag.
+
 ## Resources and numerical definitions
 
 Each service runs in a fresh per-case container with two service logical CPUs, a two-CPU quota, 1 GiB memory with no extra swap, 128 PIDs, a read-only root and dropped capabilities. The client is pinned to other available logical CPUs; native Linux with at least three available CPUs and host-visible cgroup v2 is required. Images, runtime capabilities, native platform/config IDs, raw OCI index/platform digests, release version/source and the distinct harness revision are verified and recorded. [V2 pins](benchmarks/versions-v2.json) are independent of the immutable v1 release pins.
@@ -84,7 +92,7 @@ HTTP latency spans fresh TCP request initiation through the complete loopback re
 
 Lifetime cgroup `memory.peak` includes startup, preflight, warmups, workers, page cache and kernel charges. It is not process RSS. File-page charging and shared-host scheduling/frequency remain sources of variation. Services are compared within the same case/VM. Hardware can differ between shards and repetitions; this is not an x86-versus-ARM or programming-language performance claim.
 
-The case deadline is 600 seconds and an individual HTTP request is bounded at 60 seconds. The work alarm is cancelled before ownership-checked container cleanup, so an expected deadline cannot abandon a service; total elapsed time, including cleanup, still determines a budget failure. Expected service/codec/resource failures preserve their diagnostics and completed/partial batches; other engines and subsequent cases still run. Infrastructure errors and interruptions retain available partial reports but invalidate complete-coverage claims. Artifact upload after a runner hard kill is best-effort; missing artifacts never become complete results.
+The case deadline is 1,800 seconds in protocol 2.1 (600 in retained 2.0 reports), and an individual HTTP request is bounded at 60 seconds. The work alarm is cancelled before ownership-checked container cleanup, so an expected deadline cannot abandon a service; total elapsed time, including cleanup, still determines a budget failure. Expected service/codec/resource failures preserve their diagnostics and completed/partial batches; other engines and subsequent cases still run. Infrastructure errors and interruptions retain available partial reports but invalidate complete-coverage claims. Artifact upload after a runner hard kill is best-effort; missing artifacts never become complete results.
 
 ## Pixel agreement and file size
 
@@ -146,7 +154,7 @@ The two native build manifests bind source revision/tree, Dockerfile and Cargo.l
 
 The candidate workflow also requires corpus SHA256 `4b7467347c61684f350a8ab15eca6ec7dc02708e09c17e31a2d80c1e2579ff05`, matching all 120 input files in the retained release preflight. A generator or codec update that changes their bytes stops preparation before any comparison runs.
 
-Preflight runs all 80 shards; full `measure` mode runs all 240 shards with the same sampling, quality and resource rules above. Up to 20 jobs run concurrently. A candidate VM has a 300-minute administrative bound so that 25 individual 600-second case budgets can finish and retain failures; the case deadline remains 600 seconds. Build jobs have a 120-minute bound. The existing published-image workflow retains its original bounds.
+Preflight runs all 80 shards; full `measure` mode runs all 240 shards with the same sampling, quality and resource rules above. Up to 20 jobs run concurrently. Native jobs have a 300-minute administrative bound; protocol 2.1's per-case collection deadline is 1,800 seconds. Build jobs have a 120-minute bound. Historical protocol-2.0 workflows retain their original bounds in their committed source.
 
 After the corrected native preflight passes, candidate-branch pushes default to full `measure` mode. Manual dispatch still offers both `preflight` and `measure`. CLI collection retains its explicit mode and defaults to preflight.
 
@@ -164,7 +172,7 @@ The candidate headline follows the latest complete campaign's first shard start 
 
 ### Published images
 
-The [current Benchmarks workflow](.github/workflows/benchmark.yml) prepares one corpus and runs the full 80-job preflight on pushes to `codex/benchmark-v2-*` when the measurement/catalog inputs change. It does not launch the expensive full timing campaign automatically. After integration, `workflow_dispatch` offers `preflight` or `measure`; measure produces 240 independent native VM jobs. There are three repetitions **per case**, distributed over 120 VM jobs per architecture, rather than only three VMs for the entire thousand-case suite. Jobs have a 120-minute bound and keep available reports on failure; the matrix uses fail-fast false and up to 20 concurrent jobs.
+The [current Benchmarks workflow](.github/workflows/benchmark.yml) prepares one corpus and runs the full 80-job preflight on pushes to `codex/benchmark-v2-*` when the measurement/catalog inputs change. It does not launch the expensive full timing campaign automatically. After integration, `workflow_dispatch` offers `preflight` or `measure`; measure produces 240 independent native VM jobs. There are three repetitions **per case**, distributed over 120 VM jobs per architecture, rather than only three VMs for the entire thousand-case suite. Jobs have a 300-minute bound and keep available reports on failure; the matrix uses fail-fast false and up to 20 concurrent jobs.
 
 Aggregation requires every shard exactly once for every expected architecture/repetition, all 1,000 canonical case definitions, identical corpus/pins/harness/protocol, native image identities and separate client CPUs. Replayed raw samples cannot count as another repetition, even for just one case/engine. Neither a preflight nor a partial shard can become performance evidence. JSON/Markdown list all 1,000 cases for each mode and architecture, plus every tier/family count, size ratio, pixel difference and failure.
 

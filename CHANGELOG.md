@@ -6,6 +6,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- Version collection protocol 2.1 explicitly, allowing 1,800 seconds per workload to complete heavy trials without changing the 1,000 cases, sampling, service resources, pixel budgets or strict victory gates. Preserve schema-2/600-second evidence and reject mixed or relabelled protocol cohorts.
 - Add explicit unreleased V2 candidate campaigns with one native Docker build per architecture, immutable image artifacts, source/tree/Dockerfile/lock provenance and separate complete-cohort archives. Keep published pins and historical evidence intact.
 - Introduce benchmark v2 with 1,000 distinct workloads, 20 processing families, twelve static input representations, five output codecs and ten difficulty tiers ordered before measurement. Add a deterministic shared corpus, failure-preserving native shard collector, complete-cohort/replay/quality validation, separate v2 target pins and immutable result archives. Native preflight validates coverage; full three-repeat timings remain a separate campaign. Keep the 25-case v1 evidence and published 0.4.0 preflight intact, including its 33 engine failures and 141 pixel-budget failures per mode/architecture.
 

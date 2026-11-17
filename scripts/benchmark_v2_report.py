@@ -162,13 +162,21 @@ def validate_shard(report,pins=None):
     except (KeyError,TypeError,IndexError,AttributeError) as error:raise ValueError('Malformed V2 shard evidence') from error
 
 
+def report_version(report):
+    if type(report['schema_version']) is int:
+        if report['schema_version']==2 and 'protocol_version' not in report:return '2.0'
+        if report['schema_version']==3 and report.get('protocol_version')=='2.1':return '2.1'
+    raise ValueError('Invalid or inconsistent V2 report/protocol version')
+
+
 def _validate_shard(r,pins):
     target(pins)
-    if (r['schema_version']!=2 or r['suite_id']!=SUITE or r['status']!='complete'
+    version=report_version(r)
+    if (r['suite_id']!=SUITE or r['status']!='complete'
             or r['profile']!='complete-shard' or r['harness_dirty'] is not False
             or not re.fullmatch(r'[0-9a-f]{40}',r['harness_revision'])):
         raise ValueError('Only committed complete V2 shards can be aggregated')
-    mode=r['mode'];p=protocol(mode)
+    mode=r['mode'];p=protocol(mode,version)
     if r['protocol']!=p:raise ValueError('V2 fixed sampling/resources/protocol differs')
     if type(r['repetition']) is not int or not 1<=r['repetition']<=(1 if mode=='preflight' else 3):
         raise ValueError('Invalid V2 repetition')
@@ -262,6 +270,7 @@ def aggregate(reports,mode,pins=None):
                          for c in r['cases'] for e in c['engines'].values()),
                 catalog_sha256=cohort['catalog_sha256'],harness_revision=cohort['harness_revision'],
                 corpus_sha256=cohort['fixtures']['corpus_sha256'],pins=pins,protocol=cohort['protocol'],architectures={})
+    if report_version(indexed['amd64',1,0])=='2.1':result['protocol_version']='2.1'
     if pins['pixstride']['published'] is False:
         result['campaign_started_at']=min(dt.datetime.fromisoformat(r['started_at']) for r in reports).astimezone(dt.timezone.utc).isoformat()
     definitions=verify_catalog()

@@ -22,7 +22,8 @@ def summary(result,pins=None):
                 'The retained 25-case timings belong to v1. See [the V2 protocol](BENCHMARKS_V2.md).\n')
     mode=result['mode'];measured=mode=='measure'
     status=('target met' if result['qualified'] else 'target not met') if measured else 'performance not measured'
-    text=(f'Current benchmark **v2: 1,000 distinct workloads** — **{status}**. '
+    revision='v2.1' if result.get('protocol_version')=='2.1' else 'v2'
+    text=(f'Current benchmark **{revision}: 1,000 distinct workloads** — **{status}**. '
           'Every workload and every service/quality failure is retained.\n\n')
     release=result['pins']['pixstride'];ref=result['pins']['imgproxy'];candidate=release.get('published') is False
     if candidate:
@@ -34,6 +35,8 @@ def summary(result,pins=None):
             +f'Harness `{result["harness_revision"]}`; campaign started `{result["campaign_started_at"]}`. ')
     else:provenance=(f'Pixstride {release["version"]} / imgproxy {ref["version"]}; published image `{release["image"]}`. '
            f'Runtime source `{release["revision"]}`; harness `{result["harness_revision"]}`. ')
+    if revision=='v2.1':
+        provenance+='Collection protocol **v2.1** allows **1,800 seconds per case**; sampling, service resources, pixel budgets and strict victory gates are unchanged. '
     text+=(provenance+
            f'Retained accepted timed responses: **{result["retained_timed_requests"]:,}**'
            +(' of 2,592,000 planned when all engines complete' if measured else ' (decoded preflight only)')+'.\n\n'
@@ -57,7 +60,8 @@ def summary(result,pins=None):
 
 
 def markdown(result):
-    text='# Benchmark v2 complete-cohort report\n\n'+summary(result)
+    revision='v2.1' if result.get('protocol_version')=='2.1' else 'v2'
+    text=f'# Benchmark {revision} complete-cohort report\n\n'+summary(result)
     for arch,cohort in sorted(result['architectures'].items()):
         for own in MODES:
             label='default' if own==MODES[0] else 'forced-native'

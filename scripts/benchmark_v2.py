@@ -20,14 +20,16 @@ from benchmark_v2_collect import collect
 from benchmark_v2_fixtures import verify
 
 
-def protocol(mode):
+def protocol(mode,version='2.0'):
     if mode not in ('preflight','measure'):raise ValueError('V2 mode must be preflight or measure')
+    if version not in ('2.0','2.1'):raise ValueError('Unknown V2 protocol version')
     measured=mode=='measure'
     return dict(batches=6 if measured else 0,requests_per_batch=24 if measured else 0,
                 warmups=5 if measured else 0,concurrency=1,cpus=2,memory_bytes=MEMORY_BYTES,
                 pids_limit=128,client_affinity='disjoint from service cpuset',cpu_tail_seconds=.05,
                 engine_schedule='all six permutations, repeated',http_connection='fresh per request',
-                case_order='ascending frozen nominal work rank within each shard',case_deadline_seconds=600,
+                case_order='ascending frozen nominal work rank within each shard',
+                case_deadline_seconds=600 if version=='2.0' else 1800,
                 source_cache='warm OS page cache, no application result cache',
                 cpu_scope='container-ID-verified local cgroup including descendants; client excluded',
                 memory_scope='fresh per-case container lifetime peak, including startup, cache and kernel; not RSS')
@@ -48,7 +50,8 @@ def run(args):
     if type(args.repetition) is not int or not 1<=args.repetition<=3:raise ValueError('V2 repetition must be 1..3')
     if args.mode=='preflight' and args.repetition!=1:raise ValueError('Preflight uses repetition 1 without timing qualification')
     manifest=verify(args.fixtures);cases,partial=selected_cases(args.shard_index,args.case,verify_catalog(CATALOG,manifest))
-    p=protocol(args.mode);available=sorted(os.sched_getaffinity(0));cpus=available[:2]
+    version=getattr(args,'protocol_version','2.1')
+    p=protocol(args.mode,version);available=sorted(os.sched_getaffinity(0));cpus=available[:2]
     docker=Docker(args.docker);owner=uuid.uuid4().hex[:12];versions=json.loads(args.versions.read_text());images={}
     candidate=versions['pixstride'].get('published') is False
     image_id=getattr(args,'pixstride_image',None);candidate_revision=getattr(args,'candidate_revision',None)
@@ -71,7 +74,7 @@ def run(args):
         revision=subprocess.check_output(['git','-C',str(ROOT),'rev-parse','HEAD'],text=True).strip()
         dirty=(subprocess.run(['git','-C',str(ROOT),'diff','--quiet','HEAD']).returncode!=0 or
                bool(subprocess.check_output(['git','-C',str(ROOT),'ls-files','--others','--exclude-standard']).strip()))
-        report=dict(schema_version=2,suite_id=SUITE,status='running',mode=args.mode,
+        report=dict(schema_version=2 if version=='2.0' else 3,suite_id=SUITE,status='running',mode=args.mode,
                     profile='partial-shard' if partial else 'complete-shard',shard_index=args.shard_index,
                     shard_count=40,repetition=args.repetition,started_at=dt.datetime.now(dt.timezone.utc).isoformat(),
                     harness_revision=revision,harness_dirty=dirty,workflow_url=None,host=host_metadata(cpus,available,client),
@@ -82,6 +85,7 @@ def run(args):
                         'Different encoders/pixels; numerical agreement budgets are not perceptual equivalence.',
                         'Shared VMs and different CPUs; no universal or ISA performance guarantee.',
                         'Lifetime cgroup peak includes startup, file cache and kernel; not process RSS.'])
+        if version=='2.1':report['protocol_version']=version
         if os.environ.get('GITHUB_ACTIONS')=='true':
             report['workflow_url']=os.environ['GITHUB_SERVER_URL']+'/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+os.environ['GITHUB_RUN_ID']
         report['host']['docker']=json.loads(docker.run('version','--format','{{json .Server}}'))['Version']
@@ -106,6 +110,8 @@ def main():
     parser.add_argument('--fixtures',type=Path,required=True);parser.add_argument('--output',type=Path,required=True)
     parser.add_argument('--versions',type=Path,default=ROOT/'benchmarks/versions-v2.json')
     parser.add_argument('--mode',choices=['preflight','measure'],default='preflight')
+    parser.add_argument('--protocol-version',choices=['2.0','2.1'],default='2.1',
+                        help='2.1 allows 1800 seconds per case; 2.0 reproduces the original 600-second collection')
     parser.add_argument('--shard-index',type=int,required=True);parser.add_argument('--repetition',type=int,default=1)
     parser.add_argument('--architecture',choices=['amd64','arm64']);parser.add_argument('--docker',default='docker')
     parser.add_argument('--pixstride-image');parser.add_argument('--candidate-revision')
