@@ -1,6 +1,6 @@
 # Benchmark v2: 1,000 distinct workloads
 
-V2 is the current reusable performance suite for Pixstride versus imgproxy on native Linux x86_64 and ARM64. New collections use protocol **2.2** on the unchanged 1,000-case catalog. It replaces the 25-case suite as the target for new comparisons. [V1 results and methodology](BENCHMARKS.md) remain intact; their wins do not establish any V2 performance result.
+V2 is the current reusable performance suite for Pixstride versus imgproxy on native Linux x86_64 and ARM64. New collections use protocol **2.3** on the 1,000-case catalog. Historical 25-case results are available in [V1 results and methodology](BENCHMARKS.md).
 
 <!-- benchmark-v2-candidate:summary:start -->
 Current benchmark **v2.2: 1,000 distinct workloads** — **target not met**. Every workload and every service/quality failure is retained.
@@ -113,7 +113,9 @@ Protocol **2.1** allows **1,800 seconds per case**, shared by all engines. Its c
 
 Protocol **2.2** allows **3,600 seconds per case**, shared by all engines. The collection deadline is the only change: the same 1,000 workloads, corpus, six balanced batches of 24 requests, five warmups, three repetitions, CPU/memory/PID limits, HTTP timeout, pixel budgets and strict victory rules apply. Extra collection time does not make a timeout count as a win.
 
-Schema-3 raw reports explicitly declare `protocol_version: "2.1"` or `"2.2"`; schema-2 reports without that field remain protocol 2.0. The validator rejects missing, unknown or inconsistent versions and mixed-protocol cohorts. Historical aggregates and hashes are recomputed unchanged. Current CLI collection defaults to 2.2; `--protocol-version 2.0` or `2.1` reproduces the corresponding earlier collection budget with current tooling. A checkout of an older harness uses its original CLI without this new flag.
+Protocol **2.3** reads explicit sRGB BMP V5 alpha masks in both engines' outputs. Pillow's default BI_RGB32 decoder treated those bytes as padding. The corrected decoder preserves the catalog, sampling, numerical thresholds, service limits, 3,600-second case budget and strict victory rule of 2.2. Earlier reports retain the measurements and pixel comparisons made with their original decoders.
+
+Schema-3 raw reports declare protocol 2.1, 2.2 or 2.3. Schema-2 reports retain protocol 2.0. The validator rejects mixed and inconsistent versions. New CLI collections default to 2.3. Use `--protocol-version` to select an earlier protocol.
 
 ## Complete protocol 2.2 campaigns
 
@@ -134,7 +136,7 @@ HTTP latency spans fresh TCP request initiation through the complete loopback re
 
 Lifetime cgroup `memory.peak` includes startup, preflight, warmups, workers, page cache and kernel charges. It is not process RSS. File-page charging and shared-host scheduling/frequency remain sources of variation. Services are compared within the same case/VM. Hardware can differ between shards and repetitions; this is not an x86-versus-ARM or programming-language performance claim.
 
-The case deadline is 3,600 seconds in protocol 2.2 (1,800 in 2.1 and 600 in 2.0), and an individual HTTP request is bounded at 60 seconds. The work alarm is cancelled before ownership-checked container cleanup, so an expected deadline cannot abandon a service; total elapsed time, including cleanup, still determines a budget failure. Expected service/codec/resource failures preserve their diagnostics and completed/partial batches; other engines and subsequent cases still run. Infrastructure errors and interruptions retain available partial reports but invalidate complete-coverage claims. Artifact upload after a runner hard kill is best-effort; missing artifacts never become complete results.
+The case deadline is 3,600 seconds in protocols 2.2 and 2.3 (1,800 in 2.1 and 600 in 2.0), and an individual HTTP request is bounded at 60 seconds. The work alarm is cancelled before ownership-checked container cleanup. Total elapsed time, including cleanup, still determines a budget failure. Expected service, codec and resource failures preserve their diagnostics and completed or partial batches. Infrastructure errors and interruptions invalidate complete coverage while retaining available partial reports.
 
 ## Pixel agreement and file size
 
@@ -194,13 +196,13 @@ The [candidate workflow](.github/workflows/benchmark-v2-candidate.yml) builds th
 
 The two native build manifests bind source revision/tree, Dockerfile and Cargo.lock hashes, package version and inspected native image IDs. `benchmark_v2_candidate.py pins` joins them into an explicit generated pins file outside the checkout. Every shard must use that file, the same clean harness revision and the matching architecture's local image ID. Candidate collection cannot use published provenance, and published collection cannot accept a candidate image.
 
-The candidate workflow also requires corpus SHA256 `4b7467347c61684f350a8ab15eca6ec7dc02708e09c17e31a2d80c1e2579ff05`, matching all 120 input files in the retained release preflight. A generator or codec update that changes their bytes stops preparation before any comparison runs.
+Candidate preparation, collection and import require corpus SHA256 `4b7467347c61684f350a8ab15eca6ec7dc02708e09c17e31a2d80c1e2579ff05`, matching all 120 input files in the retained release preflight. Use the validated shared corpus artifact on both architectures.
 
-Preflight runs all 80 shards; full `measure` mode runs all 240 shards with the same sampling, quality and resource rules above. Up to 20 jobs run concurrently. Native jobs have a 300-minute administrative bound; protocol 2.2's per-case collection deadline is 3,600 seconds. Build jobs have a 120-minute bound. Historical workflows retain their original bounds in their committed source.
+Preflight runs all 80 shards. Full `measure` mode runs all 240 shards with the sampling, quality and resource rules above. Up to 20 jobs run concurrently. Native jobs have a 300-minute administrative bound, and build jobs have a 120-minute bound.
 
 After the corrected native preflight passes, candidate-branch pushes default to full `measure` mode. Manual dispatch still offers both `preflight` and `measure`. CLI collection retains its explicit mode and defaults to preflight.
 
-The runner additionally requires `--versions candidate-pins.json --pixstride-image sha256:... --candidate-revision FULL_SHA`. Aggregate and archive candidate reports explicitly:
+The runner requires `--versions candidate-pins.json --pixstride-image sha256:... --candidate-revision FULL_SHA`. GitHub Actions binds every report to its workflow run and attempt. For CLI collection, generate one ID with `python3 -c 'import uuid; print(uuid.uuid4().hex)'` and pass it as `--campaign-id ID` to every shard on both architectures. The importer requires one shared collection identity. Aggregate and archive candidate reports explicitly.
 
 ```sh
 .venv-benchmark/bin/python scripts/benchmark_v2_report.py --reports .benchmark-v2-results/native-*/report.json --versions candidate-pins.json --mode measure --output candidate-measure.json --markdown candidate-measure.md
@@ -210,7 +212,7 @@ The runner additionally requires `--versions candidate-pins.json --pixstride-ima
 
 Use `--mode preflight` for the complete 80-shard validation cohort. Candidate preflight diagnostics retain reference failures as well as Pixstride failures; inspect all reference/quality counts before proceeding to timings. Candidate indices, history and generated summary markers are separate from published evidence (`candidate-preflight-index.json`, `candidate-measure-index.json`). Full results include every failure, non-winning case and metric ratio; median reductions use all retained comparable observations, including losses and numerical pixel regressions. No candidate result establishes a performance claim for the published 0.4.0 image.
 
-The candidate headline follows the latest complete campaign's first shard start time, derived from validated raw timestamps. A newer measurement replaces an older preflight even when their source commits differ; a newer preflight also supersedes older timings. Equal timestamps with different targets are rejected rather than selecting a favorable result.
+The candidate headline follows the latest complete campaign's first shard start time, derived from validated raw timestamps. A newer preflight can supersede older timings. Late imports of older campaigns go into history, and ambiguous same-mode timestamps are rejected.
 
 ### Published images
 

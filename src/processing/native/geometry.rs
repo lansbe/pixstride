@@ -2,7 +2,7 @@
 use super::engine::checked;
 use crate::{ops as plan, request::Request, Error};
 use libvips::{
-    enums::{Angle, Direction, Extend, Kernel},
+    enums::{Angle, BandFormat, Direction, Extend, Interpretation, Kernel},
     voption::{Setter, VOption},
     VipsImage,
 };
@@ -338,46 +338,44 @@ pub(super) fn decorate(mut image: VipsImage, r: &Request, d: f64) -> Result<Vips
             .map_err(|_| "native padding failed")?;
     }
     if let Some(color) = r.options.background {
-        image = background(image, color, r.extra.preserve_hdr)?;
+        image = background(image, color)?;
     }
     Ok(image)
 }
 
-pub(super) fn background(
-    mut image: VipsImage,
-    color: [u8; 4],
-    preserve_hdr: bool,
-) -> Result<VipsImage, Error> {
+pub(super) fn background(mut image: VipsImage, color: [u8; 4]) -> Result<VipsImage, Error> {
     if !image.hasalpha() {
         return Ok(image);
     }
-    if image.hasalpha()
-        && (color[0] != color[1] || color[1] != color[2])
-        && matches!(
-            image.get_interpretation(),
-            Ok(libvips::enums::Interpretation::BW | libvips::enums::Interpretation::Grey16)
-        )
-    {
+    let space = image
+        .get_interpretation()
+        .map_err(|_| "invalid native background colour space")?;
+    let [red, green, blue, _] = color;
+    let colored = red != green || green != blue;
+    let target = match space {
+        Interpretation::BW if colored => Interpretation::Srgb,
+        Interpretation::Grey16 if colored => Interpretation::Rgb16,
+        Interpretation::BW
+        | Interpretation::Grey16
+        | Interpretation::Srgb
+        | Interpretation::Rgb16 => space,
+        Interpretation::Scrgb => Interpretation::Rgb16,
+        _ if matches!(image.get_format(), Ok(BandFormat::Uchar | BandFormat::Char)) => {
+            Interpretation::Srgb
+        }
+        _ => Interpretation::Rgb16,
+    };
+    if target != space {
         image = image
-            .colourspace(if preserve_hdr {
-                libvips::enums::Interpretation::Rgb16
-            } else {
-                libvips::enums::Interpretation::Srgb
-            })
+            .colourspace(target)
             .map_err(|_| "native background colour conversion failed")?;
     }
-    let scale = if matches!(
-        image.get_interpretation(),
-        Ok(libvips::enums::Interpretation::Rgb16 | libvips::enums::Interpretation::Grey16)
-    ) {
+    let scale = if matches!(target, Interpretation::Rgb16 | Interpretation::Grey16) {
         257.0
     } else {
         1.0
     };
-    let background = color[..3]
-        .iter()
-        .map(|&c| f64::from(c) * scale)
-        .collect::<Vec<_>>();
+    let background = [red, green, blue].map(|channel| f64::from(channel) * scale);
     image = image
         .flatten_with_opts(VOption::new().set("background", background.as_slice()))
         .map_err(|_| "native background failed")?;

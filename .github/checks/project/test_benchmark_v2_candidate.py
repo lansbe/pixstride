@@ -6,9 +6,12 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from types import SimpleNamespace
 from unittest.mock import patch
 sys.path.insert(0,str(Path(__file__).resolve().parents[3]/'scripts'))
-from benchmark_fixtures import ROOT
+from benchmark_fixtures import ROOT,corpus_hash
+import benchmark_v2
+import benchmark_v2_fixtures
 from benchmark_v2_report import aggregate,target,validate_shard
 from benchmark_v2_snapshot import record,check,with_summary
 from benchmark_v2_tables import summary
@@ -23,6 +26,7 @@ def candidate_evidence(mode='preflight'):
     pins['pixstride']=dict(published=False,version='0.4.0',candidate=dict(SOURCE),images=dict(IDS))
     for report in reports:
         arch=report['host']['architecture']
+        report['workflow_url']='https://github.com/lansbe/pixstride/actions/runs/123'
         report['images']['pixstride']=dict(reference=IDS[arch],image_id=IDS[arch],architecture=arch,os='linux',
             repo_digests=[],labels={'org.opencontainers.image.revision':SOURCE['revision']},
             candidate=dict(SOURCE),capabilities=dict(version='0.4.0'))
@@ -30,6 +34,58 @@ def candidate_evidence(mode='preflight'):
 
 
 class CandidateV2Tests(unittest.TestCase):
+    def setUp(self):
+        reports,_=evidence()
+        pinned=patch.object(benchmark_v2_fixtures,'CANDIDATE_CORPUS_SHA256',
+                            reports[0]['fixtures']['corpus_sha256'],create=True)
+        pinned.start()
+        self.addCleanup(pinned.stop)
+
+    def test_candidate_runner_and_import_reject_a_self_consistent_alternate_corpus(self):
+        reports,pins=candidate_evidence()
+        report=copy.deepcopy(reports[0])
+        manifest=report['fixtures']
+        manifest['files'][next(iter(manifest['files']))]['sha256']='f'*64
+        manifest['corpus_sha256']=corpus_hash(manifest)
+        with self.subTest(entry='import'),self.assertRaisesRegex(ValueError,'canonical V2 corpus'):
+            validate_shard(report,pins)
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp)
+            versions=root/'pins.json'
+            versions.write_text(json.dumps(pins))
+            args=SimpleNamespace(mode='preflight',architecture=None,repetition=1,fixtures=root,
+                                 shard_index=0,case=None,versions=versions,docker='docker',
+                                 pixstride_image=IDS['amd64'],candidate_revision=SOURCE['revision'])
+            with patch.object(benchmark_v2.sys,'platform','linux'), \
+                    patch.object(benchmark_v2,'verify',return_value=manifest), \
+                    patch.object(benchmark_v2,'Docker',side_effect=AssertionError('Docker must not start')), \
+                    patch.object(benchmark_v2.os,'sched_getaffinity',return_value={0,1,2},create=True):
+                with self.assertRaisesRegex(ValueError,'canonical V2 corpus'):
+                    benchmark_v2.run(args)
+
+    def test_candidate_cohort_cannot_mix_distinct_workflow_runs_or_manual_shards(self):
+        reports,pins=candidate_evidence()
+        url='https://github.com/lansbe/pixstride/actions/runs/'
+        for report in reports:report['workflow_url']=url+'123'
+        for other in (url+'456',None):
+            reports[-1]['workflow_url']=other
+            if other is None:reports[-1]['campaign_id']='c'*32
+            with self.subTest(other=other),self.assertRaisesRegex(ValueError,'Mixed V2 collection identity'):
+                aggregate(reports,'preflight',pins)
+        del reports[-1]['campaign_id']
+        reports[-1]['workflow_url']=url+'123'
+        reports[-1]['workflow_run_attempt']=2
+        with self.assertRaisesRegex(ValueError,'Mixed V2 collection identity'):
+            aggregate(reports,'preflight',pins)
+        del reports[-1]['workflow_run_attempt']
+        for report in reports:
+            report['workflow_url']=None
+            report['campaign_id']='c'*32
+        self.assertEqual(aggregate(reports,'preflight',pins)['report_count'],80)
+        reports[-1]['campaign_id']='d'*32
+        with self.assertRaisesRegex(ValueError,'Mixed V2 collection identity'):
+            aggregate(reports,'preflight',pins)
+
     def test_typed_unreleased_target_accepts_complete_preflight_but_flag_alone_is_insufficient(self):
         reports,pins=candidate_evidence()
         result=aggregate(reports,'preflight',pins)
@@ -105,10 +161,15 @@ class CandidateV2Tests(unittest.TestCase):
             self.assertEqual((root/'benchmarks/results/v2/preflight-index.json').read_bytes(),old_index)
             text=(root/'README.md').read_text();self.assertEqual(text.split(start)[1].split('<!-- benchmark-v2:summary:end -->')[0],old_block)
             self.assertIn('<!-- benchmark-v2-candidate:summary:start -->',text)
-            reports[0]['started_at']='2026-11-17T00:01:00+00:00';paths[0].write_text(json.dumps(reports[0]))
-            record(paths,'preflight',root,pins=pins)
+            older=[path.read_bytes() for path in paths]
+            for path,report in zip(paths,reports):
+                report['started_at']='2026-11-17T00:01:00+00:00'
+                path.write_text(json.dumps(report))
+            latest=record(paths,'preflight',root,pins=pins)
             history=next((root/'benchmarks/results/v2').glob('history-candidate-preflight-*-index.json'))
-            check(root)
+            for path,raw in zip(paths,older):path.write_bytes(raw)
+            record(paths,'preflight',root,pins=pins)
+            self.assertEqual(check(root)['candidate-preflight']['campaign_started_at'],latest['campaign_started_at'])
             history.rename(history.parent/'history-candidate-preflight-000000000000-index.json')
             with self.assertRaises(ValueError):check(root)
 

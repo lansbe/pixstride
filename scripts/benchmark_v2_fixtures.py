@@ -11,6 +11,12 @@ from benchmark_fixtures import (PILLOW_VERSION,SOURCES,corpus_hash,download,norm
 from benchmark_v2_catalog import CATALOG,SUITE,fixture_specs,verify_catalog
 
 FORMATS={'jpg':'JPEG','png':'PNG','webp':'WEBP','tiff':'TIFF','bmp':'BMP','gif':'GIF'}
+CANDIDATE_CORPUS_SHA256='4b7467347c61684f350a8ab15eca6ec7dc02708e09c17e31a2d80c1e2579ff05'
+
+
+def require_candidate_corpus(manifest):
+    if manifest['corpus_sha256']!=CANDIDATE_CORPUS_SHA256:
+        raise ValueError('Candidate requires the canonical V2 corpus')
 
 
 def require_decoders():

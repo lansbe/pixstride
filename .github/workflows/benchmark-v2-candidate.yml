@@ -1,4 +1,4 @@
-name: Unreleased candidate benchmarks v2.2 (1000 cases)
+name: Unreleased candidate benchmarks v2.3 (1000 cases)
 on:
   workflow_dispatch:
     inputs:
@@ -186,7 +186,7 @@ jobs:
             --versions "$RUNNER_TEMP/pins/candidate-pins.json" \
             --pixstride-image "$CANDIDATE_IMAGE_ID" --candidate-revision "$GITHUB_SHA" \
             --mode "$BENCHMARK_MODE" --architecture "$BENCHMARK_ARCH" \
-            --protocol-version 2.2 \
+            --protocol-version 2.3 \
             --repetition "$BENCHMARK_REPETITION" --shard-index "$BENCHMARK_SHARD"
       - name: Verify owned containers were cleaned
         if: always()

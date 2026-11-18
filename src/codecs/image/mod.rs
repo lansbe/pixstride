@@ -1,11 +1,12 @@
 use crate::{Buffer, Error, Image, MAX_PIXELS};
 /// A validated view of the BMP raster. Its bytes remain owned by the caller.
-/// BI_RGB32's fourth byte is padding, not alpha.
+/// An explicit V5 alpha mask distinguishes alpha from BI_RGB32 padding.
 pub(crate) struct BmpView<'a> {
     width: usize,
     height: usize,
     top_down: bool,
     channels: usize,
+    alpha: bool,
     stride: usize,
     source: &'a [u8],
 }
@@ -14,6 +15,7 @@ pub(crate) struct BmpLayout {
     height: usize,
     top_down: bool,
     channels: usize,
+    alpha: bool,
     stride: usize,
     offset: usize,
     end: usize,

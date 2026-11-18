@@ -147,10 +147,11 @@ mod tests {
             u16::from_le_bytes(output.body[28..30].try_into().unwrap()),
             24
         );
-        let (_, _, pixels) = crate::image::BmpView::parse(&output.body)
+        let (_, _, bands, pixels) = crate::image::BmpView::parse(&output.body)
             .unwrap()
-            .decode_rgb()
+            .decode_native()
             .unwrap();
+        assert_eq!(bands, 3);
         assert_eq!(pixels, [255, 0, 0, 255, 0, 0]);
         let partial = br#"<svg xmlns="http://www.w3.org/2000/svg" width="2" height="1"><rect width="2" height="1" fill="red" opacity="0.5"/></svg>"#;
         let output = super::super::engine::process(partial.to_vec(), &request(), &[]).unwrap();
@@ -158,6 +159,7 @@ mod tests {
             u16::from_le_bytes(output.body[28..30].try_into().unwrap()),
             32
         );
-        assert_eq!(&output.body[54..], &[0, 0, 255, 128, 0, 0, 255, 128]);
+        let decoded = crate::image::bmp(&output.body).unwrap();
+        assert_eq!(decoded.pixels.as_slice(), [255, 0, 0, 128, 255, 0, 0, 128]);
     }
 }

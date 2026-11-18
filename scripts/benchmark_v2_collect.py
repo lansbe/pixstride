@@ -136,7 +136,10 @@ def collect(case,docker,images,fixtures,cpus,owner,index,protocol,mode,progress,
                     entry=result['engines'][engine]
                     if entry['status']=='success':
                         active(engine,'pixels')
-                        try:entry['pixels_vs_imgproxy']=pixel_agreement(bodies[engine],bodies['imgproxy'])
+                        try:
+                            entry['pixels_vs_imgproxy']=pixel_agreement(
+                                bodies[engine],bodies['imgproxy'],
+                                explicit_bmp_alpha=protocol.get('bmp_alpha')=='explicit-v5-masks')
                         except EXPECTED_ERRORS as error:fail(entry,error,'pixels')
                         flush()
             result['active']=dict(engine=None,phase='cleanup',batch=None);flush()

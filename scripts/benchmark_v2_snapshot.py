@@ -76,7 +76,7 @@ def candidate_headline(results):
 
 
 def check(root=ROOT):
-    directory=root/DIRECTORY;results={};referenced=set()
+    directory=root/DIRECTORY;results={};referenced=set();candidate_history={}
     if directory.exists():
         for path in sorted(directory.glob('*-index.json')):
             current=path.name in ('preflight-index.json','measure-index.json','candidate-preflight-index.json','candidate-measure-index.json')
@@ -85,11 +85,17 @@ def check(root=ROOT):
                 key=('candidate-' if result['pins']['pixstride']['published'] is False else '')+result['mode']
                 if path.name!=key+'-index.json':raise ValueError('V2 index mode differs from filename')
                 results[key]=result
+            elif result['pins']['pixstride']['published'] is False:
+                mode=result['mode'];started=dt.datetime.fromisoformat(result['campaign_started_at'])
+                candidate_history[mode]=max(started,candidate_history.get(mode,started))
         if {p.name for p in directory.glob('*.raw.json.gz')}!=referenced:
             raise ValueError('V2 raw archives without their complete cohort index')
     pins=load_pins(root/'benchmarks/versions-v2.json')
     body=summary(headline(results,pins),pins)
     candidates={key.removeprefix('candidate-'):value for key,value in results.items() if key.startswith('candidate-')}
+    for mode,started in candidate_history.items():
+        if mode not in candidates or started>dt.datetime.fromisoformat(candidates[mode]['campaign_started_at']):
+            raise ValueError('V2 candidate history is newer than its current index')
     candidate_result=candidate_headline(candidates)
     for name in DOCS:
         path=root/name
@@ -139,13 +145,23 @@ def record(paths,mode,root=ROOT,pins=None):
         archives[name]=archive
         entries.append(dict(file=name,sha256=sha256(archive),raw_sha256=fingerprint))
     index=dict(schema_version=1,kind='v2-candidate-complete-cohort' if candidate else 'v2-complete-cohort',mode=mode,reports=entries,result=result)
-    target=directory/(prefix+mode+'-index.json');new=encoded(index)
-    if target.exists() and target.read_bytes()!=new:
-        old=target.read_bytes();history=directory/f'history-{prefix}{mode}-{sha256(old)[:12]}-index.json'
-        if history.exists() and history.read_bytes()!=old:raise ValueError('V2 history fingerprint collision')
-        history.write_bytes(old)
+    destination=directory/(prefix+mode+'-index.json');new=encoded(index)
+    def history(raw):
+        path=directory/f'history-{prefix}{mode}-{sha256(raw)[:12]}-index.json'
+        if path.exists() and path.read_bytes()!=raw:raise ValueError('V2 history fingerprint collision')
+        return path
+    previous=None
+    if destination.exists() and (old:=destination.read_bytes())!=new:
+        if candidate:
+            old_started=dt.datetime.fromisoformat(json.loads(old)['result']['campaign_started_at'])
+            new_started=dt.datetime.fromisoformat(result['campaign_started_at'])
+            if new_started==old_started:raise ValueError('Different V2 candidate cohorts have the same start time')
+            if new_started<old_started:destination=history(new)
+            else:previous=history(old),old
+        else:previous=history(old),old
     for name,archive in archives.items():(directory/name).write_bytes(archive)
-    target.write_bytes(new);sync(root);return result
+    if previous:previous[0].write_bytes(previous[1])
+    destination.write_bytes(new);sync(root);return result
 
 
 def main():

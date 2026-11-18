@@ -65,3 +65,22 @@ fn pixelation_averages_straight_color_and_alpha_independently() {
         }
     }
 }
+
+#[test]
+fn blurring_an_alpha_edge_never_reveals_hidden_blue() {
+    let mut r = request(2);
+    r.effects.blur_sigma = 1.25;
+    let pixels = [
+        [255, 0, 0, 255],
+        [255, 0, 0, 255],
+        [0, 0, 255, 0],
+        [0, 0, 255, 0],
+    ]
+    .concat()
+    .repeat(4);
+    let result = effects(image(&pixels, 4, 4, 4), &r).unwrap();
+    let pixel = result.getpoint(2, 2).unwrap();
+    assert!(pixel[3] > 0. && pixel[3] < 255.);
+    assert_eq!(pixel[2], 0.);
+    assert!(pixel[0] >= 254.);
+}

@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[3] / 'scripts'))
 import benchmark_v2 as runner
 from benchmark_v2_report import aggregate, validate_shard
 from benchmark_v2_tables import summary
+from benchmark_metrics import pixel_agreement
 from test_benchmark_v2_report import evidence
 
 
@@ -27,7 +28,7 @@ class ProtocolRevisionTests(unittest.TestCase):
             expected = {**legacy, 'case_deadline_seconds': 1800}
             self.assertEqual(runner.protocol(mode, '2.1'), expected)
             self.assertEqual(runner.protocol(mode, '2.0'), legacy)
-        for invalid in ('latest', '2.3', 2.1, None):
+        for invalid in ('latest', '2.4', 2.1, None):
             with self.assertRaises(ValueError):
                 runner.protocol('measure', invalid)
 
@@ -84,10 +85,11 @@ class ProtocolRevisionTests(unittest.TestCase):
         result['protocol'] = {**result['protocol'], 'case_deadline_seconds': 600}
         self.assertEqual(result, old)
 
-    def test_cli_defaults_to_22_and_can_rerun_both_previous_protocols(self):
+    def test_cli_defaults_to_23_and_can_rerun_previous_protocols(self):
         base = ['benchmark_v2.py', '--fixtures', '/tmp/corpus', '--output', '/tmp/report.json',
                 '--shard-index', '0', '--mode', 'measure']
-        for extra, expected in (([], '2.2'), (['--protocol-version', '2.0'], '2.0'),
+        for extra, expected in (([], '2.3'), (['--protocol-version', '2.2'], '2.2'),
+                                (['--protocol-version', '2.0'], '2.0'),
                                 (['--protocol-version', '2.1'], '2.1')):
             with patch.object(sys, 'argv', base + extra), patch.object(runner, 'run') as run:
                 runner.main()
@@ -126,6 +128,42 @@ class ProtocolRevisionTests(unittest.TestCase):
         self.assertEqual(summary(old), old_summary)
         self.assertIn('**v2.1: 1,000 distinct workloads**', old_summary)
         self.assertIn('1,800 seconds per case', old_summary)
+
+    def test_revision_23_retains_limits_and_requires_explicit_bmp_alpha_decoding(self):
+        reports, pins = evidence()
+        prior = runner.protocol('preflight', '2.2')
+        current = runner.protocol('preflight', '2.3')
+        self.assertEqual(current, {**prior, 'bmp_alpha': 'explicit-v5-masks'})
+        report = {**reports[0], 'schema_version': 3, 'protocol_version': '2.3', 'protocol': current}
+        validate_shard(report, pins)
+        with self.assertRaises(ValueError):
+            validate_shard({**report, 'protocol': prior}, pins)
+        with self.assertRaisesRegex(ValueError, 'Mixed V2'):
+            aggregate([report, revised(reports[1], '2.2')], 'preflight', pins)
+
+    def test_v5_alpha_masks_are_decoded_on_both_sides_without_using_legacy_padding(self):
+        masked = bytearray(146)
+        masked[:2] = b'BM'
+        for offset, value in [(2,146),(10,138),(14,124),(18,2),(22,1),(34,8),
+                              (54,0x00ff0000),(58,0x0000ff00),(62,0x000000ff),
+                              (66,0xff000000),(70,0x73524742)]:
+            masked[offset:offset+4] = value.to_bytes(4,'little')
+        masked[26:30] = b'\x01\x00\x20\x00'
+        masked[138:] = bytes([33,22,11,0,66,55,44,128])
+        bitfields = bytearray(masked)
+        bitfields[30] = 3
+        self.assertFalse(pixel_agreement(bytes(masked), bytes(bitfields))['exact_visible_pixels'])
+        compare = lambda a,b: pixel_agreement(bytes(a),bytes(b),explicit_bmp_alpha=True)
+        self.assertTrue(compare(masked,bitfields)['exact_visible_pixels'])
+        changed = bytearray(masked)
+        changed[-1] = 127
+        self.assertEqual(compare(changed,bitfields)['alpha']['max_error'],1)
+        legacy = bytearray(masked[:54] + masked[138:])
+        for offset, value in [(2,62),(10,54),(14,40)]:
+            legacy[offset:offset+4] = value.to_bytes(4,'little')
+        opaque = bytearray(bitfields)
+        opaque[-5] = opaque[-1] = 255
+        self.assertTrue(compare(legacy,opaque)['exact_visible_pixels'])
 
 
 if __name__ == '__main__':

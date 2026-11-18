@@ -53,10 +53,11 @@ fn row_permutations_match_literal_rgb_matrices() {
         let output = try_process(&source(), &request(options), &[])
             .unwrap()
             .unwrap();
-        let (_, _, pixels) = crate::image::BmpView::parse(&output.body)
+        let (_, _, bands, pixels) = crate::image::BmpView::parse(&output.body)
             .unwrap()
-            .decode_rgb()
+            .decode_native()
             .unwrap();
+        assert_eq!(bands, 3);
         let indices: Vec<u8> = pixels.chunks_exact(3).map(|p| p[0]).collect();
         assert_eq!(indices, expected, "{options}");
     }
@@ -134,12 +135,13 @@ fn real_worker_engine_flips_odd_width_rows_without_moving_padding() {
     let source = crate::png_encode::encode_pixels(33, 3, &pixels[..], 3).unwrap();
     let output =
         super::super::engine::process(source.as_slice().to_vec(), &request("fl:1:1"), &[]).unwrap();
-    let (width, height, rgb) = crate::image::BmpView::parse(&output.body)
+    let (width, height, bands, rgb) = crate::image::BmpView::parse(&output.body)
         .unwrap()
-        .decode_rgb()
+        .decode_native()
         .unwrap();
     let expected: Vec<_> = pixels.chunks_exact(3).rev().flatten().copied().collect();
     assert_eq!([width, height], [33, 3]);
+    assert_eq!(bands, 3);
     assert_eq!(rgb, expected);
     assert!(output.body[54..].chunks_exact(100).all(|row| row[99] == 0));
 }

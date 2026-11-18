@@ -24,6 +24,74 @@ fn native_rgba_bmp_preserves_straight_bgra_without_white_compositing() {
     assert_eq!(u16::from_le_bytes(bytes[28..30].try_into().unwrap()), 32);
     let offset = u32::from_le_bytes(bytes[10..14].try_into().unwrap()) as usize;
     assert_eq!(&bytes[offset..], &[33, 22, 11, 0, 66, 55, 44, 128]);
+    let reloaded = super::super::engine::load(&bytes, 1, false).unwrap();
+    assert!(reloaded.hasalpha());
+    assert_eq!(reloaded.getpoint(0, 0).unwrap(), [11., 22., 33., 0.]);
+    assert_eq!(reloaded.getpoint(1, 0).unwrap(), [44., 55., 66., 128.]);
+    assert_eq!(bytes[14..18], 124u32.to_le_bytes());
+    assert_eq!(bytes[30..34], 3u32.to_le_bytes());
+    assert_eq!(bytes[66..70], 0xff000000u32.to_le_bytes());
+    let pixels = crate::image::bmp(&bytes).unwrap();
+    assert_eq!(pixels.pixels.as_slice(), [11, 22, 33, 0, 44, 55, 66, 128]);
+    for source_limit in [false, true] {
+        let mut limited = request("", "png");
+        if source_limit {
+            limited.extra.max_source_pixels = 1;
+        } else {
+            limited.extra.max_frame_pixels = 1;
+        }
+        let result = super::super::engine::process(bytes.clone(), &limited, &[]);
+        assert_eq!(result.err(), Some("BMP source pixel budget exceeded"));
+    }
+}
+
+#[test]
+fn colored_background_keeps_eight_bit_gray_alpha_eligible_for_jpeg_with_hdr_requested() {
+    let source = crate::png_encode::encode_pixels(16, 16, [94, 0].repeat(16 * 16), 2).unwrap();
+    let result = super::super::engine::process(
+        source.as_slice().to_vec(),
+        &request("ph:1/bg:112233/q:100/", "jpg"),
+        &[],
+    )
+    .unwrap();
+    let decoded = VipsImage::new_from_buffer(&result.body, "").unwrap();
+    let pixel = decoded.getpoint(8, 8).unwrap();
+    assert_eq!(pixel.len(), 3);
+    assert!(pixel
+        .iter()
+        .zip([17., 34., 51.])
+        .all(|(n, expected)| (n - expected).abs() <= 2.));
+}
+
+#[test]
+fn colored_background_matches_high_precision_sample_range() {
+    use libvips::enums::{BandFormat, Interpretation};
+    super::super::engine::initialize().unwrap();
+    let gray: Vec<_> = [6000u16, 0]
+        .into_iter()
+        .flat_map(u16::to_ne_bytes)
+        .collect();
+    let linear: Vec<_> = [0.1f32, 0.2, 0.3, 0.0]
+        .into_iter()
+        .flat_map(f32::to_ne_bytes)
+        .collect();
+    for (pixels, bands, format, space) in [
+        (gray, 2, BandFormat::Ushort, Interpretation::Grey16),
+        (linear, 4, BandFormat::Float, Interpretation::Scrgb),
+    ] {
+        let input = VipsImage::new_from_memory_copy(&pixels, 1, 1, bands, format)
+            .unwrap()
+            .copy_with_opts(VOption::new().set("interpretation", space as i32))
+            .unwrap();
+        let output = super::super::geometry::background(input, [17, 34, 51, 255]).unwrap();
+        assert_eq!(
+            output.get_format().unwrap(),
+            BandFormat::Ushort,
+            "{space:?}"
+        );
+        assert_eq!(output.get_interpretation().unwrap(), Interpretation::Rgb16);
+        assert_eq!(output.getpoint(0, 0).unwrap(), [4369., 8738., 13107.]);
+    }
 }
 
 #[test]

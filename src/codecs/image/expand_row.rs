@@ -171,6 +171,9 @@ pub(crate) fn le32(data: &[u8], at: usize) -> Result<u32, Error> {
     let b = data.get(at..at + 4).ok_or("truncated BMP header")?;
     Ok(u32::from_le_bytes([b[0], b[1], b[2], b[3]]))
 }
+pub(crate) const BMP_ALPHA_MASKS: [u8; 16] =
+    [0, 0, 255, 0, 0, 255, 0, 0, 255, 0, 0, 0, 0, 0, 0, 255];
+
 impl BmpLayout {
     pub(crate) fn parse(data: &[u8], file_len: usize) -> Result<Self, Error> {
         let offset = le32(data, 10)? as usize;
@@ -187,8 +190,16 @@ impl BmpLayout {
         let height = h.unsigned_abs() as usize;
         dimensions(width, height)?;
         let bpp = le16(data, 28)?;
-        if le16(data, 26)? != 1 || le32(data, 30)? != 0 || (bpp != 24 && bpp != 32) {
-            return Err("only uncompressed BMP RGB24/RGB32 supported");
+        let compression = le32(data, 30)?;
+        let alpha = bpp == 32
+            && header == 124
+            && matches!(compression, 0 | 3)
+            && data.get(54..70) == Some(BMP_ALPHA_MASKS.as_slice())
+            && data.get(70..74) == Some(b"BGRs")
+            && le32(data, 126)? == 0
+            && le32(data, 130)? == 0;
+        if le16(data, 26)? != 1 || (!alpha && (compression != 0 || !matches!(bpp, 24 | 32))) {
+            return Err("unsupported BMP pixel layout");
         }
         let channels = (bpp / 8) as usize;
         let stride = (width * channels + 3) & !3;
@@ -201,6 +212,7 @@ impl BmpLayout {
             height,
             top_down: h < 0,
             channels,
+            alpha,
             stride,
             offset,
             end,
@@ -215,6 +227,7 @@ impl<'a> BmpView<'a> {
             height: layout.height,
             top_down: layout.top_down,
             channels: layout.channels,
+            alpha: layout.alpha,
             stride: layout.stride,
             source: &data[layout.offset..layout.end],
         })
@@ -222,16 +235,7 @@ impl<'a> BmpView<'a> {
 
     pub(crate) fn decode(&self) -> Result<Image, Error> {
         let mut pixels = Buffer::new(dimensions(self.width, self.height)?)?;
-        for y in 0..self.height {
-            let sy = if self.top_down {
-                y
-            } else {
-                self.height - 1 - y
-            };
-            let row = &self.source[sy * self.stride..sy * self.stride + self.width * self.channels];
-            let out = &mut pixels.as_mut_slice()[y * self.width * 4..(y + 1) * self.width * 4];
-            expand_row(row, out, self.channels, true);
-        }
+        self.expand(pixels.as_mut_slice());
         Ok(Image {
             width: self.width,
             height: self.height,
@@ -239,21 +243,54 @@ impl<'a> BmpView<'a> {
         })
     }
 
-    /// BI_RGB24/32 contain RGB samples; the fourth BI_RGB32 byte is padding.
-    /// Native RGB import avoids expanding these opaque pixels to synthetic alpha.
     #[cfg(feature = "native-codecs")]
-    pub(crate) fn decode_rgb(&self) -> Result<(usize, usize, Vec<u8>), Error> {
+    pub(crate) fn dimensions(&self) -> [usize; 2] {
+        [self.width, self.height]
+    }
+
+    fn expand(&self, pixels: &mut [u8]) {
+        for y in 0..self.height {
+            let sy = if self.top_down {
+                y
+            } else {
+                self.height - 1 - y
+            };
+            let row = &self.source[sy * self.stride..sy * self.stride + self.width * self.channels];
+            let out = &mut pixels[y * self.width * 4..(y + 1) * self.width * 4];
+            if self.alpha {
+                for (bgra, rgba) in row
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .zip(out.as_chunks_mut::<4>().0)
+                {
+                    *rgba = [bgra[2], bgra[1], bgra[0], bgra[3]];
+                }
+            } else {
+                expand_row(row, out, self.channels, true);
+            }
+        }
+    }
+
+    /// Import opaque rasters without allocating a synthetic alpha channel.
+    #[cfg(feature = "native-codecs")]
+    pub(crate) fn decode_native(&self) -> Result<(usize, usize, i32, Vec<u8>), Error> {
+        let bands = if self.alpha { 4 } else { 3 };
         let size = self
             .width
             .checked_mul(self.height)
-            .and_then(|n| n.checked_mul(3))
+            .and_then(|n| n.checked_mul(bands))
             .filter(|n| *n <= crate::MAX_FILE)
-            .ok_or("BMP RGB raster exceeds limit")?;
+            .ok_or("BMP raster exceeds limit")?;
         let mut pixels = Vec::new();
         pixels
             .try_reserve_exact(size)
-            .map_err(|_| "BMP RGB allocation failed")?;
+            .map_err(|_| "BMP allocation failed")?;
         pixels.resize(size, 0);
+        if self.alpha {
+            self.expand(&mut pixels);
+            return Ok((self.width, self.height, 4, pixels));
+        }
         for y in 0..self.height {
             let source_y = if self.top_down {
                 y
@@ -270,13 +307,16 @@ impl<'a> BmpView<'a> {
                 rgb.copy_from_slice(&[bgr[2], bgr[1], bgr[0]]);
             }
         }
-        Ok((self.width, self.height, pixels))
+        Ok((self.width, self.height, 3, pixels))
     }
 
     /// Normalize a validated, unchanged raster to the exact BMP24 layout used by
     /// encode_bmp. Copy pixels only: source padding/unused alpha are not metadata
     /// that may be forwarded to the newly zero-initialized output.
     pub(crate) fn encode_identity(&self) -> Result<Buffer, Error> {
+        if self.alpha {
+            return encode_bmp(&self.decode()?);
+        }
         let (mut buffer, stride) = bmp_output(self.width, self.height)?;
         let b = buffer.as_mut_slice();
         for row in 0..self.height {

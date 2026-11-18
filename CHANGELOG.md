@@ -6,6 +6,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- Add collection protocol 2.3 to compare explicit BMP V5 alpha from both engines. Keep all prior protocol results and the 2.2 sampling, deadline, resource limits, quality thresholds and victory criteria.
 - Add explicit collection protocol 2.2 with a shared 3,600-second case deadline after protocol 2.1 missed nine responses on one heavy x86_64 trial. Preserve complete 2.0/2.1 cohorts and their failures; workload definitions, samples, resource limits, numerical budgets and victory gates remain fixed.
 - Version collection protocol 2.1 explicitly, allowing 1,800 seconds per workload to complete heavy trials without changing the 1,000 cases, sampling, service resources, pixel budgets or strict victory gates. Preserve schema-2/600-second evidence and reject mixed or relabelled protocol cohorts.
 - Add explicit unreleased V2 candidate campaigns with one native Docker build per architecture, immutable image artifacts, source/tree/Dockerfile/lock provenance and separate complete-cohort archives. Keep published pins and historical evidence intact.
@@ -30,6 +31,9 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Refresh README and benchmark results with the actual published 0.4.0 image: all 25 cases win CPU, p50, p95 and lifetime peak cgroup memory in default and forced-native modes, in every run on three native Linux VMs per architecture. Retain all 64,800 timed requests, output-size/pixel differences, hardware identities and earlier losses separately. These observations do not certify perceptual equivalence or a universal performance guarantee.
 
 ### Fixed
+
+- Preserve native BMP transparency through an explicit V5 alpha mask and decode the same layout on reimport. Choose background compositing precision from the source color space and premultiply transparent images for native blur and sharpening.
+- Require the canonical V2 candidate corpus and one collection identity during collection and import. Retain late imports in history according to their original start time.
 
 - Keep opaque native RGB/grayscale samples unchanged when a background is supplied, and avoid charging convolution scratch to identity geometry such as large flips and quarter-turns. Preserve actual resize computation and pixel limits.
 - Match mirrored integer pixelation blocks, preserve straight RGBA samples in native 32-bit BMP output, and composite transparent JPEG output over the requested background or white by default.

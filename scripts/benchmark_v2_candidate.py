@@ -11,6 +11,20 @@ from benchmark_fixtures import ROOT,PILLOW_VERSION
 from benchmark_runtime import Docker,architecture,candidate_source,require_native_image,validate_candidate_image
 from release_policy import version_key
 
+
+def collection_identity(report):
+    workflow=report.get('workflow_url')
+    manual=report.get('campaign_id')
+    attempt=report.get('workflow_run_attempt',1)
+    if (manual is None and isinstance(workflow,str) and re.fullmatch(
+            r'https://[^/\s]+/[^/\s]+/[^/\s]+/actions/runs/[0-9]+',workflow)
+            and type(attempt) is int and attempt>0):
+        return workflow,attempt
+    if (workflow is None and 'workflow_run_attempt' not in report
+            and isinstance(manual,str) and re.fullmatch(r'[0-9a-f]{32}',manual)):
+        return manual,None
+    raise ValueError('Candidate V2 collection identity requires one workflow run or manual campaign ID')
+
 FIELDS={'revision':40,'tree':40,'dockerfile_sha256':64,'cargo_lock_sha256':64}
 
 

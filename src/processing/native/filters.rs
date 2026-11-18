@@ -8,9 +8,23 @@ use libvips::{
 };
 
 pub(super) fn effects(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
-    let filtered = r.effects.blur_sigma > 0.0
-        || r.effects.sharpen_sigma > 0.0
+    let neighborhood_filter = r.effects.blur_sigma > 0.0 || r.effects.sharpen_sigma > 0.0;
+    let filtered = neighborhood_filter
         || (r.effects.pixelate > 1 && image.get_width().max(image.get_height()) > 1);
+    let mut restore = None;
+    if neighborhood_filter && image.hasalpha() {
+        let format = image
+            .get_format()
+            .map_err(|_| "invalid native filter type")?;
+        let space = image
+            .get_interpretation()
+            .map_err(|_| "invalid native filter colour space")?;
+        image = image
+            .premultiply()
+            .and_then(|i| i.cast(format))
+            .map_err(|_| "native filter premultiplication failed")?;
+        restore = Some((space, format));
+    }
     if filtered && super::shared::fits_memory(&image) {
         // Finish the upstream geometry once; filter halos otherwise reevaluate
         // it while caches are disabled. HDR/large rasters keep their old route.
@@ -54,6 +68,13 @@ pub(super) fn effects(mut image: VipsImage, r: &Request) -> Result<VipsImage, Er
                 .extract_area(0, 0, w, h)
                 .map_err(|_| "native pixelation crop failed")?;
         }
+    }
+    if let Some((space, format)) = restore {
+        image = image
+            .unpremultiply()
+            .and_then(|i| i.colourspace(space))
+            .and_then(|i| i.cast(format))
+            .map_err(|_| "native filter alpha restoration failed")?;
     }
     Ok(image)
 }

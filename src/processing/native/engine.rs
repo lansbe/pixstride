@@ -51,12 +51,12 @@ fn load_with_owner(
         if data.len() > crate::MAX_FILE {
             return Err("input exceeds file limit");
         }
-        let (width, height, pixels) = crate::image::BmpView::parse(data)?.decode_rgb()?;
-        return VipsImage::new_from_owned_u8(pixels, width as i32, height as i32, 3)
+        let (width, height, bands, pixels) = crate::image::BmpView::parse(data)?.decode_native()?;
+        return VipsImage::new_from_owned_u8(pixels, width as i32, height as i32, bands)
             .and_then(|i| {
                 i.copy_with_opts(VOption::new().set("interpretation", Interpretation::Srgb as i32))
             })
-            .map_err(|_| "native RGB import failed");
+            .map_err(|_| "native BMP import failed");
     }
     if format == Some(OutputFormat::Ico) || data.starts_with(b"P6") {
         let img = crate::pipeline::decode(data)?;
@@ -195,7 +195,15 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
     if data.len() > r.extra.max_source_bytes.min(crate::MAX_FILE) {
         return Err("native source exceeds byte limit");
     }
-    if let Some([width, height]) = super::bmp_gray::source_dimensions(&data)? {
+    let bmp_dimensions = if data.starts_with(b"BM")
+        && data.get(14..18) == Some(&124u32.to_le_bytes())
+        && data.get(28..30) == Some(&32u16.to_le_bytes())
+    {
+        Some(crate::image::BmpView::parse(&data)?.dimensions())
+    } else {
+        super::bmp_gray::source_dimensions(&data)?
+    };
+    if let Some([width, height]) = bmp_dimensions {
         let pixels = width.checked_mul(height).ok_or("BMP dimensions overflow")?;
         if pixels > r.extra.max_source_pixels || pixels > r.extra.max_frame_pixels {
             return Err("BMP source pixel budget exceeded");
@@ -392,11 +400,7 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
         let frame = super::filters::effects(frame, r)?;
         let frame = geometry::decorate(frame, r, dpr)?;
         let frame = if format == OutputFormat::Jpeg {
-            geometry::background(
-                frame,
-                r.options.background.unwrap_or([255; 4]),
-                r.extra.preserve_hdr,
-            )?
+            geometry::background(frame, r.options.background.unwrap_or([255; 4]))?
         } else {
             frame
         };

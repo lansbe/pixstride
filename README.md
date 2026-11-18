@@ -82,7 +82,7 @@ Native responses retain the worker's received encoded allocation through HTTP ou
 
 Complete opaque 8-bit PNG palettes decode into owned RGB while retaining inherited palette encoding. Transparent, packed, interlaced and color-managed palettes use the native codec path; checksum and source-size validation still apply.
 
-New collections use **protocol v2.2**: the shared per-case observation budget is 3,600 seconds. The retained v2.0 campaigns exceeded their 600-second collection budget on expensive workloads, and v2.1 still lacked nine timed responses for workload 999 in one x86_64 repetition after 1,800 seconds. These deadlines affected imgproxy as well. All workloads, samples, pixel budgets, service limits and victory criteria stay fixed; earlier observations and failures retain their original protocol.
+New collections use **protocol v2.3**. Pixel comparisons read explicit BMP V5 alpha masks from either service. Earlier protocols treated the fourth byte of BI_RGB32 as padding, including files with those masks. Protocol v2.3 keeps the 3,600-second case budget, sampling, quality thresholds and service limits of v2.2. The archived results identify the protocol that produced them.
 
 <!-- benchmark-v2-candidate:summary:start -->
 Current benchmark **v2.2: 1,000 distinct workloads** — **target not met**. Every workload and every service/quality failure is retained.
