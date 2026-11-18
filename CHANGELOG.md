@@ -16,6 +16,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Record two complete 1,000-case protocol 2.2 comparisons on native Linux x86_64 and ARM64. Both complete all timed responses and pass the pixel budgets in both modes. Publish the strict win counts, median metric reductions and every loss in the benchmark documentation.
+
 - Retain the exact 256-color palette through eligible opaque Indexed8 PNG quarter-turns and flips into lossless BMP8, avoiding RGB expansion and preserving complete-stream validation and resource limits. Extend bounded native DIB40/BI_RGB8 input to complete RGB palettes, preserving the one-band gray path and enforcing the decoded-byte ceiling before allocation. Small outputs, size targeting, other transforms, alpha and color-managed sources keep their existing routes; encoded bytes and ETags can change.
 - Encode native BW8 BMP directly with a complete lossless gray palette when its exact file size is no larger than RGB24, retaining small-image byte-target successes. Add bounded native BI_RGB8/DIB40 grayscale-palette input for roundtrips, preserving palette mappings and source budgets before raster allocation; other native/built-in BMP routes stay unchanged.
 - Render eligible bounded byte SVG rasters once, verify every alpha sample and use RGB processing only when all are opaque. Keep true transparency, antialiasing and metadata, with existing HDR/linear/large-raster fallbacks.
