@@ -74,7 +74,7 @@ Both Pixstride modes, on each architecture, completed **967/1000 decoded trials*
 
 The [first complete campaign](https://github.com/lansbe/pixstride/actions/runs/43996121837), harness `943d9a0e614a9b331d05e84c6f904fd194b117ca`, also passed all 82 jobs and produced the same counts. Its [historical index](benchmarks/results/v2/history-preflight-357e2099eef6-index.json) and all 80 raw archives remain intact. Review regression tests then fixed deadline handling during pixel comparison and protected container cleanup; the current campaign reran every shard using that corrected collector. Neither campaign triggered a case deadline. All 162 native-report/aggregate ZIP digests were verified across the two campaigns, and both local aggregates exactly matched CI.
 
-No requests or tolerances were changed after these results, and no failing case was removed. This validates the new workload definitions and exposes limitations in the published service. V2 CPU/p50/p95/memory wins remain **not measured**: the full three-repeat timing campaign is a separate workflow mode. The older v1 25/25 result cannot be extended to this suite.
+No requests or tolerances were changed after these results, and no failing case was removed. This validates the new workload definitions and exposes limitations in the published service. V2 CPU/p50/p95/memory wins for the published 0.4.0 image remain **not measured**: the full three-repeat timing campaign is a separate workflow mode. The older v1 25/25 result cannot be extended to this suite.
 
 ## Coverage and increasing difficulty
 
