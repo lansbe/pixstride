@@ -74,6 +74,8 @@ Eligible opaque Indexed8 PNG rotations and flips retain the original 256-color p
 
 SmartCrop and native filters materialize eligible byte rasters once at their processing boundary to avoid repeated upstream rendering. Materialization uses the existing 64-MiB raster limit; higher-precision and larger images keep their typed processing route.
 
+The native worker decodes plain RGB8 PNG rows directly into BMP output for eligible flips and half-turns. It also encodes plain eight-bit grayscale and grayscale-alpha PNGs with the lossless Rust encoder. The PNG encoding can change file sizes and ETags while preserving decoded pixels.
+
 Eligible native SVG rasters are rendered once and checked for actual opacity before removing an unused alpha band. Transparent or antialiased pixels retain alpha; HDR, linear and over-budget rasters keep their existing processing route.
 
 Native responses retain the worker's received encoded allocation through HTTP output, and RGB BMP encoding produces its owned output directly. This removes two payload copies while preserving raster alignment, frame validation and existing resource limits.

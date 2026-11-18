@@ -16,6 +16,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Stream plain RGB8 PNG rows directly into BMP for eligible flips and half-turns, with complete stream validation and the existing source and output limits. Use the lossless Rust PNG encoder for eligible grayscale and grayscale-alpha rasters, preserving genuine alpha and keeping color profiles, palette encoding, higher bit depths and interlacing on their corresponding paths.
+
 - Record two complete 1,000-case protocol 2.2 comparisons on native Linux x86_64 and ARM64. Both complete all timed responses and pass the pixel budgets in both modes. Publish the strict win counts, median metric reductions and every loss in the benchmark documentation.
 
 - Retain the exact 256-color palette through eligible opaque Indexed8 PNG quarter-turns and flips into lossless BMP8, avoiding RGB expansion and preserving complete-stream validation and resource limits. Extend bounded native DIB40/BI_RGB8 input to complete RGB palettes, preserving the one-band gray path and enforcing the decoded-byte ceiling before allocation. Small outputs, size targeting, other transforms, alpha and color-managed sources keep their existing routes; encoded bytes and ETags can change.

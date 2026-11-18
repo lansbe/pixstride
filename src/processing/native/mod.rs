@@ -45,6 +45,8 @@ mod pool;
 #[cfg(feature = "native-codecs")]
 mod raster;
 #[cfg(feature = "native-codecs")]
+mod rgb_png_bmp;
+#[cfg(feature = "native-codecs")]
 mod scale;
 #[cfg(feature = "native-codecs")]
 mod scaled_decode;

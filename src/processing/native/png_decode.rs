@@ -32,7 +32,7 @@ pub(super) fn indices(data: &[u8], request: &Request) -> Result<Option<Palette>,
     )
 }
 
-fn plain(info: &Info<'_>) -> bool {
+pub(super) fn plain(info: &Info<'_>) -> bool {
     !info.interlaced
         && info.bit_depth == BitDepth::Eight
         && (matches!(

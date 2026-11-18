@@ -120,3 +120,71 @@ fn inherited_palette_normalizes_source_depth_and_explicit_settings_override_it()
     r.extra.encoding.png_colors = 2;
     assert_eq!(png_depth(&source, &r), Some(1));
 }
+
+#[test]
+fn plain_gray_png_encoding_is_independent_of_the_native_png_saver() {
+    const CHILD: &str = "TEST_NATIVE_GRAY_PNG_SAVER_CHILD";
+    if std::env::var_os(CHILD).is_none() {
+        let name = "processing::native::encode::encoding_tests::plain_gray_png_encoding_is_independent_of_the_native_png_saver";
+        let output = std::process::Command::new(std::env::current_exe().unwrap())
+            .args(["--exact", name, "--nocapture"])
+            .env(CHILD, "1")
+            .output()
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        return;
+    }
+    super::super::engine::initialize().unwrap();
+    // Isolated test process: exercise the real dependency failure without
+    // changing operation registration in any other test or worker.
+    let gray = || {
+        VipsImage::new_from_owned_u8(vec![0, 64, 128, 255], 2, 2, 1)
+            .unwrap()
+            .copy_with_opts(VOption::new().set("interpretation", Interpretation::BW as i32))
+            .unwrap()
+    };
+    // Register the saver class before blocking its GType hierarchy.
+    assert!(gray().write_to_buffer(".png").is_ok());
+    unsafe {
+        libvips::bindings::vips_operation_block_set(c"VipsForeignSavePng".as_ptr(), 1);
+    }
+    assert!(gray().write_to_buffer(".png").is_err());
+    libvips::Vips::error_clear();
+    let output = save(gray(), &request("", "png"), OutputFormat::Png, 2).unwrap();
+    assert_eq!(&output[24..26], &[8, 0]);
+    assert_eq!(
+        crate::png::decode(&output).unwrap().pixels.as_slice(),
+        &[0, 0, 0, 255, 64, 64, 64, 255, 128, 128, 128, 255, 255, 255, 255, 255]
+    );
+    let alpha = VipsImage::new_from_owned_u8(vec![11, 0, 22, 128, 33, 254, 44, 255], 2, 2, 2)
+        .unwrap()
+        .copy_with_opts(VOption::new().set("interpretation", Interpretation::BW as i32))
+        .unwrap();
+    let output = save(alpha, &request("", "png"), OutputFormat::Png, 2).unwrap();
+    assert_eq!(&output[24..26], &[8, 4]);
+    assert_eq!(
+        crate::png::decode(&output).unwrap().pixels.as_slice(),
+        &[11, 11, 11, 0, 22, 22, 22, 128, 33, 33, 33, 254, 44, 44, 44, 255]
+    );
+    let mut interlaced = request("", "png");
+    interlaced.extra.encoding.png_interlaced = true;
+    assert!(save(gray(), &interlaced, OutputFormat::Png, 2).is_err());
+    let mut hdr = request("", "png");
+    hdr.extra.preserve_hdr = true;
+    assert!(save(
+        gray().cast(BandFormat::Ushort).unwrap(),
+        &hdr,
+        OutputFormat::Png,
+        2
+    )
+    .is_err());
+    let mut palette = gray();
+    palette.set_int("palette", 1).unwrap();
+    palette.set_int("bits-per-sample", 8).unwrap();
+    assert!(save(palette, &request("", "png"), OutputFormat::Png, 2).is_err());
+}

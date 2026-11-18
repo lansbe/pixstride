@@ -8,7 +8,7 @@ use crate::{
 
 const OFFSET: usize = 1078;
 
-fn eligible(r: &Request, mark: &[u8]) -> bool {
+pub(super) fn eligible(r: &Request, mark: &[u8]) -> bool {
     let (o, e) = (&r.options, &r.extra);
     r.format == Some(OutputFormat::Bmp)
         && r.strip_metadata
@@ -49,7 +49,7 @@ fn eligible(r: &Request, mark: &[u8]) -> bool {
 
 // Keep this shortcut to a complete image stream. All CRC/Adler/frame checks
 // still run in the shared decoder, including finish() and late chunk guards.
-fn image_chunks_only(data: &[u8]) -> Result<bool, Error> {
+pub(super) fn image_chunks_only(data: &[u8]) -> Result<bool, Error> {
     let mut at = 8usize;
     while let Some(header) = data.get(at..at.saturating_add(8)) {
         let size = u32::from_be_bytes(header[..4].try_into().unwrap()) as usize;

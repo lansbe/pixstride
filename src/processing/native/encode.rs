@@ -265,8 +265,10 @@ pub(super) fn save(
         && png_depth(&image, r).is_none()
         && !r.extra.encoding.png_interlaced
         && image.get_format().ok() == Some(BandFormat::Uchar)
-        && image.get_interpretation().ok() == Some(Interpretation::Srgb)
-        && matches!(image.get_bands(), 3 | 4)
+        && ((image.get_interpretation().ok() == Some(Interpretation::Srgb)
+            && matches!(image.get_bands(), 3 | 4))
+            || (image.get_interpretation().ok() == Some(Interpretation::BW)
+                && matches!(image.get_bands(), 1 | 2)))
         && i64::from(image.get_width()) * i64::from(image.get_height()) * 4
             <= crate::MAX_FILE as i64
     {
