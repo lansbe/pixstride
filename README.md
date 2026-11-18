@@ -70,6 +70,8 @@ Opaque BI_RGB24/32 BMP input now stays in owned RGB storage through native proce
 
 Opaque eight-bit grayscale BMP output uses a lossless 256-entry gray palette when its complete file is no larger than RGB24. Native decoding accepts that grayscale BMP8 representation; small images and true alpha keep their existing encoding.
 
+Eligible opaque Indexed8 PNG rotations and flips retain the original 256-color palette and transform one-byte indices directly into lossless BMP8. This path requires an explicit BMP target, unchanged dimensions and no other processing or metadata retention. It validates the complete PNG stream and keeps the existing source, pixel, output and dimension limits. The native BMP8 reader accepts complete gray or RGB palettes for roundtrips; compressed and extended BMP headers keep their existing restrictions. Encoded bytes, output size and ETags can change without changing decoded samples.
+
 SmartCrop and native filters materialize eligible byte rasters once at their processing boundary to avoid repeated upstream rendering. Materialization uses the existing 64-MiB raster limit; higher-precision and larger images keep their typed processing route.
 
 Eligible native SVG rasters are rendered once and checked for actual opacity before removing an unused alpha band. Transparent or antialiased pixels retain alpha; HDR, linear and over-budget rasters keep their existing processing route.

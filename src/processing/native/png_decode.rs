@@ -15,6 +15,23 @@ struct Decoded {
     indexed: bool,
 }
 
+pub(super) struct Palette {
+    pub dimensions: [i32; 2],
+    pub pixels: Vec<u8>,
+    pub colors: [u8; 768],
+}
+
+pub(super) fn indices(data: &[u8], request: &Request) -> Result<Option<Palette>, Error> {
+    let mut colors = [0; 768];
+    Ok(
+        decode_raster(data, request, Some(&mut colors))?.map(|decoded| Palette {
+            dimensions: decoded.dimensions,
+            pixels: decoded.pixels,
+            colors,
+        }),
+    )
+}
+
 fn plain(info: &Info<'_>) -> bool {
     !info.interlaced
         && info.bit_depth == BitDepth::Eight
@@ -70,6 +87,14 @@ fn palette_chunks_plain(data: &[u8]) -> Result<bool, Error> {
 }
 
 fn decode(data: &[u8], r: &Request) -> Result<Option<Decoded>, Error> {
+    decode_raster(data, r, None)
+}
+
+fn decode_raster(
+    data: &[u8],
+    r: &Request,
+    palette: Option<&mut [u8; 768]>,
+) -> Result<Option<Decoded>, Error> {
     if !data.starts_with(b"\x89PNG\r\n\x1a\n")
         || !r.strip_metadata
         || !r.strip_color_profile
@@ -87,9 +112,13 @@ fn decode(data: &[u8], r: &Request) -> Result<Option<Decoded>, Error> {
     checks.set_ignore_checksums(false);
     checks.set_skip_ancillary_crc_failures(false);
     let mut decoder = Decoder::new_with_options(Cursor::new(data), checks);
-    // EXPAND leaves admitted8-bit RGB/gray unchanged and expands an opaque
-    // complete Indexed8 palette to RGB. All256 index values are valid.
-    decoder.set_transformations(Transformations::EXPAND);
+    // Normal loading expands a full opaque Indexed8 palette to RGB. Exact
+    // palette permutations retain the one-byte plane with the same validation.
+    decoder.set_transformations(if palette.is_some() {
+        Transformations::IDENTITY
+    } else {
+        Transformations::EXPAND
+    });
     decoder.set_limits(Limits {
         bytes: crate::MAX_FILE,
     });
@@ -97,8 +126,11 @@ fn decode(data: &[u8], r: &Request) -> Result<Option<Decoded>, Error> {
         .read_info()
         .map_err(|_| "PNG header decode failed")?;
     let info = reader.info();
-    if !plain(info) {
+    if !plain(info) || (palette.is_some() && info.color_type != ColorType::Indexed) {
         return Ok(None);
+    }
+    if let Some(palette) = palette {
+        palette.copy_from_slice(info.palette.as_deref().ok_or("missing PNG palette")?);
     }
     let (width, height) = (info.width as usize, info.height as usize);
     crate::image::dimensions(width, height)?;

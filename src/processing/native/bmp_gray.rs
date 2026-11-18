@@ -1,4 +1,4 @@
-//! Native grayscale BMP8 with a complete grayscale palette, without RGB expansion.
+//! Bounded complete BMP8 palettes and grayscale output without RGB expansion.
 use crate::Error;
 use libvips::{
     enums::{BandFormat, Interpretation},
@@ -14,7 +14,8 @@ struct View<'a> {
     top_down: bool,
     stride: usize,
     raster: &'a [u8],
-    palette: [u8; 256],
+    palette: [[u8; 3]; 256],
+    gray: bool,
 }
 
 fn parse(data: &[u8]) -> Result<Option<View<'_>>, Error> {
@@ -28,12 +29,12 @@ fn parse(data: &[u8]) -> Result<Option<View<'_>>, Error> {
         || le32(data, 30)? != 0
         || !matches!(le32(data, 46)?, 0 | 256)
     {
-        return Err("unsupported grayscale BMP8 header");
+        return Err("unsupported BMP8 header");
     }
     let width = le32(data, 18)? as i32;
     let height = le32(data, 22)? as i32;
     if width <= 0 || height == 0 || height == i32::MIN {
-        return Err("invalid grayscale BMP dimensions");
+        return Err("invalid BMP8 dimensions");
     }
     let top_down = height < 0;
     let (width, height) = (width as usize, height.unsigned_abs() as usize);
@@ -44,14 +45,13 @@ fn parse(data: &[u8]) -> Result<Option<View<'_>>, Error> {
         .checked_mul(height)
         .and_then(|n| n.checked_add(offset))
         .filter(|n| offset >= OFFSET && *n <= data.len())
-        .ok_or("truncated grayscale BMP raster")?;
-    let mut palette = [0; 256];
+        .ok_or("truncated BMP8 raster")?;
+    let mut palette = [[0; 3]; 256];
+    let mut gray = true;
     for (value, entry) in palette.iter_mut().zip(data[54..OFFSET].chunks_exact(4)) {
-        if entry[0] != entry[1] || entry[1] != entry[2] {
-            return Err("BMP8 requires a complete grayscale palette");
-        }
         // RGBQUAD's reserved byte is padding, not alpha.
-        *value = entry[0];
+        *value = [entry[2], entry[1], entry[0]];
+        gray &= entry[0] == entry[1] && entry[1] == entry[2];
     }
     Ok(Some(View {
         width,
@@ -60,6 +60,7 @@ fn parse(data: &[u8]) -> Result<Option<View<'_>>, Error> {
         stride,
         raster: &data[offset..end],
         palette,
+        gray,
     }))
 }
 
@@ -72,22 +73,25 @@ pub(super) fn try_load(data: &[u8]) -> Result<Option<VipsImage>, Error> {
     let Some(view) = parse(data)? else {
         return Ok(None);
     };
+    let bands = if view.gray { 1 } else { 3 };
     let size = view
         .width
         .checked_mul(view.height)
+        .and_then(|n| n.checked_mul(bands))
         .filter(|n| *n <= crate::MAX_FILE)
-        .ok_or("BMP gray raster exceeds limit")?;
+        .ok_or("BMP8 raster exceeds limit")?;
     let mut pixels = Vec::new();
     pixels
         .try_reserve_exact(size)
-        .map_err(|_| "BMP gray allocation failed")?;
+        .map_err(|_| "BMP8 allocation failed")?;
     pixels.resize(size, 0);
-    let identity = view
-        .palette
-        .iter()
-        .enumerate()
-        .all(|(index, value)| usize::from(*value) == index);
-    for (row, output) in pixels.chunks_exact_mut(view.width).enumerate() {
+    let identity = view.gray
+        && view
+            .palette
+            .iter()
+            .enumerate()
+            .all(|(index, value)| usize::from(value[0]) == index);
+    for (row, output) in pixels.chunks_exact_mut(view.width * bands).enumerate() {
         let source_row = if view.top_down {
             row
         } else {
@@ -96,18 +100,29 @@ pub(super) fn try_load(data: &[u8]) -> Result<Option<VipsImage>, Error> {
         let input = &view.raster[source_row * view.stride..source_row * view.stride + view.width];
         if identity {
             output.copy_from_slice(input);
-        } else {
+        } else if view.gray {
             for (out, index) in output.iter_mut().zip(input) {
-                *out = view.palette[usize::from(*index)];
+                *out = view.palette[usize::from(*index)][0];
+            }
+        } else {
+            for (out, index) in output.chunks_exact_mut(3).zip(input) {
+                out.copy_from_slice(&view.palette[usize::from(*index)]);
             }
         }
     }
-    VipsImage::new_from_owned_u8(pixels, view.width as i32, view.height as i32, 1)
+    VipsImage::new_from_owned_u8(pixels, view.width as i32, view.height as i32, bands as i32)
         .and_then(|i| {
-            i.copy_with_opts(VOption::new().set("interpretation", Interpretation::BW as i32))
+            i.copy_with_opts(VOption::new().set(
+                "interpretation",
+                if view.gray {
+                    Interpretation::BW
+                } else {
+                    Interpretation::Srgb
+                } as i32,
+            ))
         })
         .map(Some)
-        .map_err(|_| "native gray BMP import failed")
+        .map_err(|_| "native BMP8 import failed")
 }
 
 pub(super) fn try_save(image: &VipsImage) -> Result<Option<Vec<u8>>, Error> {

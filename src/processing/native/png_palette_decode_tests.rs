@@ -65,6 +65,46 @@ const EXPECTED_RGB: [u8; 18] = [
 ];
 
 #[test]
+fn opaque_indices_keep_the_complete_literal_palette_without_expansion() {
+    let data = fixture(8, 256, false);
+    let decoded = indices(&data, &request())
+        .unwrap()
+        .expect("opaque PNG indices");
+    assert_eq!(decoded.dimensions, [3, 2]);
+    assert_eq!(decoded.pixels, [0, 1, 255, 128, 64, 2]);
+    assert_eq!(&decoded.colors[..6], &[0, 255, 85, 1, 254, 84]);
+    assert_eq!(&decoded.colors[765..], &[255, 0, 170]);
+}
+
+#[test]
+fn unexpanded_indices_preserve_opaque_admission_source_bounds_and_final_validation() {
+    let data = fixture(8, 256, false);
+    for (depth, entries, alpha) in [(4, 16, false), (8, 16, false), (8, 256, true)] {
+        assert!(indices(&fixture(depth, entries, alpha), &request())
+            .unwrap()
+            .is_none());
+    }
+    let mut r = request();
+    r.extra.max_source_pixels = 5;
+    assert!(indices(&data, &r).is_err());
+    r.extra.max_source_pixels = 6;
+    r.extra.max_frame_pixels = 5;
+    assert!(indices(&data, &r).is_err());
+    let mut corrupt = data.clone();
+    corrupt[809] ^= 1;
+    assert!(indices(&corrupt, &request()).is_err());
+    assert!(indices(&data[..data.len() - 1], &request()).is_err());
+    for kind in [b"gAMA", b"tRNS", b"iCCP", b"eXIf", b"acTL"] {
+        let late = insert_before(&data, b"IEND", kind, b"synthetic");
+        assert!(!matches!(indices(&late, &request()), Ok(Some(_))));
+    }
+    let mut late = insert_before(&data, b"IEND", b"tEXt", b"key\0value");
+    let at = late.len() - 13;
+    late[at] ^= 1;
+    assert!(indices(&late, &request()).is_err());
+}
+
+#[test]
 fn complete_opaque_indexed8_expands_to_exact_three_band_rgb() {
     let data = fixture(8, 256, false);
     let decoded = decode(&data, &request())
@@ -141,11 +181,13 @@ fn palette_decode_rejects_adler_crc_truncated_iend_and_late_crc() {
     let mut bad_crc = data.clone();
     bad_crc[at + 8 + len] ^= 1;
     assert!(decode(&bad_crc, &request()).is_err());
+    assert!(indices(&bad_crc, &request()).is_err());
     let mut bad_adler = data.clone();
     bad_adler[at + 7 + len] ^= 1;
     let crc = crc32fast::hash(&bad_adler[at + 4..at + 8 + len]);
     bad_adler[at + 8 + len..at + 12 + len].copy_from_slice(&crc.to_be_bytes());
     assert!(decode(&bad_adler, &request()).is_err());
+    assert!(indices(&bad_adler, &request()).is_err());
     assert!(decode(&data[..data.len() - 1], &request()).is_err());
     let mut late = insert_before(&data, b"IEND", b"tEXt", b"key\0value");
     let position = late.len() - 13;

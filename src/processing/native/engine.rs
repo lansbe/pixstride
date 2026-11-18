@@ -204,6 +204,9 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
     if let Some(result) = super::png_identity::try_process(&mut data, r, mark)? {
         return Ok(result);
     }
+    if let Some(result) = super::indexed_bmp::try_process(&data, r, mark)? {
+        return Ok(result);
+    }
     if sniff(&data) == Some(OutputFormat::Svg) {
         if let Some(result) = super::fast_svg::try_process(&data, r)? {
             return Ok(result);

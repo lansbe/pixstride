@@ -150,7 +150,7 @@ fn small_gray_requested_byte_target_keeps_existing_success() {
 }
 
 #[test]
-fn only_uncompressed_complete_gray_palette_is_admitted_and_limits_precede_decode() {
+fn only_uncompressed_complete_palette_is_admitted_and_limits_precede_decode() {
     super::super::engine::initialize().unwrap();
     let source = fixture(false, false);
     assert_eq!(source_dimensions(&source).unwrap(), Some([2, 2]));
@@ -169,9 +169,6 @@ fn only_uncompressed_complete_gray_palette_is_admitted_and_limits_precede_decode
         bad[position..position + 4].copy_from_slice(&value.to_le_bytes());
         assert!(try_load(&bad).is_err(), "header position {position}");
     }
-    let mut colored = source.clone();
-    colored[55] ^= 1;
-    assert!(try_load(&colored).is_err());
     let mut planes = source.clone();
     planes[26] = 0;
     assert!(try_load(&planes).is_err());
@@ -214,4 +211,40 @@ fn rgb_alpha_high_precision_and_other_formats_keep_existing_routes() {
         .copy_with_opts(VOption::new().set("interpretation", Interpretation::Grey16 as i32))
         .unwrap();
     assert!(try_save(&gray16).unwrap().is_none());
+}
+
+#[test]
+fn complete_color_palette_maps_to_owned_rgb_with_both_row_orders() {
+    super::super::engine::initialize().unwrap();
+    for top_down in [false, true] {
+        let mut bytes = fixture(top_down, false);
+        for (index, rgb) in [
+            (0usize, [1, 2, 3]),
+            (64, [4, 5, 6]),
+            (128, [7, 8, 9]),
+            (255, [10, 11, 12]),
+        ] {
+            bytes[54 + index * 4..57 + index * 4].copy_from_slice(&[rgb[2], rgb[1], rgb[0]]);
+        }
+        let image = try_load(&bytes).unwrap().expect("color BMP8 loader");
+        assert_eq!(image.get_bands(), 3);
+        assert_eq!(image.get_interpretation().unwrap(), Interpretation::Srgb);
+        bytes.fill(0);
+        drop(bytes);
+        assert_eq!(
+            &*super::super::raster::export(&image).unwrap(),
+            &[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]
+        );
+    }
+}
+
+#[test]
+fn color_palette_expansion_keeps_the_decoded_byte_ceiling() {
+    let mut bytes = fixture(false, false);
+    bytes.resize(1078 + 5000 * 4500, 0);
+    bytes[18..22].copy_from_slice(&5000u32.to_le_bytes());
+    bytes[22..26].copy_from_slice(&4500u32.to_le_bytes());
+    bytes[55] ^= 1;
+    assert_eq!(source_dimensions(&bytes).unwrap(), Some([5000, 4500]));
+    assert!(matches!(try_load(&bytes), Err("BMP8 raster exceeds limit")));
 }

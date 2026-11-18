@@ -25,6 +25,8 @@ mod geometry;
 #[cfg(all(test, feature = "native-codecs"))]
 mod graph_boundary_tests;
 #[cfg(feature = "native-codecs")]
+mod indexed_bmp;
+#[cfg(feature = "native-codecs")]
 mod jpeg_decode;
 #[cfg(feature = "native-codecs")]
 mod metadata;
