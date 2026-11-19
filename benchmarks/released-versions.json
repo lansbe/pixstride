@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "pixstride": {
+    "version": "0.4.0",
+    "revision": "98868fa66288a2b27a24116f29f82ece11a9cef2",
+    "published": true,
+    "image": "ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690"
+  },
+  "imgproxy": {
+    "version": "4.0.24",
+    "image": "docker.io/darthsim/imgproxy:v4.0.24@sha256:5f3546e097bde5d2c568bf5110c4e3fb4af9bbe2cc5da6390067fda034a88db3"
+  },
+  "pillow": "13.0.0"
+}

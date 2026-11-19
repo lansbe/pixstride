@@ -12,6 +12,7 @@ import statistics
 from benchmark_fixtures import ROOT, corpus_hash, sha256
 from benchmark_metrics import balanced_orders, percentile, summarize_batches
 from benchmark_runtime import ENGINES, MEMORY_BYTES, require_native_image, validate_candidate_image
+from benchmark_release import validate_release_image
 
 LABELS = {'pixstride_default': 'Pixstride default', 'pixstride_native': 'Pixstride native', 'imgproxy': 'imgproxy'}
 
@@ -52,6 +53,10 @@ def validate_report(report, *, require_client_isolation=False):
         if not {'architecture', 'os'}.issubset(image):
             raise ValueError('Reports require inspected image architecture and operating system')
         require_native_image(image['architecture'], image['os'], report['host']['architecture'])
+        if 'release' in image:
+            if product != 'pixstride':
+                raise ValueError('Published release proof belongs to Pixstride only')
+            validate_release_image(image)
         if image.get('candidate') or image.get('reference', '').startswith('sha256:'):
             if product != 'pixstride':
                 raise ValueError('The imgproxy reference must remain a published digest-pinned image')

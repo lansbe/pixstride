@@ -25,9 +25,9 @@ def generated(reports, result):
     status = 'target met' if result['qualified'] else 'target not met'
     documents = generated_both(reports, result)
     for name, text in documents.items():
-        text = text.replace('## Unreleased candidate confirmation', '## Latest measured cohort')
+        text = text.replace('## Unreleased candidate confirmation', '## Retained pre-release source cohort')
         text = text.replace('benchmarks/results/candidate-index.json', 'benchmarks/results/' + INDEX)
-        documents[name] = (f'Latest measured cohort: **{status}**. Every retained run is included; '
+        documents[name] = (f'Retained pre-release source cohort: **{status}**. Every retained run is included; '
                            'these observations do not replace the historical qualified snapshot.\n\n' + text)
     return documents
 
