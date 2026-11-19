@@ -126,7 +126,16 @@ Both campaigns collected all 2,592,000 timed responses. All 1,000 cases on each 
 | `3920636` | 761 / 762 | 790 / 786 | [Workflow](https://github.com/lansbe/pixstride/actions/runs/44196600140) · [Archive](benchmarks/results/v2/history-candidate-measure-62b08b04f8be-index.json) |
 | `ffaa54b` | 762 / 767 | 788 / 791 | [Workflow](https://github.com/lansbe/pixstride/actions/runs/44217906239) · [Archive](benchmarks/results/v2/candidate-measure-index.json) |
 
-In the `ffaa54b` campaign, median HTTP latency was the most frequent reason a workload missed the strict target. At least one repetition missed the p50 gate on 209 x86_64 and 195 ARM64 workloads in default mode. Fractional crops accounted for 22 of the 238 x86_64 default losses, and long processing chains accounted for 23 of the 212 ARM64 default losses. A workload can miss more than one metric.
+In the `ffaa54b` campaign, both services completed all 1,000 cases. The last column includes cases where each service led on different metrics or repetitions and cases with equal results.
+
+| Linux | Pixstride mode | Pixstride strict wins | imgproxy strict wins | Mixed or tied |
+|---|---|---:|---:|---:|
+| x86_64 | Default | 762 | 3 | 235 |
+| x86_64 | Forced native | 767 | 3 | 230 |
+| ARM64 | Default | 788 | 2 | 210 |
+| ARM64 | Forced native | 791 | 1 | 208 |
+
+Median HTTP latency was the most frequent reason Pixstride missed the strict target in this campaign. At least one repetition missed the p50 gate on 209 x86_64 and 195 ARM64 workloads in default mode. Fractional crops accounted for 22 of the 238 x86_64 default losses, and long processing chains accounted for 23 of the 212 ARM64 default losses.
 
 ## Resources and numerical definitions
 

@@ -17,6 +17,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Changed
 
+- Plan eligible native SVG rendering in the final orientation so turns and flips can use a smaller decoded raster. Apply the requested orientation and residual resize after rendering.
+
 - Stream plain RGB8 PNG rows directly into BMP for eligible flips and half-turns, with complete stream validation and the existing source and output limits. Use the lossless Rust PNG encoder for eligible grayscale and grayscale-alpha rasters, preserving genuine alpha and keeping color profiles, palette encoding, higher bit depths and interlacing on their corresponding paths.
 
 - Record two complete 1,000-case protocol 2.2 comparisons on native Linux x86_64 and ARM64. Both complete all timed responses and pass the pixel budgets in both modes. Publish the strict win counts, median metric reductions and every loss in the benchmark documentation.

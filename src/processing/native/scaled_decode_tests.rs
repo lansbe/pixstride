@@ -45,6 +45,50 @@ fn equal_pixels(actual: &VipsImage, expected: &VipsImage) {
 }
 
 #[test]
+fn reduced_svg_keeps_quarter_turn_geometry_and_flip_order() {
+    let data = Arc::new(
+        br##"<svg xmlns="http://www.w3.org/2000/svg" width="200" height="100">
+        <rect x="0" y="0" width="100" height="50" fill="#ff0000"/>
+        <rect x="100" y="0" width="100" height="50" fill="#00ff00"/>
+        <rect x="0" y="50" width="100" height="50" fill="#0000ff"/>
+        <rect x="100" y="50" width="100" height="50" fill="#ffff00"/>
+        </svg>"##
+            .to_vec(),
+    );
+    let colors = [
+        [255., 0., 0.],
+        [0., 255., 0.],
+        [0., 0., 255.],
+        [255., 255., 0.],
+    ];
+    for (angle, expected) in [(90, [0, 2, 1, 3]), (270, [3, 1, 2, 0])] {
+        let r = request(&format!("rs:force:50:100:1/rot:{angle}/fl:1:0"), "svg");
+        let loaded = try_load(&data, &head(&data), &r, OutputFormat::Svg)
+            .unwrap()
+            .expect("SVG can render smaller before a quarter turn");
+        assert_eq!(
+            [loaded.image.get_width(), loaded.image.get_height()],
+            [100, 50]
+        );
+        assert_eq!(loaded.plan.scale, [1.0; 2]);
+        let (image, _) =
+            super::super::geometry::apply(loaded.image, &loaded.request, true, Some(loaded.plan))
+                .unwrap();
+        assert_eq!([image.get_width(), image.get_height()], [50, 100]);
+        for ((x, y), index) in [(5, 5), (40, 5), (5, 90), (40, 90)]
+            .into_iter()
+            .zip(expected)
+        {
+            assert_eq!(&image.getpoint(x, y).unwrap()[..3], &colors[index]);
+        }
+    }
+    let cropped = request("c:40:40:ce/rs:force:20:20/rot:90", "svg");
+    assert!(try_load(&data, &head(&data), &cropped, OutputFormat::Svg)
+        .unwrap()
+        .is_none());
+}
+
+#[test]
 fn webp_reloads_at_decoder_scale_instead_of_lanczos_resampling() {
     let data = webp();
     let r = request("rs:force:64:32/dpr:2", "webp");

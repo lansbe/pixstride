@@ -81,11 +81,12 @@ pub(super) fn try_load(
     format: OutputFormat,
 ) -> Result<Option<Loaded>, Error> {
     let vector = format == OutputFormat::Svg;
+    let orientation_requested =
+        r.options.rotation != Rotation::R0 || r.options.flip_horizontal || r.options.flip_vertical;
+    let oriented_vector = vector && r.options.crop.is_none();
     if !matches!(format, OutputFormat::Webp | OutputFormat::Svg)
         || (r.auto_rotate && head.get_int("orientation").unwrap_or(1) != 1)
-        || r.options.rotation != Rotation::R0
-        || r.options.flip_horizontal
-        || r.options.flip_vertical
+        || (orientation_requested && !oriented_vector)
         || r.options.watermark.is_some()
         || r.effects.trim.is_some()
         || r.extra.encoding.linear
@@ -94,7 +95,13 @@ pub(super) fn try_load(
     {
         return Ok(None);
     }
-    let source = [head.get_width(), head.get_height()];
+    // Plan the requested geometry in its final orientation. The SVG loader
+    // uses one uniform scale and geometry still applies the turn and flips.
+    let oriented = |width, height| match r.options.rotation {
+        Rotation::R90 | Rotation::R270 => [height, width],
+        _ => [width, height],
+    };
+    let source = oriented(head.get_width(), head.get_height());
     super::engine::checked(source[0], source[1])?;
     let selected = selected_crop(source, r)?;
     let mut plan = super::scale::Plan::new(selected[0], selected[1], r, vector)?;
@@ -133,7 +140,7 @@ pub(super) fn try_load(
         options.set("scale", scale)
     };
     let image = super::shared::load(data, options)?;
-    let decoded = [image.get_width(), image.get_height()];
+    let decoded = oriented(image.get_width(), image.get_height());
     super::engine::checked(decoded[0], decoded[1])?;
     let axis_preshrink =
         std::array::from_fn::<_, 2, _>(|axis| f64::from(source[axis]) / f64::from(decoded[axis]));

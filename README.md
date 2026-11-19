@@ -76,13 +76,15 @@ SmartCrop and native filters materialize eligible byte rasters once at their pro
 
 The native worker decodes plain RGB8 PNG rows directly into BMP output for eligible flips and half-turns. It also encodes plain eight-bit grayscale and grayscale-alpha PNGs with the lossless Rust encoder. The PNG encoding can change file sizes and ETags while preserving decoded pixels.
 
-Eligible native SVG rasters are rendered once and checked for actual opacity before removing an unused alpha band. Transparent or antialiased pixels retain alpha; HDR, linear and over-budget rasters keep their existing processing route.
+Native SVG rendering plans the raster size in the final orientation. Eligible downscales can render fewer pixels before a turn or flip. The worker checks the rendered pixels for actual opacity before removing an unused alpha band.
 
 Native responses retain the worker's received encoded allocation through HTTP output, and RGB BMP encoding produces its owned output directly. This removes two payload copies while preserving raster alignment, frame validation and existing resource limits.
 
 Complete opaque 8-bit PNG palettes decode into owned RGB while retaining inherited palette encoding. Transparent, packed, interlaced and color-managed palettes use the native codec path; checksum and source-size validation still apply.
 
 New collections use **protocol v2.3**. Pixel comparisons read explicit BMP V5 alpha masks from either service. Earlier protocols treated the fourth byte of BI_RGB32 as padding, including files with those masks. Protocol v2.3 keeps the 3,600-second case budget, sampling, quality thresholds and service limits of v2.2. The archived results identify the protocol that produced them.
+
+A valid case can end with mixed results. One service may lead on CPU while the other leads on latency or memory. A strict win requires the same service to lead all four metrics in every repetition.
 
 <!-- benchmark-v2-candidate:summary:start -->
 Current benchmark **v2.2: 1,000 distinct workloads** — **target not met**. Every workload and every service/quality failure is retained.
