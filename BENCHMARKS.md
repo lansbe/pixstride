@@ -1,4 +1,6 @@
-# Linux performance benchmarks
+# Linux performance benchmarks — v1 (25 cases)
+
+The current suite is [benchmark v2 with 1,000 distinct workloads](BENCHMARKS_V2.md). This guide preserves the v1 protocol and its actual 25-case evidence; these results do not establish V2 performance.
 
 The suite measures 25 predefined HTTP image-processing cases on native Linux AMD64 and ARM64. [released-versions.json](benchmarks/released-versions.json) pins the current published images by immutable multi-platform digest; [versions.json](benchmarks/versions.json) preserves the initial Pixstride 0.3.0/imgproxy 4.0.24 baseline. Raw reports retain actual image identities and published OCI proof independently of the harness source. Pixstride default routing and forced-native mode are separate observations. In 0.4.0 the default `auto` route keeps eligible opaque PNG identities in the built-in engine and sends other eligible transformations through the native worker. Forced-native uses that worker for every case. The worker can itself select optimized Rust paths or libvips; this is a routing comparison, not a Rust-versus-C comparison.
 
@@ -124,7 +126,7 @@ python3 -m venv .venv-benchmark
 
 Copy the same prepared corpus to the second architecture. Image overrides via `--pixstride-image` / `--imgproxy-image` require immutable `@sha256:` references. A published Pixstride image must still match the selected `--versions` file, including its release version and source revision; another release needs its own pins file. Source candidates use the explicit provenance mode described below. `--case`, lower sample counts and `--preflight` support development trials and cannot pass full-publication validation.
 
-The [Benchmarks workflow](.github/workflows/benchmark.yml) shares one corpus across three native `ubuntu-24.04` and three `ubuntu-24.04-arm` jobs, measuring the pinned published images without rebuilding them. Pushes on `codex/benchmark-release-*` or the original benchmark branch trigger it; `workflow_dispatch` supports manual reruns after integration. Timing ratios do not gate unrelated PRs. Correctness, input integrity and accounting do gate a benchmark run. Failures retain diagnostics and available partial JSON; owned containers are cleaned. Raw report artifacts have 90-day retention; corpus media have seven days.
+The [Benchmarks workflow](.github/workflows/benchmark-v1.yml) shares one corpus across three native `ubuntu-24.04` and three `ubuntu-24.04-arm` jobs, measuring the pinned published images without rebuilding them. Pushes on `codex/benchmark-release-*` or the original benchmark branch trigger it; `workflow_dispatch` supports manual reruns after integration. Timing ratios do not gate unrelated PRs. Correctness, input integrity and accounting do gate a benchmark run. Failures retain diagnostics and available partial JSON; owned containers are cleaned. Raw report artifacts have 90-day retention; corpus media have seven days.
 
 For a published-release comparison, retain all three full reports per architecture and recompute the strict both-mode target:
 

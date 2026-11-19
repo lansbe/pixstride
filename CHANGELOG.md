@@ -6,6 +6,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Added
 
+- Introduce benchmark v2 with 1,000 distinct workloads, 20 processing families, twelve static input representations, five output codecs and ten difficulty tiers ordered before measurement. Add a deterministic shared corpus, failure-preserving native shard collector, complete-cohort/replay/quality validation, separate v2 target pins and immutable result archives. Native preflight validates coverage; full three-repeat timings remain a separate manual campaign. Keep the 25-case v1 evidence and results intact. Native preflight validates all 1,000 reference cases on both architectures and retains Pixstride's 33 engine failures and 141 pixel-budget failures per mode/architecture; it makes no V2 timing-win claim.
+
 - Verify published benchmark image identities against raw OCI index/platform digests, release version/source annotations, native image configs and runtime capabilities, independently of the harness revision. Default new runs to the current release pins while retaining the immutable 0.3.0 baseline.
 - Record/check published-image comparisons separately from pre-release source cohorts, retaining all six native reports and every failed comparison. Share the strict CPU/p50/p95/peak and decoded-pixel gates, generate both-mode tables and median reductions, and run three independent native VMs per architecture without rebuilding the release.
 

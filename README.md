@@ -62,7 +62,25 @@ Version 0.1.1 introduced work limits that can reject expensive valid inputs. The
 
 ## Benchmarks
 
-The reusable suite compares Pixstride (default routing and forced native) with imgproxy, using immutable reference images, provenance-checked candidate builds and the same 25 cases on native Linux AMD64 and ARM64. It covers public photos, transparency, flat graphics, JPEG/PNG/WebP/BMP, progressive JPEG, grayscale, TIFF and SVG. See [BENCHMARKS.md](BENCHMARKS.md) for all cases, CPU/HTTP/memory/output measurements, pixel differences, hardware, raw evidence and rerun commands.
+The current reusable suite is **benchmark v2: 1,000 distinct workloads**, ordered into ten nominal difficulty tiers. It covers 20 processing families, twelve static input representations/content types and five output codecs, with larger images, alpha, entropy-heavy textures, extreme aspect ratios and long geometry/filter chains. It compares default and forced-native Pixstride against imgproxy on native Linux x86_64 and ARM64. See [BENCHMARKS_V2.md](BENCHMARKS_V2.md) for coverage, resources, fixed quality budgets, complete-cohort rules and rerun commands.
+
+<!-- benchmark-v2:summary:start -->
+Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
+
+Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690`. Runtime source `98868fa66288a2b27a24116f29f82ece11a9cef2`; harness `8222ceb6bc739171bf98b92121a7fe96a03f5dfa`. Retained accepted timed responses: **0** (decoded preflight only).
+
+| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Performance |
+|---|---|---:|---:|---:|---:|
+| amd64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
+| amd64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
+| arm64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
+| arm64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
+
+Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 preflight index](benchmarks/results/v2/preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
+<!-- benchmark-v2:summary:end -->
+
+<details>
+<summary>Historical v1: 25-case results for the published 0.4.0 image</summary>
 
 The published **0.4.0** image was measured on 2026-11-16, on three fresh native Linux VMs per architecture. Both default (`auto`) and forced-native beat imgproxy on CPU/request, HTTP p50/p95 and lifetime peak cgroup memory in **all 25 cases in every run**. Each service has two CPUs and 1 GiB; the client uses separate CPUs. This is a sequential local-source workload on shared VMs. All pixel-agreement checks pass the unchanged envelope; encodings and file sizes can still differ.
 
@@ -142,6 +160,8 @@ Ratios are Pixstride / imgproxy; below 1 means less observed CPU, lower HTTP p50
 </details>
 
 Outputs can differ in pixels, compression and size even at the same quality setting. These observations do **not** establish an equal-quality speed advantage, a universal memory/latency guarantee, or an AMD64-versus-ARM64 performance claim. The two architectures use different runner CPUs. This public, reproducible suite replaces the previous private 20-case macOS baseline.
+
+</details>
 
 ## Versions
 

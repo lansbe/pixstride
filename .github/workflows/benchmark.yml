@@ -1,122 +1,150 @@
-name: Benchmarks
+name: Benchmarks v2 (1000 cases)
 on:
   workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Preflight all cases, or run the full 3-repeat timing campaign'
+        type: choice
+        options: [preflight, measure]
+        default: preflight
+        required: true
   push:
-    branches: [codex/reusable-linux-benchmarks, 'codex/benchmark-release-*']
+    branches: ['codex/benchmark-v2-*']
     paths:
       - .github/workflows/benchmark.yml
+      - scripts/benchmark_v2.py
+      - scripts/benchmark_v2_catalog.py
+      - scripts/benchmark_v2_collect.py
+      - scripts/benchmark_v2_fixtures.py
       - scripts/benchmark.py
       - scripts/benchmark_runtime.py
       - scripts/benchmark_metrics.py
-      - scripts/benchmark_fixtures.py
       - scripts/benchmark_release.py
-      - .github/checks/project/test_benchmark_runtime.py
-      - .github/checks/project/test_benchmark_runner.py
-      - .github/checks/project/test_benchmark_metrics.py
-      - .github/checks/project/test_benchmark_fixtures.py
-      - .github/checks/project/test_benchmark_release.py
-      - benchmarks/cases.json
-      - benchmarks/released-versions.json
+      - benchmarks/cases-v2.json
+      - benchmarks/versions-v2.json
 permissions:
   contents: read
 concurrency:
-  group: benchmarks-${{ github.ref }}
+  group: benchmarks-v2-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   corpus:
-    name: Shared corpus and accounting tests
+    name: Freeze catalog, test tooling and prepare one shared corpus
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+      mode: ${{ steps.matrix.outputs.mode }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - name: Install decoder, test accounting and prepare identical inputs
+      - name: Select exact complete-cohort matrix
+        id: matrix
+        env:
+          BENCHMARK_MODE: ${{ inputs.mode || 'preflight' }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          mode = os.environ['BENCHMARK_MODE']
+          assert mode in ('preflight', 'measure')
+          include = [dict(arch=arch, runner=runner, repetition=rep, shard=shard, mode=mode)
+                     for arch, runner in [('amd64', 'ubuntu-24.04'), ('arm64', 'ubuntu-24.04-arm')]
+                     for rep in range(1, 4 if mode == 'measure' else 2) for shard in range(40)]
+          assert len(include) == (240 if mode == 'measure' else 80)
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('mode=' + mode + '\n')
+              output.write('matrix=' + json.dumps({'include': include}, separators=(',', ':')) + '\n')
+          PY
+      - name: Verify all tooling and generate the immutable shared inputs
         run: |
           python3 -m venv "$RUNNER_TEMP/benchmark-env"
           "$RUNNER_TEMP/benchmark-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
           "$RUNNER_TEMP/benchmark-env/bin/python" -m unittest discover -s .github/checks/project -v
           "$RUNNER_TEMP/benchmark-env/bin/python" scripts/project.py check
           "$RUNNER_TEMP/benchmark-env/bin/python" scripts/candidate_snapshot.py --check
-          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_fixtures.py --output "$RUNNER_TEMP/corpus" --cache "$RUNNER_TEMP/source-cache"
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_v2_catalog.py --check
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_v2_snapshot.py --check
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_v2_fixtures.py --output "$RUNNER_TEMP/corpus" --cache "$RUNNER_TEMP/source-cache"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
-          name: benchmark-shared-corpus
+          name: benchmark-v2-shared-corpus
           path: ${{ runner.temp }}/corpus/
           if-no-files-found: error
           retention-days: 7
-  measure:
-    name: Released ${{ matrix.platform.arch }} repetition ${{ matrix.repetition }}
+  native:
+    name: V2 ${{ matrix.mode }} ${{ matrix.arch }} r${{ matrix.repetition }} s${{ matrix.shard }}
     needs: corpus
     strategy:
       fail-fast: false
-      matrix:
-        platform:
-          - arch: amd64
-            runner: ubuntu-24.04
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-        repetition: [1, 2, 3]
-    runs-on: ${{ matrix.platform.runner }}
-    timeout-minutes: 60
+      max-parallel: 20
+      matrix: ${{ fromJson(needs.corpus.outputs.matrix) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
     env:
-      BENCHMARK_RUNNER: ${{ matrix.platform.runner }}
-      BENCHMARK_ARCH: ${{ matrix.platform.arch }}
+      BENCHMARK_RUNNER: ${{ matrix.runner }}
+      BENCHMARK_MODE: ${{ matrix.mode }}
+      BENCHMARK_ARCH: ${{ matrix.arch }}
+      BENCHMARK_REPETITION: ${{ matrix.repetition }}
+      BENCHMARK_SHARD: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          name: benchmark-shared-corpus
+          name: benchmark-v2-shared-corpus
           path: ${{ runner.temp }}/corpus
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069
         with:
           version: v0.38.1
           driver: docker
-      - name: Install pinned independent decoder
+      - name: Install the independent pinned decoder
         run: |
           python3 -m venv "$RUNNER_TEMP/benchmark-env"
           "$RUNNER_TEMP/benchmark-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
-      - name: Preflight every case using only pinned published images
+      - name: Run exactly this frozen native shard, preserving every engine failure
         run: |
-          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark.py --architecture "$BENCHMARK_ARCH" --versions benchmarks/released-versions.json --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/preflight.json" --preflight
-      - name: Measure all cases with the unchanged balanced protocol
-        run: |
-          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark.py --architecture "$BENCHMARK_ARCH" --versions benchmarks/released-versions.json --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/report.json"
+          "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_v2.py \
+            --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/report.json" \
+            --mode "$BENCHMARK_MODE" --architecture "$BENCHMARK_ARCH" \
+            --repetition "$BENCHMARK_REPETITION" --shard-index "$BENCHMARK_SHARD"
       - name: Verify owned containers were cleaned
         if: always()
         run: test -z "$(docker ps -aq --filter label=io.pixstride.benchmark.run)"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
-          name: benchmark-linux-${{ matrix.platform.arch }}-${{ matrix.repetition }}
-          path: |
-            ${{ runner.temp }}/report.json
-            ${{ runner.temp }}/preflight.json
+          name: v2-${{ matrix.mode }}-${{ matrix.arch }}-r${{ matrix.repetition }}-s${{ matrix.shard }}
+          path: ${{ runner.temp }}/report.json
           if-no-files-found: warn
           retention-days: 90
-  qualification:
-    name: Recompute every released-image comparison
-    needs: measure
+  aggregate:
+    name: Validate exact 1000-case coverage and retain all outcomes
+    needs: [corpus, native]
+    if: always() && needs.corpus.result == 'success'
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
         with:
-          pattern: benchmark-linux-*
+          pattern: v2-*
           path: ${{ runner.temp }}/reports
-      - name: Require all metrics and pixel gates in all six retained runs
+      - name: Recompute complete coverage, output quality and the strict timing gate
+        env:
+          BENCHMARK_MODE: ${{ needs.corpus.outputs.mode }}
         run: |
-          python3 scripts/release_snapshot.py --qualify "$RUNNER_TEMP"/reports/benchmark-linux-*/report.json --output "$RUNNER_TEMP/qualification.json" --markdown "$RUNNER_TEMP/qualification.md"
+          python3 scripts/benchmark_v2_report.py --reports "$RUNNER_TEMP"/reports/v2-*/report.json \
+            --mode "$BENCHMARK_MODE" --output "$RUNNER_TEMP/v2-aggregate.json" --markdown "$RUNNER_TEMP/v2-aggregate.md"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         if: always()
         with:
-          name: benchmark-release-qualification
+          name: benchmark-v2-aggregate
           path: |
-            ${{ runner.temp }}/qualification.json
-            ${{ runner.temp }}/qualification.md
+            ${{ runner.temp }}/v2-aggregate.json
+            ${{ runner.temp }}/v2-aggregate.md
           if-no-files-found: warn
           retention-days: 90
