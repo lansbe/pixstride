@@ -83,7 +83,7 @@ impl Worker {
                 pipe::write_all(&mut self.input, bytes, deadline)?;
             }
             let bytes = pipe::frame(&mut self.output, worker::OUTPUT_LIMIT, deadline)?;
-            parse_output(&bytes)
+            parse_output(bytes)
         })();
         if result.is_err() {
             use std::os::unix::process::ExitStatusExt;

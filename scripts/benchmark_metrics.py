@@ -102,11 +102,29 @@ def read_counters(group):
                           (group / 'memory.events').read_text())
 
 
-def pixel_agreement(actual, reference):
+def _pixel_stream(data, explicit_bmp_alpha):
+    import io
+    stream = io.BytesIO(data)
+    masks = bytes.fromhex('0000ff0000ff0000ff000000000000ff')
+    if (explicit_bmp_alpha and len(data) >= 138 and data[:2] == b'BM'
+            and data[14:18] == b'\x7c\0\0\0'
+            and data[26:34] == b'\x01\0\x20\0\0\0\0\0'
+            and data[54:70] == masks and data[70:74] == b'BGRs'
+            and data[126:134] == b'\0' * 8
+            and 138 <= int.from_bytes(data[10:14], 'little') <= len(data)):
+        # Pillow reads BI_RGB32's high byte as padding. An explicit V5 mask
+        # declares alpha, so let the same decoder read it as BI_BITFIELDS.
+        stream.seek(30)
+        stream.write(b'\x03\0\0\0')
+        stream.seek(0)
+    return stream
+
+
+def pixel_agreement(actual, reference, *, explicit_bmp_alpha=False):
     """Decode outside timing; hidden RGB in transparent pixels is not an error."""
     from PIL import Image, ImageChops
-    import io
-    with Image.open(io.BytesIO(actual)) as a, Image.open(io.BytesIO(reference)) as b:
+    with (Image.open(_pixel_stream(actual, explicit_bmp_alpha)) as a,
+          Image.open(_pixel_stream(reference, explicit_bmp_alpha)) as b):
         if a.size != b.size:
             raise ValueError('Cannot compare images with different dimensions')
         a, b = a.convert('RGBA'), b.convert('RGBA')

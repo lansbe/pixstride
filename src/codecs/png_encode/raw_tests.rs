@@ -1,6 +1,46 @@
 use super::*;
 
 #[test]
+fn gray_png_preserves_literal_samples_without_rgb_expansion() {
+    let data = [0, 127, 255, 1, 64, 128];
+    let bytes = encode_pixels(3, 2, data, 1).unwrap();
+    assert_eq!(&bytes.as_slice()[24..26], &[8, 0]);
+    let image = crate::png::decode(bytes.as_slice()).unwrap();
+    assert_eq!((image.width, image.height), (3, 2));
+    assert_eq!(
+        image.pixels.as_slice(),
+        &[
+            0, 0, 0, 255, 127, 127, 127, 255, 255, 255, 255, 255, 1, 1, 1, 255, 64, 64, 64, 255,
+            128, 128, 128, 255,
+        ]
+    );
+}
+
+#[test]
+fn gray_alpha_png_preserves_partial_and_invisible_samples() {
+    let data = [11, 0, 22, 1, 33, 128, 44, 254, 55, 255, 66, 100];
+    let bytes = encode_pixels(3, 2, data, 2).unwrap();
+    assert_eq!(&bytes.as_slice()[24..26], &[8, 4]);
+    let image = crate::png::decode(bytes.as_slice()).unwrap();
+    assert_eq!(
+        image.pixels.as_slice(),
+        &[
+            11, 11, 11, 0, 22, 22, 22, 1, 33, 33, 33, 128, 44, 44, 44, 254, 55, 55, 55, 255, 66,
+            66, 66, 100,
+        ]
+    );
+    let opaque = encode_pixels(3, 1, [0, 255, 128, 255, 255, 255], 2).unwrap();
+    assert_eq!(&opaque.as_slice()[24..26], &[8, 0]);
+    assert_eq!(
+        crate::png::decode(opaque.as_slice())
+            .unwrap()
+            .pixels
+            .as_slice(),
+        &[0, 0, 0, 255, 128, 128, 128, 255, 255, 255, 255, 255]
+    );
+}
+
+#[test]
 fn packed_rgb_encoding_keeps_pixels_and_rgba_encoder_bytes() {
     for (width, height) in [(1, 1), (3, 7), (33, 19)] {
         let rgb: Vec<u8> = (0..width * height * 3)

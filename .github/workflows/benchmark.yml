@@ -1,4 +1,4 @@
-name: Benchmarks v2 (1000 cases)
+name: Benchmarks v2.3 (1000 cases)
 on:
   workflow_dispatch:
     inputs:
@@ -80,7 +80,7 @@ jobs:
       max-parallel: 20
       matrix: ${{ fromJson(needs.corpus.outputs.matrix) }}
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 120
+    timeout-minutes: 300
     env:
       BENCHMARK_RUNNER: ${{ matrix.runner }}
       BENCHMARK_MODE: ${{ matrix.mode }}
@@ -106,6 +106,7 @@ jobs:
       - name: Run exactly this frozen native shard, preserving every engine failure
         run: |
           "$RUNNER_TEMP/benchmark-env/bin/python" scripts/benchmark_v2.py \
+            --protocol-version 2.3 \
             --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/report.json" \
             --mode "$BENCHMARK_MODE" --architecture "$BENCHMARK_ARCH" \
             --repetition "$BENCHMARK_REPETITION" --shard-index "$BENCHMARK_SHARD"

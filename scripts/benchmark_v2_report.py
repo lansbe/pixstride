@@ -15,6 +15,8 @@ from benchmark_metrics import balanced_orders,summarize_batches
 from benchmark_release import identity,validate_release_image
 from benchmark_report import validate_client_affinity
 from benchmark_runtime import ENGINES,require_native_image
+from benchmark_v2_candidate import candidate_identity,collection_identity,validate_image
+from benchmark_v2_fixtures import require_candidate_corpus
 from benchmark_v2 import protocol
 from benchmark_v2_catalog import CATALOG,SUITE,fixture_specs,select_shard,verify_catalog
 from benchmark_v2_collect import MIMES,preflight_order
@@ -39,13 +41,16 @@ def load_pins(path=None):
 
 
 def target(pins):
-    if (pins.get('schema_version')!=1 or pins['pixstride'].get('published') is not True
-            or pins['pillow']!=PILLOW_VERSION
-            or not re.fullmatch(r'[^\s@]+@sha256:[0-9a-f]{64}',pins['imgproxy']['image'])):
-        raise ValueError('V2 requires explicit published immutable target pins and the fixed decoder')
-    version_key(pins['imgproxy']['version'])
-    return dict(pixstride=identity(pins['pixstride']),imgproxy={k:pins['imgproxy'][k] for k in ('version','image')},
-                pillow=pins['pillow'])
+    try:
+        if (pins.get('schema_version')!=1 or pins['pillow']!=PILLOW_VERSION
+                or not re.fullmatch(r'[^\s@]+@sha256:[0-9a-f]{64}',pins['imgproxy']['image'])):
+            raise ValueError('V2 requires explicit immutable target pins and the fixed decoder')
+        version_key(pins['imgproxy']['version']);own=pins['pixstride']
+        if own.get('published') is True:product=identity(own)
+        elif own.get('published') is False:product=candidate_identity(own)
+        else:raise ValueError('V2 requires explicit published or fully typed candidate pins')
+        return dict(pixstride=product,imgproxy={k:pins['imgproxy'][k] for k in ('version','image')},pillow=pins['pillow'])
+    except (KeyError,TypeError,AttributeError) as error:raise ValueError('Malformed V2 target pins') from error
 
 
 def number(value,positive=False):
@@ -158,14 +163,21 @@ def validate_shard(report,pins=None):
     except (KeyError,TypeError,IndexError,AttributeError) as error:raise ValueError('Malformed V2 shard evidence') from error
 
 
+def report_version(report):
+    if type(report['schema_version']) is int:
+        if report['schema_version']==2 and 'protocol_version' not in report:return '2.0'
+        if report['schema_version']==3 and report.get('protocol_version') in ('2.1','2.2','2.3'):return report['protocol_version']
+    raise ValueError('Invalid or inconsistent V2 report/protocol version')
+
+
 def _validate_shard(r,pins):
-    if pins['pixstride'].get('published') is not True:
-        raise ValueError('V2 requires explicit published-release target pins')
-    if (r['schema_version']!=2 or r['suite_id']!=SUITE or r['status']!='complete'
+    target(pins)
+    version=report_version(r)
+    if (r['suite_id']!=SUITE or r['status']!='complete'
             or r['profile']!='complete-shard' or r['harness_dirty'] is not False
             or not re.fullmatch(r'[0-9a-f]{40}',r['harness_revision'])):
         raise ValueError('Only committed complete V2 shards can be aggregated')
-    mode=r['mode'];p=protocol(mode)
+    mode=r['mode'];p=protocol(mode,version)
     if r['protocol']!=p:raise ValueError('V2 fixed sampling/resources/protocol differs')
     if type(r['repetition']) is not int or not 1<=r['repetition']<=(1 if mode=='preflight' else 3):
         raise ValueError('Invalid V2 repetition')
@@ -181,7 +193,12 @@ def _validate_shard(r,pins):
     for product in ('pixstride','imgproxy'):
         image=r['images'][product];require_native_image(image['architecture'],image['os'],arch)
         if not re.fullmatch(r'sha256:[0-9a-f]{64}',image['image_id']):raise ValueError('Invalid inspected image ID')
-    validate_release_image(r['images']['pixstride'],pins['pixstride'])
+    if pins['pixstride']['published']:
+        validate_release_image(r['images']['pixstride'],pins['pixstride'])
+    else:
+        require_candidate_corpus(r['fixtures'])
+        collection_identity(r)
+        validate_image(r['images']['pixstride'],pins['pixstride'],r['harness_revision'],arch)
     ref=r['images']['imgproxy']
     if (ref['reference']!=pins['imgproxy']['image'] or not re.search(r'(?<![0-9.])'+re.escape(pins['imgproxy']['version'])+r'(?![0-9.])',ref['version'])
             or not any(d.rsplit('@',1)[-1]==ref['reference'].rsplit('@',1)[-1] for d in ref['repo_digests'])):
@@ -235,13 +252,18 @@ def aggregate(reports,mode,pins=None):
     pins=pins or load_pins();target(pins);protocol(mode)
     repetitions=1 if mode=='preflight' else 3
     expected={(arch,rep,shard) for arch in ('amd64','arm64') for rep in range(1,repetitions+1) for shard in range(40)}
-    indexed={};cohort=None;native_ids={}
+    indexed={};cohort=None;native_ids={};campaign=None
+    candidate=pins['pixstride']['published'] is False
     for report in reports:
         validate_shard(report,pins)
         if report['mode']!=mode:raise ValueError('Mixed V2 preflight/measurement modes')
         arch=report['host']['architecture'];key=(arch,report['repetition'],report['shard_index'])
         if key in indexed:raise ValueError('Duplicated V2 shard/repetition')
         indexed[key]=report
+        if candidate:
+            collected=collection_identity(report)
+            if campaign is None:campaign=collected
+            elif campaign!=collected:raise ValueError('Mixed V2 collection identity')
         identity={k:report[k] for k in ('harness_revision','catalog_sha256','fixtures','protocol')}
         if cohort is None:cohort=identity
         elif identity!=cohort:raise ValueError('Mixed V2 harness/corpus/catalog/protocol')
@@ -257,6 +279,10 @@ def aggregate(reports,mode,pins=None):
                          for c in r['cases'] for e in c['engines'].values()),
                 catalog_sha256=cohort['catalog_sha256'],harness_revision=cohort['harness_revision'],
                 corpus_sha256=cohort['fixtures']['corpus_sha256'],pins=pins,protocol=cohort['protocol'],architectures={})
+    version=report_version(indexed['amd64',1,0])
+    if version!='2.0':result['protocol_version']=version
+    if pins['pixstride']['published'] is False:
+        result['campaign_started_at']=min(dt.datetime.fromisoformat(r['started_at']) for r in reports).astimezone(dt.timezone.utc).isoformat()
     definitions=verify_catalog()
     for arch in ('amd64','arm64'):
         runs=[]

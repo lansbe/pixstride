@@ -67,6 +67,7 @@ pub(super) fn strip(image: &VipsImage, r: &Request) -> Result<VipsImage, Error> 
                 | "loop"
                 | "vips-loader"
                 | "bits-per-sample"
+                | "palette"
         ) {
             continue;
         }
