@@ -24,8 +24,10 @@ RUN sh /usr/local/bin/build-native-vips /opt/pixstride-codecs
 ENV VIPS_PLUGIN_PATH=/opt/pixstride-codecs/lib/vips-modules-8.18
 
 FROM ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96 AS codec-runtime
+# The base image includes Pebble, while Pixstride is the runtime entry point.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libcurl4t64 ca-certificates libvips42t64 libde265-0 libx265-215 libsharpyuv0 fonts-dejavu-core \
+    && rm -f /usr/bin/pebble \
     && rm -rf /var/lib/apt/lists/*
 COPY --from=codecs-build /runtime/lib/ /opt/pixstride-codecs/lib/
 COPY --from=codecs-build /runtime/share/ /usr/share/

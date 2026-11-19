@@ -34,6 +34,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ### Fixed
 
+- Remove the unused Pebble binary from the runtime filesystem. It came from the Ubuntu base image and embeds the Go version affected by CVE-2026-97054.
+
 - Preserve native BMP transparency through an explicit V5 alpha mask and decode the same layout on reimport. Choose background compositing precision from the source color space and premultiply transparent images for native blur and sharpening.
 - Require the canonical V2 candidate corpus and one collection identity during collection and import. Retain late imports in history according to their original start time.
 
