@@ -19,6 +19,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 - Plan eligible native SVG rendering in the final orientation so turns and flips can use a smaller decoded raster. Apply the requested orientation and residual resize after rendering.
 
+- Archive the full `5779424` comparison with protocol 2.3. Every response and pixel budget passes. Keep the four strict win counts and each case's metrics with the source and image pins.
+
 - Stream plain RGB8 PNG rows directly into BMP for eligible flips and half-turns, with complete stream validation and the existing source and output limits. Use the lossless Rust PNG encoder for eligible grayscale and grayscale-alpha rasters, preserving genuine alpha and keeping color profiles, palette encoding, higher bit depths and interlacing on their corresponding paths.
 
 - Record three complete 1,000-case protocol 2.2 comparisons on native Linux x86_64 and ARM64. Each completes all timed responses and passes the pixel budgets in both modes. The `a6cd40f` comparison reaches 777 strict wins on x86_64 and 803 on ARM64 in default mode. Publish the metrics and every loss in the benchmark documentation.
