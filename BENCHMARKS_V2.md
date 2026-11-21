@@ -2,6 +2,13 @@
 
 V2 is the current reusable performance suite for Pixstride versus imgproxy on native Linux x86_64 and ARM64. New collections use protocol **2.3** on the 1,000-case catalog. Historical 25-case results are available in [V1 results and methodology](BENCHMARKS.md).
 
+<!-- benchmark-v2:summary:start -->
+Current benchmark: **v2, 1,000 distinct workloads**, 20 processing families and 10 nominal difficulty tiers. Configured published target: Pixstride **0.5.0** / imgproxy **4.0.24**. Native full-catalog preflight is pending; V2 performance is **not measured**. The retained 25-case timings belong to v1. See [the V2 protocol](BENCHMARKS_V2.md).
+<!-- benchmark-v2:summary:end -->
+
+<details>
+<summary>Archived source-build comparisons</summary>
+
 <!-- benchmark-v2-candidate:summary:start -->
 Current benchmark **v2.3: 1,000 distinct workloads** — **target not met**. Every workload and every service/quality failure is retained.
 
@@ -45,24 +52,6 @@ arm64 pixstride_native, all non-winning workloads (206): `v2-0002-fill-panorama-
 
 Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 candidate-measure index](benchmarks/results/v2/candidate-measure-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
 <!-- benchmark-v2-candidate:summary:end -->
-
-<details>
-<summary>Published 0.4.0 preflight baseline</summary>
-
-<!-- benchmark-v2:summary:start -->
-Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
-
-Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690`. Runtime source `98868fa66288a2b27a24116f29f82ece11a9cef2`; harness `8222ceb6bc739171bf98b92121a7fe96a03f5dfa`. Retained accepted timed responses: **0** (decoded preflight only).
-
-| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Performance |
-|---|---|---:|---:|---:|---:|
-| amd64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
-| amd64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
-| arm64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
-| arm64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
-
-Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 preflight index](benchmarks/results/v2/preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
-<!-- benchmark-v2:summary:end -->
 
 </details>
 
@@ -235,7 +224,7 @@ The runner requires `--versions candidate-pins.json --pixstride-image sha256:...
 .venv-benchmark/bin/python scripts/benchmark_v2_snapshot.py --check
 ```
 
-Use `--mode preflight` for the complete 80-shard validation cohort. Candidate preflight diagnostics retain reference failures as well as Pixstride failures; inspect all reference/quality counts before proceeding to timings. Candidate indices, history and generated summary markers are separate from published evidence (`candidate-preflight-index.json`, `candidate-measure-index.json`). Full results include every failure, non-winning case and metric ratio; median reductions use all retained comparable observations, including losses and numerical pixel regressions. No candidate result establishes a performance claim for the published 0.4.0 image.
+Use `--mode preflight` for the complete 80-shard validation cohort. Candidate preflight diagnostics retain reference failures as well as Pixstride failures; inspect all reference/quality counts before proceeding to timings. Candidate indices, history and generated summary markers are separate from published evidence (`candidate-preflight-index.json`, `candidate-measure-index.json`). Full results include every failure, non-winning case and metric ratio; median reductions use all retained comparable observations, including losses and numerical pixel regressions. The published-image workflow separately verifies and measures the exact release image.
 
 The candidate headline follows the latest complete campaign's first shard start time, derived from validated raw timestamps. A newer preflight can supersede older timings. Late imports of older campaigns go into history, and ambiguous same-mode timestamps are rejected.
 

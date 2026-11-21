@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
   "pixstride": {
-    "version": "0.4.0",
-    "revision": "98868fa66288a2b27a24116f29f82ece11a9cef2",
+    "version": "0.5.0",
+    "revision": "a4953322a33451b85eb9877554a7d7bc6d87f027",
     "published": true,
-    "image": "ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690"
+    "image": "ghcr.io/lansbe/pixstride:0.5.0@sha256:03c2986b7cc4df6c7964b229e445f4d6c324a27598d02d1c55ca631c9bf3d258"
   },
   "imgproxy": {
     "version": "4.0.24",

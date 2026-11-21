@@ -86,6 +86,15 @@ New collections use **protocol v2.3**. Pixel comparisons read explicit BMP V5 al
 
 A valid case can end with mixed results. One service may lead on CPU while the other leads on latency or memory. A strict win requires the same service to lead all four metrics in every repetition.
 
+<!-- benchmark-v2:summary:start -->
+Current benchmark: **v2, 1,000 distinct workloads**, 20 processing families and 10 nominal difficulty tiers. Configured published target: Pixstride **0.5.0** / imgproxy **4.0.24**. Native full-catalog preflight is pending; V2 performance is **not measured**. The retained 25-case timings belong to v1. See [the V2 protocol](BENCHMARKS_V2.md).
+<!-- benchmark-v2:summary:end -->
+
+<details>
+<summary>Archived source-build comparisons</summary>
+
+The published 0.4.0 preflight and its failure counts are in the [benchmark guide](BENCHMARKS_V2.md#native-validation-of-pixstride-040).
+
 <!-- benchmark-v2-candidate:summary:start -->
 Current benchmark **v2.3: 1,000 distinct workloads** — **target not met**. Every workload and every service/quality failure is retained.
 
@@ -129,24 +138,6 @@ arm64 pixstride_native, all non-winning workloads (206): `v2-0002-fill-panorama-
 
 Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 candidate-measure index](benchmarks/results/v2/candidate-measure-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
 <!-- benchmark-v2-candidate:summary:end -->
-
-<details>
-<summary>Published 0.4.0 preflight baseline</summary>
-
-<!-- benchmark-v2:summary:start -->
-Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
-
-Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690`. Runtime source `98868fa66288a2b27a24116f29f82ece11a9cef2`; harness `8222ceb6bc739171bf98b92121a7fe96a03f5dfa`. Retained accepted timed responses: **0** (decoded preflight only).
-
-| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Performance |
-|---|---|---:|---:|---:|---:|
-| amd64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
-| amd64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
-| arm64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
-| arm64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
-
-Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 preflight index](benchmarks/results/v2/preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
-<!-- benchmark-v2:summary:end -->
 
 </details>
 
