@@ -5,7 +5,7 @@
 Report vulnerabilities privately through [GitHub Security Advisories](https://github.com/lansbe/pixstride/security/advisories/new). Do not put secrets, private images, internal URLs, or exploit details in public issues.
 
 <!-- generated:support:start -->
-Only the latest stable release receives fixes (currently `0.4.0`). Alpha, beta and release-candidate builds are for testing; no response-time SLA is offered.
+Only the latest stable release receives fixes (currently `0.5.0`). Alpha, beta and release-candidate builds are for testing; no response-time SLA is offered.
 <!-- generated:support:end -->
 
 ## Deployment boundary

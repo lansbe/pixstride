@@ -65,7 +65,10 @@ jobs:
       - name: Install native dependencies and locked Rust toolchain
         run: |
           brew install vips pkgconf go openssl@3
-          echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+          # Homebrew keeps libvips's libjpeg and libarchive metadata in separate kegs.
+          export PKG_CONFIG_PATH="$(brew --prefix vips)/lib/pkgconfig:$(brew --prefix mozjpeg)/lib/pkgconfig:$(brew --prefix libarchive)/lib/pkgconfig:$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          pkg-config --print-errors --atleast-version=8.18 vips
+          printf 'PKG_CONFIG_PATH=%s\n' "$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
           rustup toolchain install 1.100.0 --profile minimal --component rustfmt,clippy
           rustup override set 1.100.0
           cargo fetch --locked

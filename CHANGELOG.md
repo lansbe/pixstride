@@ -4,6 +4,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-21
+
 ### Added
 
 - Add collection protocol 2.3 to compare explicit BMP V5 alpha from both engines. Keep all prior protocol results and the 2.2 sampling, deadline, resource limits, quality thresholds and victory criteria.
@@ -19,9 +21,11 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 - Plan eligible native SVG rendering in the final orientation so turns and flips can use a smaller decoded raster. Apply the requested orientation and residual resize after rendering.
 
+- Archive the full `5779424` and `28e1a37` comparisons with protocol 2.3. Every response and pixel budget passes. The SVG optimization brings the ten rotated SVG long chains to ten strict wins on Linux x86_64 in both modes and nine default / eight forced native on ARM64. Keep every case's metrics with the source and image pins.
+
 - Stream plain RGB8 PNG rows directly into BMP for eligible flips and half-turns, with complete stream validation and the existing source and output limits. Use the lossless Rust PNG encoder for eligible grayscale and grayscale-alpha rasters, preserving genuine alpha and keeping color profiles, palette encoding, higher bit depths and interlacing on their corresponding paths.
 
-- Record two complete 1,000-case protocol 2.2 comparisons on native Linux x86_64 and ARM64. Both complete all timed responses and pass the pixel budgets in both modes. Publish the strict win counts, median metric reductions and every loss in the benchmark documentation.
+- Record three complete 1,000-case protocol 2.2 comparisons on native Linux x86_64 and ARM64. Each completes all timed responses and passes the pixel budgets in both modes. The `a6cd40f` comparison reaches 777 strict wins on x86_64 and 803 on ARM64 in default mode. Publish the metrics and every loss in the benchmark documentation.
 
 - Retain the exact 256-color palette through eligible opaque Indexed8 PNG quarter-turns and flips into lossless BMP8, avoiding RGB expansion and preserving complete-stream validation and resource limits. Extend bounded native DIB40/BI_RGB8 input to complete RGB palettes, preserving the one-band gray path and enforcing the decoded-byte ceiling before allocation. Small outputs, size targeting, other transforms, alpha and color-managed sources keep their existing routes; encoded bytes and ETags can change.
 - Encode native BW8 BMP directly with a complete lossless gray palette when its exact file size is no larger than RGB24, retaining small-image byte-target successes. Add bounded native BI_RGB8/DIB40 grayscale-palette input for roundtrips, preserving palette mappings and source budgets before raster allocation; other native/built-in BMP routes stay unchanged.
@@ -36,7 +40,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 - Remove the unused Pebble binary from the runtime filesystem. It came from the Ubuntu base image and embeds the Go version affected by CVE-2026-97054.
 
-- Preserve native BMP transparency through an explicit V5 alpha mask and decode the same layout on reimport. Choose background compositing precision from the source color space and premultiply transparent images for native blur and sharpening.
+- Preserve native BMP transparency through an explicit V5 alpha mask and decode the same layout on reimport. Choose background compositing precision from the source color space and premultiply transparent images for native blur and sharpening. On upgrade, invalidate cached transformations or change the signed cachebuster for outputs whose pixels, bytes or ETags can change.
 - Require the canonical V2 candidate corpus and one collection identity during collection and import. Retain late imports in history according to their original start time.
 
 - Keep opaque native RGB/grayscale samples unchanged when a background is supplied, and avoid charging convolution scratch to identity geometry such as large flips and quarter-turns. Preserve actual resize computation and pixel limits.
@@ -174,7 +178,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Linux AMD64/ARM64 Docker images, MIT licensing and deployment documentation.
 - Historical CPU, loopback HTTP and RAM comparisons with their quality and environment limitations. This is not full imgproxy compatibility.
 
-[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/lansbe/pixstride/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/lansbe/pixstride/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/lansbe/pixstride/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lansbe/pixstride/compare/v0.1.1...v0.2.0
