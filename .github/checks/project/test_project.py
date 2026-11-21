@@ -56,7 +56,7 @@ class DocumentationTests(unittest.TestCase):
     def setUp(self):
         self.directory = tempfile.TemporaryDirectory(prefix="pixstride-project-test-")
         self.root = Path(self.directory.name)
-        for name in ("Cargo.toml", "Cargo.lock", "README.md", "SECURITY.md", "CHANGELOG.md", "CONTRIBUTING.md", "COMPATIBILITY.md", "BENCHMARKS.md", "LICENSE", "THIRD_PARTY_NOTICES.md"):
+        for name in ("Cargo.toml", "Cargo.lock", "README.md", "SECURITY.md", "CHANGELOG.md", "CONTRIBUTING.md", "COMPATIBILITY.md", "BENCHMARKS.md", "BENCHMARKS_V2.md", "LICENSE", "THIRD_PARTY_NOTICES.md"):
             shutil.copyfile(ROOT / name, self.root / name)
         shutil.copytree(ROOT / "src", self.root / "src")
         shutil.copytree(ROOT / "benchmarks", self.root / "benchmarks")
@@ -66,10 +66,14 @@ class DocumentationTests(unittest.TestCase):
         shutil.copytree(ROOT / ".github/checks/compatibility", self.root / ".github/checks/compatibility")
         (self.root / '.github/workflows').mkdir(parents=True)
         shutil.copyfile(ROOT / '.github/workflows/benchmark.yml', self.root / '.github/workflows/benchmark.yml')
+        shutil.copyfile(ROOT / '.github/workflows/benchmark-v1.yml', self.root / '.github/workflows/benchmark-v1.yml')
         shutil.copyfile(ROOT / '.github/workflows/benchmark-candidate.yml', self.root / '.github/workflows/benchmark-candidate.yml')
+        shutil.copyfile(ROOT / '.github/workflows/benchmark-v2-candidate.yml', self.root / '.github/workflows/benchmark-v2-candidate.yml')
         shutil.copyfile(ROOT / '.github/workflows/allocator-diagnostics.yml', self.root / '.github/workflows/allocator-diagnostics.yml')
         (self.root / 'scripts').mkdir()
         shutil.copyfile(ROOT / 'scripts/benchmark_fixtures.py', self.root / 'scripts/benchmark_fixtures.py')
+        for name in ('build_native_codecs.sh', 'build_native_vips.sh', 'native_codecs_check.py'):
+            shutil.copyfile(ROOT / 'scripts' / name, self.root / 'scripts' / name)
         run("git", "init", "-b", "master", cwd=self.root)
         run("git", "config", "user.name", "Fixture", cwd=self.root)
         run("git", "config", "user.email", "fixture@example.invalid", cwd=self.root)

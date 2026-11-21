@@ -4,6 +4,53 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-21
+
+### Added
+
+- Add collection protocol 2.3 to compare explicit BMP V5 alpha from both engines. Keep all prior protocol results and the 2.2 sampling, deadline, resource limits, quality thresholds and victory criteria.
+- Add explicit collection protocol 2.2 with a shared 3,600-second case deadline after protocol 2.1 missed nine responses on one heavy x86_64 trial. Preserve complete 2.0/2.1 cohorts and their failures; workload definitions, samples, resource limits, numerical budgets and victory gates remain fixed.
+- Version collection protocol 2.1 explicitly, allowing 1,800 seconds per workload to complete heavy trials without changing the 1,000 cases, sampling, service resources, pixel budgets or strict victory gates. Preserve schema-2/600-second evidence and reject mixed or relabelled protocol cohorts.
+- Add explicit unreleased V2 candidate campaigns with one native Docker build per architecture, immutable image artifacts, source/tree/Dockerfile/lock provenance and separate complete-cohort archives. Keep published pins and historical evidence intact.
+- Introduce benchmark v2 with 1,000 distinct workloads, 20 processing families, twelve static input representations, five output codecs and ten difficulty tiers ordered before measurement. Add a deterministic shared corpus, failure-preserving native shard collector, complete-cohort/replay/quality validation, separate v2 target pins and immutable result archives. Native preflight validates coverage; full three-repeat timings remain a separate campaign. Keep the 25-case v1 evidence and published 0.4.0 preflight intact, including its 33 engine failures and 141 pixel-budget failures per mode/architecture.
+
+- Verify published benchmark image identities against raw OCI index/platform digests, release version/source annotations, native image configs and runtime capabilities, independently of the harness revision. Default new runs to the current release pins while retaining the immutable 0.3.0 baseline.
+- Record/check published-image comparisons separately from pre-release source cohorts, retaining all six native reports and every failed comparison. Share the strict CPU/p50/p95/peak and decoded-pixel gates, generate both-mode tables and median reductions, and run three independent native VMs per architecture without rebuilding the release.
+
+### Changed
+
+- Plan eligible native SVG rendering in the final orientation so turns and flips can use a smaller decoded raster. Apply the requested orientation and residual resize after rendering.
+
+- Archive the full `5779424` and `28e1a37` comparisons with protocol 2.3. Every response and pixel budget passes. The SVG optimization brings the ten rotated SVG long chains to ten strict wins on Linux x86_64 in both modes and nine default / eight forced native on ARM64. Keep every case's metrics with the source and image pins.
+
+- Stream plain RGB8 PNG rows directly into BMP for eligible flips and half-turns, with complete stream validation and the existing source and output limits. Use the lossless Rust PNG encoder for eligible grayscale and grayscale-alpha rasters, preserving genuine alpha and keeping color profiles, palette encoding, higher bit depths and interlacing on their corresponding paths.
+
+- Record three complete 1,000-case protocol 2.2 comparisons on native Linux x86_64 and ARM64. Each completes all timed responses and passes the pixel budgets in both modes. The `a6cd40f` comparison reaches 777 strict wins on x86_64 and 803 on ARM64 in default mode. Publish the metrics and every loss in the benchmark documentation.
+
+- Retain the exact 256-color palette through eligible opaque Indexed8 PNG quarter-turns and flips into lossless BMP8, avoiding RGB expansion and preserving complete-stream validation and resource limits. Extend bounded native DIB40/BI_RGB8 input to complete RGB palettes, preserving the one-band gray path and enforcing the decoded-byte ceiling before allocation. Small outputs, size targeting, other transforms, alpha and color-managed sources keep their existing routes; encoded bytes and ETags can change.
+- Encode native BW8 BMP directly with a complete lossless gray palette when its exact file size is no larger than RGB24, retaining small-image byte-target successes. Add bounded native BI_RGB8/DIB40 grayscale-palette input for roundtrips, preserving palette mappings and source budgets before raster allocation; other native/built-in BMP routes stay unchanged.
+- Render eligible bounded byte SVG rasters once, verify every alpha sample and use RGB processing only when all are opaque. Keep true transparency, antialiasing and metadata, with existing HDR/linear/large-raster fallbacks.
+- Retain owned native response frames through HTTP output and encode RGB BMP directly into its output vector, eliminating duplicate payload allocations without changing encoded bytes, raster alignment, frame validation or worker limits.
+- Decode complete opaque Indexed8 PNG palettes into bounded owned RGB, preserving palette output policy and native fallbacks for transparency, color management, interlace and other precision requirements.
+- Build pinned libvips 8.18.7, quantizr 1.4.3, libheif 1.23.7 and AOM 3.15.3 for the Linux native worker, retain all native codecs and ship their corresponding sources and notices. Verify loaded SDK/runtime libraries and real codec roundtrips before accepting an image.
+- Materialize eligible bounded byte rasters before SmartCrop analysis and native filters, avoiding repeated upstream evaluation while retaining higher-precision/large-image fallbacks. Identity crops and absent filters keep their direct route.
+- Refresh README and benchmark results with the actual published 0.4.0 image: all 25 cases win CPU, p50, p95 and lifetime peak cgroup memory in default and forced-native modes, in every run on three native Linux VMs per architecture. Retain all 64,800 timed requests, output-size/pixel differences, hardware identities and earlier losses separately. These observations do not certify perceptual equivalence or a universal performance guarantee.
+
+### Fixed
+
+- Remove the unused Pebble binary from the runtime filesystem. It came from the Ubuntu base image and embeds the Go version affected by CVE-2026-97054.
+
+- Preserve native BMP transparency through an explicit V5 alpha mask and decode the same layout on reimport. Choose background compositing precision from the source color space and premultiply transparent images for native blur and sharpening. On upgrade, invalidate cached transformations or change the signed cachebuster for outputs whose pixels, bytes or ETags can change.
+- Require the canonical V2 candidate corpus and one collection identity during collection and import. Retain late imports in history according to their original start time.
+
+- Keep opaque native RGB/grayscale samples unchanged when a background is supplied, and avoid charging convolution scratch to identity geometry such as large flips and quarter-turns. Preserve actual resize computation and pixel limits.
+- Match mirrored integer pixelation blocks, preserve straight RGBA samples in native 32-bit BMP output, and composite transparent JPEG output over the requested background or white by default.
+- Retain palette representation when stripping private metadata and inherit native PNG palette precision and quantizer defaults instead of silently exporting truecolor pixels.
+- Match reduced WebP decoding and scaled SVG rendering before residual geometry, while preserving original source admission, crop coordinates and resource limits.
+- Decode valid indexed PNG fixtures in the independent native smoke-check reader, including packed palette indices and transparency.
+- Validate corrected source against all 1,000 imgproxy cases on native Linux x86_64 and ARM64: both default and forced-native modes complete every trial within the frozen numerical pixel budgets. Retain all 80 raw reports and the original 120-file corpus identity; preflight has no timing-win claim.
+- Import opaque BI_RGB24/32 BMP directly into owned three-band RGB rasters, preserving row order and ignoring RGB32 padding. Avoid synthetic-alpha resampling and AVIF auxiliary alpha encoding while retaining real ICO/PNG alpha. Rounding, encoded representations and ETags can change.
+
 ## [0.4.0] - 2026-11-16
 
 ### Added
@@ -131,7 +178,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Linux AMD64/ARM64 Docker images, MIT licensing and deployment documentation.
 - Historical CPU, loopback HTTP and RAM comparisons with their quality and environment limitations. This is not full imgproxy compatibility.
 
-[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/lansbe/pixstride/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/lansbe/pixstride/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/lansbe/pixstride/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lansbe/pixstride/compare/v0.1.1...v0.2.0

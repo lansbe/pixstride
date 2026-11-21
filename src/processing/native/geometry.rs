@@ -2,7 +2,7 @@
 use super::engine::checked;
 use crate::{ops as plan, request::Request, Error};
 use libvips::{
-    enums::{Angle, Direction, Extend, Kernel},
+    enums::{Angle, BandFormat, Direction, Extend, Interpretation, Kernel},
     voption::{Setter, VOption},
     VipsImage,
 };
@@ -37,15 +37,15 @@ pub(super) fn resize_scale(
     let width = size(f64::from(image.get_width()) * sx)?;
     let height = size(f64::from(image.get_height()) * sy)?;
     checked(width, height)?;
+    if sx == 1.0 && sy == 1.0 {
+        return Ok(image.clone());
+    }
     let source = i64::from(image.get_width()) * i64::from(image.get_height());
     let intermediate = i64::from(image.get_height()) * i64::from(width);
     if intermediate > 16_000_000
         || source + 2 * intermediate + i64::from(width) * i64::from(height) > 100_000_000
     {
         return Err("resize computation budget exceeded");
-    }
-    if sx == 1.0 && sy == 1.0 {
-        return Ok(image.clone());
     }
     let options = VOption::new().set("vscale", sy).set(
         "kernel",
@@ -87,10 +87,17 @@ fn crop(
         width.min(image.get_width()).max(1),
         height.min(image.get_height()).max(1),
     );
-    if !smart && width == image.get_width() && height == image.get_height() {
+    if width == image.get_width() && height == image.get_height() {
         return Ok(image.clone());
     }
     if smart {
+        // Analysis and the eventual crop both consume these pixels. Keep one
+        // bounded raster instead of evaluating the upstream resize twice.
+        let image = if super::shared::fits_memory(image) {
+            super::shared::materialize(image.clone())?
+        } else {
+            image.clone()
+        };
         return image
             .smartcrop(width, height)
             .map_err(|_| "native smart crop failed");
@@ -331,43 +338,124 @@ pub(super) fn decorate(mut image: VipsImage, r: &Request, d: f64) -> Result<Vips
             .map_err(|_| "native padding failed")?;
     }
     if let Some(color) = r.options.background {
-        if image.hasalpha()
-            && (color[0] != color[1] || color[1] != color[2])
-            && matches!(
-                image.get_interpretation(),
-                Ok(libvips::enums::Interpretation::BW | libvips::enums::Interpretation::Grey16)
-            )
-        {
-            image = image
-                .colourspace(if r.extra.preserve_hdr {
-                    libvips::enums::Interpretation::Rgb16
-                } else {
-                    libvips::enums::Interpretation::Srgb
-                })
-                .map_err(|_| "native background colour conversion failed")?;
-        }
-        let scale = if matches!(
-            image.get_interpretation(),
-            Ok(libvips::enums::Interpretation::Rgb16 | libvips::enums::Interpretation::Grey16)
-        ) {
-            257.0
-        } else {
-            1.0
-        };
-        let background = color[..3]
-            .iter()
-            .map(|&c| f64::from(c) * scale)
-            .collect::<Vec<_>>();
-        image = image
-            .flatten_with_opts(VOption::new().set("background", background.as_slice()))
-            .map_err(|_| "native background failed")?;
+        image = background(image, color)?;
     }
+    Ok(image)
+}
+
+pub(super) fn background(mut image: VipsImage, color: [u8; 4]) -> Result<VipsImage, Error> {
+    if !image.hasalpha() {
+        return Ok(image);
+    }
+    let space = image
+        .get_interpretation()
+        .map_err(|_| "invalid native background colour space")?;
+    let [red, green, blue, _] = color;
+    let colored = red != green || green != blue;
+    let target = match space {
+        Interpretation::BW if colored => Interpretation::Srgb,
+        Interpretation::Grey16 if colored => Interpretation::Rgb16,
+        Interpretation::BW
+        | Interpretation::Grey16
+        | Interpretation::Srgb
+        | Interpretation::Rgb16 => space,
+        Interpretation::Scrgb => Interpretation::Rgb16,
+        _ if matches!(image.get_format(), Ok(BandFormat::Uchar | BandFormat::Char)) => {
+            Interpretation::Srgb
+        }
+        _ => Interpretation::Rgb16,
+    };
+    if target != space {
+        image = image
+            .colourspace(target)
+            .map_err(|_| "native background colour conversion failed")?;
+    }
+    let scale = if matches!(target, Interpretation::Rgb16 | Interpretation::Grey16) {
+        257.0
+    } else {
+        1.0
+    };
+    let background = [red, green, blue].map(|channel| f64::from(channel) * scale);
+    image = image
+        .flatten_with_opts(VOption::new().set("background", background.as_slice()))
+        .map_err(|_| "native background failed")?;
     Ok(image)
 }
 
 #[cfg(test)]
 mod alpha_tests {
     use super::*;
+
+    fn background_request(color: &str) -> Request {
+        crate::request::parse(
+            &format!("/unsafe/bg:{color}/plain/local:///fixture.png@png"),
+            &crate::request::Config::unsafe_local(),
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn background_preserves_opaque_rgb_and_gray_samples_and_bands() {
+        super::super::engine::initialize().unwrap();
+        for (pixels, bands, space) in [
+            (vec![9u8, 27, 81], 3, libvips::enums::Interpretation::Srgb),
+            (vec![91u8], 1, libvips::enums::Interpretation::BW),
+        ] {
+            let image = VipsImage::new_from_memory_copy(
+                &pixels,
+                1,
+                1,
+                bands,
+                libvips::enums::BandFormat::Uchar,
+            )
+            .unwrap()
+            .copy_with_opts(VOption::new().set("interpretation", space as i32))
+            .unwrap();
+            for color in ["ffffff", "080b12"] {
+                let result = decorate(image.clone(), &background_request(color), 1.0).unwrap();
+                assert_eq!(result.get_bands(), bands);
+                assert_eq!(
+                    result.getpoint(0, 0).unwrap(),
+                    pixels.iter().map(|p| f64::from(*p)).collect::<Vec<_>>()
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn background_still_flattens_real_transparency() {
+        super::super::engine::initialize().unwrap();
+        let image = VipsImage::new_from_memory_copy(
+            &[100u8, 50, 10, 0],
+            1,
+            1,
+            4,
+            libvips::enums::BandFormat::Uchar,
+        )
+        .unwrap()
+        .copy_with_opts(VOption::new().set(
+            "interpretation",
+            libvips::enums::Interpretation::Srgb as i32,
+        ))
+        .unwrap();
+        let result = decorate(image, &background_request("080b12"), 1.0).unwrap();
+        assert_eq!(result.get_bands(), 3);
+        assert_eq!(result.getpoint(0, 0).unwrap(), [8.0, 11.0, 18.0]);
+    }
+
+    #[test]
+    fn identity_geometry_does_not_charge_nonexistent_convolution_work() {
+        super::super::engine::initialize().unwrap();
+        let image = VipsImage::black(4096, 4096).unwrap();
+        let result = resize_scale(&image, 1.0, 1.0, false).unwrap();
+        assert_eq!([result.get_width(), result.get_height()], [4096, 4096]);
+        let cross_axis = VipsImage::black(1, 4001).unwrap();
+        assert!(matches!(
+            resize_scale(&cross_axis, 4001.0, 1.0 / 4001.0, false),
+            Err("resize computation budget exceeded")
+        ));
+    }
+
     #[test]
     fn alpha_resize_uses_the_input_precision_for_premultiplied_samples() {
         super::super::engine::initialize().unwrap();

@@ -22,6 +22,7 @@ def png(width, height, channels=3, depth=8, rows=None, extra=()):
 
 
 def read_png(data):
+    """Decode synthetic PNG samples; indexed images expand to RGB/RGBA8."""
     if data[:8] != b'\x89PNG\r\n\x1a\n':
         raise ValueError('PNG required')
     offset, compressed, chunks = 8, bytearray(), []
@@ -39,11 +40,12 @@ def read_png(data):
         elif kind == b'IDAT':
             compressed.extend(body)
         offset += 12 + size
-    if depth not in (8, 16) or color not in (0, 2, 4, 6) or interlace:
+    indexed = color == 3 and depth in (1, 2, 4, 8)
+    if (not indexed and (depth not in (8, 16) or color not in (0, 2, 4, 6))) or interlace:
         raise ValueError('Unsupported test PNG representation')
-    channels = {0: 1, 2: 3, 4: 2, 6: 4}[color]
-    pixel_bytes = channels * depth // 8
-    stride = width * pixel_bytes
+    channels = 1 if indexed else {0: 1, 2: 3, 4: 2, 6: 4}[color]
+    pixel_bytes = max(1, channels * depth // 8)
+    stride = (width * depth + 7) // 8 if indexed else width * pixel_bytes
     if width * height > 50_000_000:
         raise ValueError('Oversized test PNG')
     raw = zlib.decompress(compressed)
@@ -75,6 +77,24 @@ def read_png(data):
             row[x] = (row[x] + prediction) & 255
         pixels.extend(row)
         previous = row
+    if indexed:
+        palette = next((body for kind, body in chunks if kind == b'PLTE'), None)
+        alpha = next((body for kind, body in chunks if kind == b'tRNS'), b'')
+        if (not palette or len(palette) % 3 or len(palette) // 3 > 1 << depth
+                or len(alpha) > len(palette) // 3):
+            raise ValueError('Invalid test PNG palette')
+        values = []
+        for y in range(height):
+            row = pixels[y * stride:(y + 1) * stride]
+            for x in range(width):
+                bit = x * depth
+                index = (row[bit // 8] >> (8 - depth - bit % 8)) & ((1 << depth) - 1)
+                if index >= len(palette) // 3:
+                    raise ValueError('Invalid test PNG palette index')
+                values.extend(palette[index * 3:index * 3 + 3])
+                if alpha:
+                    values.append(alpha[index] if index < len(alpha) else 255)
+        return (width, height, 4 if alpha else 3, 8), values, chunks
     values = list(pixels) if depth == 8 else list(struct.unpack('>'+'H'*(len(pixels)//2), pixels))
     return (width, height, channels, depth), values, chunks
 

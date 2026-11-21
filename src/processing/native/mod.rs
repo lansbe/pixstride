@@ -1,12 +1,14 @@
 //! Reusable isolated native processes: bounded pipes, deadline, no image cache.
-#[cfg(feature = "native-codecs")]
-use crate::Buffer;
 use crate::{
     pipeline::Processed,
     request::{OutputFormat, Request},
     watermark, Error,
 };
 
+#[cfg(feature = "native-codecs")]
+mod bmp_encode;
+#[cfg(feature = "native-codecs")]
+mod bmp_gray;
 pub(crate) mod capabilities;
 #[cfg(feature = "native-codecs")]
 mod composite;
@@ -17,7 +19,13 @@ mod engine;
 #[cfg(feature = "native-codecs")]
 mod fast_svg;
 #[cfg(feature = "native-codecs")]
+mod filters;
+#[cfg(feature = "native-codecs")]
 mod geometry;
+#[cfg(all(test, feature = "native-codecs"))]
+mod graph_boundary_tests;
+#[cfg(feature = "native-codecs")]
+mod indexed_bmp;
 #[cfg(feature = "native-codecs")]
 mod jpeg_decode;
 #[cfg(feature = "native-codecs")]
@@ -37,11 +45,17 @@ mod pool;
 #[cfg(feature = "native-codecs")]
 mod raster;
 #[cfg(feature = "native-codecs")]
+mod rgb_png_bmp;
+#[cfg(feature = "native-codecs")]
 mod scale;
+#[cfg(feature = "native-codecs")]
+mod scaled_decode;
 #[cfg(feature = "native-codecs")]
 mod shared;
 #[cfg(feature = "native-codecs")]
 mod svg;
+#[cfg(feature = "native-codecs")]
+mod svg_alpha;
 #[cfg(feature = "native-codecs")]
 mod worker;
 
@@ -80,6 +94,7 @@ pub fn needs(data: &[u8]) -> bool {
         sniff(data),
         Some(OutputFormat::Avif | OutputFormat::Heic | OutputFormat::Jxl)
     ) || (sniff(data) == Some(OutputFormat::Webp) && data.get(12..16) != Some(b"VP8L"))
+        || (sniff(data) == Some(OutputFormat::Bmp) && data.get(28..30) == Some(b"\x08\0"))
 }
 
 #[cfg(not(feature = "native-codecs"))]
@@ -114,7 +129,7 @@ pub fn process(
 }
 
 #[cfg(feature = "native-codecs")]
-fn parse_output(bytes: &[u8]) -> Result<Processed, Error> {
+fn parse_output(bytes: Vec<u8>) -> Result<Processed, Error> {
     if bytes.len() < 41 || &bytes[..4] != b"PXN2" {
         return Err("invalid native output");
     }
@@ -143,8 +158,7 @@ fn parse_output(bytes: &[u8]) -> Result<Processed, Error> {
     if bytes.len() - 37 > crate::MAX_FILE {
         return Err("native output exceeds limit");
     }
-    let mut body = Buffer::new(bytes.len() - 37)?;
-    body.as_mut_slice().copy_from_slice(&bytes[37..]);
+    let body = super::encoded::EncodedBytes::from_native_frame(bytes, 37)?;
     Ok(Processed {
         body,
         mime: format.mime(),
@@ -153,6 +167,9 @@ fn parse_output(bytes: &[u8]) -> Result<Processed, Error> {
         origin,
     })
 }
+
+#[cfg(all(test, feature = "native-codecs"))]
+mod output_tests;
 
 /// Ensures process-owned children are reaped before an operational command exits.
 pub(crate) struct Shutdown;

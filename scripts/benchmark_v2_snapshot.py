@@ -1,0 +1,178 @@
+#!/usr/bin/env python3
+"""Archive complete V2 cohorts, including Pixstride failures, without replacing v1 evidence."""
+import argparse
+import datetime as dt
+import gzip
+import json
+from pathlib import Path
+import re
+
+from benchmark_fixtures import ROOT,sha256
+from benchmark_v2_report import aggregate,load,load_pins,target
+from benchmark_v2_tables import summary
+
+DOCS=('README.md','BENCHMARKS_V2.md')
+DIRECTORY=Path('benchmarks/results/v2')
+
+
+def encoded(value):return (json.dumps(value,indent=2,sort_keys=True)+'\n').encode()
+
+
+def with_summary(text,body,candidate=False):
+    prefix='benchmark-v2-candidate' if candidate else 'benchmark-v2'
+    start,end=f'<!-- {prefix}:summary:start -->',f'<!-- {prefix}:summary:end -->'
+    block=start+'\n'+body.rstrip()+'\n'+end
+    if start not in text and end not in text:return text.rstrip()+'\n\n'+block+'\n'
+    if text.count(start)!=1 or text.count(end)!=1:raise ValueError('Invalid V2 documentation markers')
+    before,remainder=text.split(start,1)
+    if end not in remainder:raise ValueError('Misordered V2 documentation markers')
+    _,after=remainder.split(end,1)
+    return before+block+after
+
+
+def _index(path,root,current):
+    if path.is_symlink():raise ValueError('V2 index must be a regular file')
+    raw_index=path.read_bytes();index=json.loads(raw_index)
+    candidate=index.get('kind')=='v2-candidate-complete-cohort'
+    if index.get('schema_version')!=1 or index.get('kind') not in ('v2-complete-cohort','v2-candidate-complete-cohort'):
+        raise ValueError('Invalid V2 index schema')
+    prefix='candidate-' if candidate else ''
+    if candidate!=(index['result']['pins']['pixstride'].get('published') is False):raise ValueError('V2 index kind differs from target provenance')
+    if not current:
+        expected=f'history-{prefix}{index["mode"]}-{sha256(raw_index)[:12]}-index.json'
+        if path.name!=expected:raise ValueError('V2 historical index filename/hash differs')
+    mode=index['mode'];reports=[];directory=root/DIRECTORY
+    for entry in index['reports']:
+        name=entry['file']
+        if not re.fullmatch(r'v2-(preflight|measure)-(amd64|arm64)-r[1-3]-s[0-3][0-9]-[a-f0-9]{12}\.raw\.json\.gz',name):
+            raise ValueError('Invalid V2 raw archive filename')
+        archive=directory/name
+        if archive.is_symlink() or sha256(archive.read_bytes())!=entry['sha256']:raise ValueError('V2 compressed archive hash differs')
+        report,raw=load(archive);fingerprint=sha256(raw)
+        expected=f'v2-{mode}-{report["host"]["architecture"]}-r{report["repetition"]}-s{report["shard_index"]:02d}-{fingerprint[:12]}.raw.json.gz'
+        if fingerprint!=entry['raw_sha256'] or name!=expected:raise ValueError('V2 raw archive binding differs')
+        reports.append(report)
+    result=aggregate(reports,mode,index['result']['pins'])
+    if ((mode=='preflight' and not candidate and not result['reference_valid']) or encoded(result)!=encoded(index['result'])):
+        raise ValueError('Stale/invalid V2 aggregate')
+    return result,{entry['file'] for entry in index['reports']}
+
+
+def headline(results,pins):
+    for mode in ('measure','preflight'):
+        if mode in results and target(results[mode]['pins'])==target(pins):return results[mode]
+    return None
+
+
+def candidate_headline(results):
+    if not results:return None
+    started={mode:dt.datetime.fromisoformat(result['campaign_started_at']) for mode,result in results.items()}
+    if any(not value.tzinfo for value in started.values()):raise ValueError('Candidate campaign timestamp needs a timezone')
+    latest=max(started.values());selected={mode:results[mode] for mode,value in started.items() if value==latest}
+    pins=target(next(iter(selected.values()))['pins'])
+    if any(target(result['pins'])!=pins for result in selected.values()):
+        raise ValueError('Ambiguous latest candidate campaigns have different targets')
+    return selected.get('measure') or selected.get('preflight')
+
+
+def check(root=ROOT):
+    directory=root/DIRECTORY;results={};referenced=set();candidate_history={}
+    if directory.exists():
+        for path in sorted(directory.glob('*-index.json')):
+            current=path.name in ('preflight-index.json','measure-index.json','candidate-preflight-index.json','candidate-measure-index.json')
+            result,files=_index(path,root,current);referenced|=files
+            if current:
+                key=('candidate-' if result['pins']['pixstride']['published'] is False else '')+result['mode']
+                if path.name!=key+'-index.json':raise ValueError('V2 index mode differs from filename')
+                results[key]=result
+            elif result['pins']['pixstride']['published'] is False:
+                mode=result['mode'];started=dt.datetime.fromisoformat(result['campaign_started_at'])
+                candidate_history[mode]=max(started,candidate_history.get(mode,started))
+        if {p.name for p in directory.glob('*.raw.json.gz')}!=referenced:
+            raise ValueError('V2 raw archives without their complete cohort index')
+    pins=load_pins(root/'benchmarks/versions-v2.json')
+    body=summary(headline(results,pins),pins)
+    candidates={key.removeprefix('candidate-'):value for key,value in results.items() if key.startswith('candidate-')}
+    for mode,started in candidate_history.items():
+        if mode not in candidates or started>dt.datetime.fromisoformat(candidates[mode]['campaign_started_at']):
+            raise ValueError('V2 candidate history is newer than its current index')
+    candidate_result=candidate_headline(candidates)
+    for name in DOCS:
+        path=root/name
+        if not path.exists():
+            if results:raise ValueError('Missing V2 document')
+            continue
+        text=path.read_text()
+        if '<!-- benchmark-v2:' in text and text!=with_summary(text,body):raise ValueError('Stale V2 generated documentation')
+        if results and '<!-- benchmark-v2:' not in text:raise ValueError('Missing V2 generated documentation')
+        if candidate_result is not None and text!=with_summary(text,summary(candidate_result),candidate=True):
+            raise ValueError('Stale/missing V2 candidate generated documentation')
+    return results
+
+
+def sync(root=ROOT):
+    results={};candidates={}
+    for mode in ('preflight','measure'):
+        for prefix,collection in (('',results),('candidate-',candidates)):
+            path=root/DIRECTORY/(prefix+mode+'-index.json')
+            if path.exists():collection[mode]=_index(path,root,True)[0]
+    pins=load_pins(root/'benchmarks/versions-v2.json')
+    body=summary(headline(results,pins),pins)
+    candidate_result=candidate_headline(candidates)
+    for name in DOCS:
+        path=root/name;text=with_summary(path.read_text(),body)
+        if candidate_result is not None:text=with_summary(text,summary(candidate_result),candidate=True)
+        path.write_text(text)
+
+
+def record(paths,mode,root=ROOT,pins=None):
+    loaded=sorted([load(path) for path in paths],key=lambda item:(item[0]['host']['architecture'],item[0]['repetition'],item[0]['shard_index']))
+    pins=load_pins(root/'benchmarks/versions-v2.json') if pins is None else pins
+    result=aggregate([report for report,_ in loaded],mode,pins);candidate=pins['pixstride']['published'] is False
+    prefix='candidate-' if candidate else ''
+    if mode=='preflight' and not candidate and not result['reference_valid']:
+        raise ValueError('Invalid reference cases: retain diagnostics; cannot publish a validated 1000-case preflight')
+    directory=root/DIRECTORY;directory.mkdir(parents=True,exist_ok=True);entries=[];archives={}
+    for report,raw in loaded:
+        fingerprint=sha256(raw);arch=report['host']['architecture']
+        name=f'v2-{mode}-{arch}-r{report["repetition"]}-s{report["shard_index"]:02d}-{fingerprint[:12]}.raw.json.gz'
+        path=directory/name
+        if path.exists():
+            _,existing=load(path)
+            if existing!=raw:raise ValueError('V2 raw archive fingerprint collision')
+            archive=path.read_bytes()
+        else:archive=gzip.compress(raw,mtime=0)
+        archives[name]=archive
+        entries.append(dict(file=name,sha256=sha256(archive),raw_sha256=fingerprint))
+    index=dict(schema_version=1,kind='v2-candidate-complete-cohort' if candidate else 'v2-complete-cohort',mode=mode,reports=entries,result=result)
+    destination=directory/(prefix+mode+'-index.json');new=encoded(index)
+    def history(raw):
+        path=directory/f'history-{prefix}{mode}-{sha256(raw)[:12]}-index.json'
+        if path.exists() and path.read_bytes()!=raw:raise ValueError('V2 history fingerprint collision')
+        return path
+    previous=None
+    if destination.exists() and (old:=destination.read_bytes())!=new:
+        if candidate:
+            old_started=dt.datetime.fromisoformat(json.loads(old)['result']['campaign_started_at'])
+            new_started=dt.datetime.fromisoformat(result['campaign_started_at'])
+            if new_started==old_started:raise ValueError('Different V2 candidate cohorts have the same start time')
+            if new_started<old_started:destination=history(new)
+            else:previous=history(old),old
+        else:previous=history(old),old
+    for name,archive in archives.items():(directory/name).write_bytes(archive)
+    if previous:previous[0].write_bytes(previous[1])
+    destination.write_bytes(new);sync(root);return result
+
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__);action=parser.add_mutually_exclusive_group(required=True)
+    action.add_argument('--record',type=Path,nargs='+');action.add_argument('--check',action='store_true')
+    action.add_argument('--init',action='store_true');parser.add_argument('--mode',choices=['preflight','measure'])
+    parser.add_argument('--versions',type=Path);args=parser.parse_args()
+    if bool(args.record)!=bool(args.mode):parser.error('--mode is required only with --record')
+    if args.record:record(args.record,args.mode,pins=load_pins(args.versions) if args.versions else None)
+    elif args.init:sync()
+    check();print('V2 archives, complete coverage, outcomes and generated documentation are consistent')
+
+
+if __name__=='__main__':main()

@@ -1,9 +1,8 @@
-//! Lossless RGB/RGBA PNG encoding for , with adaptive PNG filters and the
+//! Lossless gray/gray-alpha/RGB/RGBA PNG encoding with adaptive filters and the
 //! bounded libdeflate zlib encoder.
 //!
-//! Input pixels are RGBA8. An entirely opaque image is encoded as RGB8;
-//! otherwise all four channels are preserved. Color metadata is not part of
-//! `Image` and therefore is not invented here.
+//! Packed eight-bit samples retain their grayscale or RGB representation.
+//! An alpha channel is omitted only when every sample is opaque.
 
 use crate::{deflate_encode, Buffer, Error, Image, MAX_FILE, MAX_PIXELS};
 #[cfg(test)]
@@ -259,8 +258,11 @@ fn zeros(size: usize) -> Result<Vec<u8>, Error> {
 }
 
 /// Inspect alpha in bounded groups without changing the first non-opaque
-/// decision. Input length was checked against complete RGBA pixels.
-fn all_opaque(input: &[u8]) -> bool {
+/// decision. Input length was checked against complete gray-alpha or RGBA pixels.
+fn all_opaque(input: &[u8], channels: usize) -> bool {
+    if channels == 2 {
+        return input.as_chunks::<2>().0.iter().all(|pixel| pixel[1] == 255);
+    }
     #[cfg_attr(not(target_arch = "aarch64"), allow(unused_mut))]
     let mut at = 0usize;
     #[cfg(all(target_arch = "aarch64", target_feature = "neon"))]
@@ -339,7 +341,7 @@ pub(crate) fn encode_pixels(
     source_channels: usize,
 ) -> Result<Buffer, Error> {
     let input = source.as_ref();
-    if !matches!(source_channels, 3 | 4) {
+    if !matches!(source_channels, 1..=4) {
         return Err("PNG: unsupported input channels");
     }
     if width == 0
@@ -359,8 +361,9 @@ pub(crate) fn encode_pixels(
     if input.len() != input_len {
         return Err("PNG: inconsistent pixels");
     }
-    let opaque = source_channels == 3 || all_opaque(input);
-    let channels = if opaque { 3 } else { 4 };
+    let alpha = source_channels == 2 || source_channels == 4;
+    let opaque = !alpha || all_opaque(input, source_channels);
+    let channels = source_channels - usize::from(alpha && opaque);
     let stride = width.checked_mul(channels).ok_or("PNG: size too large")?;
     let raw_len = stride
         .checked_add(1)
@@ -373,19 +376,25 @@ pub(crate) fn encode_pixels(
     raw.try_reserve_exact(raw_len)
         .map_err(|_| "PNG: allocation failed")?;
     let mut previous = zeros(stride)?;
-    if source_channels == 3 {
+    if source_channels == channels {
         for (y, row) in input.chunks_exact(input_stride).enumerate() {
             let above = if y == 0 {
                 previous.as_slice()
             } else {
                 &input[(y - 1) * input_stride..y * input_stride]
             };
-            append_best_row(&mut raw, row, above, 3);
+            append_best_row(&mut raw, row, above, channels);
         }
     } else if opaque {
         let mut current = zeros(stride)?;
         for row in input.chunks_exact(input_stride) {
-            opaque_rgb_row(row, &mut current);
+            if source_channels == 2 {
+                for (pixel, value) in row.as_chunks::<2>().0.iter().zip(&mut current) {
+                    *value = pixel[0];
+                }
+            } else {
+                opaque_rgb_row(row, &mut current);
+            }
             append_best_row(&mut raw, &current, &previous, channels);
             std::mem::swap(&mut current, &mut previous);
         }
@@ -421,7 +430,12 @@ pub(crate) fn encode_pixels(
     header[..4].copy_from_slice(&(width as u32).to_be_bytes());
     header[4..8].copy_from_slice(&(height as u32).to_be_bytes());
     header[8] = 8;
-    header[9] = if opaque { 2 } else { 6 };
+    header[9] = match channels {
+        1 => 0,
+        2 => 4,
+        3 => 2,
+        _ => 6,
+    };
     let pos = write_chunk(out, 8, b"IHDR", &header);
     let pos = write_chunk(out, pos, b"IDAT", &compressed);
     let pos = write_chunk(out, pos, b"IEND", &[]);
@@ -432,51 +446,4 @@ pub(crate) fn encode_pixels(
 }
 
 #[cfg(test)]
-mod lane_tests {
-    use super::*;
-    #[test]
-    fn vector_filter_scores_match_the_scalar_reference_at_lane_boundaries() {
-        for channels in [3, 4] {
-            for width in [1, 3, 4, 5, 15, 16, 17, 31, 32, 33, 257, 40_001] {
-                let current = (0..width * channels)
-                    .map(|i| (i * 73 + 19) as u8)
-                    .collect::<Vec<_>>();
-                let previous = (0..width * channels)
-                    .map(|i| (i * 137 + 251) as u8)
-                    .collect::<Vec<_>>();
-                assert_eq!(
-                    score_filters(&current, &previous, channels),
-                    score_filters_scalar(&current, &previous, channels),
-                    "{width} pixels, {channels} channels"
-                );
-                for kind in 0..5 {
-                    let mut actual = Vec::new();
-                    append_filtered(&mut actual, &current, &previous, channels, kind);
-                    let expected: Vec<_> = (0..current.len())
-                        .map(|i| {
-                            filtered(
-                                kind,
-                                current[i],
-                                if i >= channels {
-                                    current[i - channels]
-                                } else {
-                                    0
-                                },
-                                previous[i],
-                                if i >= channels {
-                                    previous[i - channels]
-                                } else {
-                                    0
-                                },
-                            )
-                        })
-                        .collect();
-                    assert_eq!(
-                        actual, expected,
-                        "filter {kind}, {width} pixels, {channels} channels"
-                    );
-                }
-            }
-        }
-    }
-}
+mod lane_tests;

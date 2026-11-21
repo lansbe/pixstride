@@ -10,6 +10,7 @@ import platform
 import re
 import socket
 import subprocess
+import tempfile
 import time
 
 from benchmark_fixtures import MIMES, ROOT, sha256
@@ -136,6 +137,18 @@ class Docker:
 
     def inspect(self, name):
         return json.loads(self.run('inspect', name))[0]
+
+    def manifest(self, reference):
+        # Preserve exact registry bytes; ordinary run() strips CLI whitespace.
+        with tempfile.TemporaryFile() as output:
+            result = subprocess.run([self.executable, 'buildx', 'imagetools', 'inspect', '--raw', reference],
+                                    stdout=output, stderr=subprocess.PIPE, timeout=180)
+            if result.returncode:
+                raise RuntimeError('OCI inspection failed: ' + result.stderr[-2000:].decode(errors='replace'))
+            output.seek(0)
+            raw = output.read(2_000_001)
+            if len(raw) > 2_000_000: raise ValueError('Oversized OCI manifest')
+            return raw
 
     def image(self, reference, candidate_revision=None):
         if candidate_revision:

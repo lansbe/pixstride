@@ -23,6 +23,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Install the pinned benchmark decoder for project checks
+        run: |
+          python3 -m venv "$RUNNER_TEMP/project-check-env"
+          "$RUNNER_TEMP/project-check-env/bin/python" -m pip install --disable-pip-version-check --only-binary=:all: Pillow==13.0.0
+          echo "$RUNNER_TEMP/project-check-env/bin" >> "$GITHUB_PATH"
       - name: Check release tooling and documentation
         env:
           PR_BASE: ${{ github.event.pull_request.base.sha }}
@@ -35,6 +40,8 @@ jobs:
           python3 scripts/project.py check "${args[@]}"
           python3 scripts/benchmark_report.py --check
           python3 scripts/candidate_snapshot.py --check
+          python3 scripts/benchmark_v2_catalog.py --check
+          python3 scripts/benchmark_v2_snapshot.py --check
           python3 - <<'PY'
           import os, re
           title = os.environ.get('PR_TITLE', '')
@@ -58,7 +65,10 @@ jobs:
       - name: Install native dependencies and locked Rust toolchain
         run: |
           brew install vips pkgconf go openssl@3
-          echo "PKG_CONFIG_PATH=$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}" >> "$GITHUB_ENV"
+          # Homebrew keeps libvips's libjpeg and libarchive metadata in separate kegs.
+          export PKG_CONFIG_PATH="$(brew --prefix vips)/lib/pkgconfig:$(brew --prefix mozjpeg)/lib/pkgconfig:$(brew --prefix libarchive)/lib/pkgconfig:$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+          pkg-config --print-errors --atleast-version=8.18 vips
+          printf 'PKG_CONFIG_PATH=%s\n' "$PKG_CONFIG_PATH" >> "$GITHUB_ENV"
           rustup toolchain install 1.100.0 --profile minimal --component rustfmt,clippy
           rustup override set 1.100.0
           cargo fetch --locked
@@ -95,7 +105,7 @@ jobs:
       matrix:
         runner: [ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 20
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -130,7 +140,7 @@ jobs:
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: 30
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write

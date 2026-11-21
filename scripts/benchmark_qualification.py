@@ -4,10 +4,12 @@ import argparse
 import hashlib
 import json
 import math
+import re
 from pathlib import Path
 
 from benchmark_fixtures import ROOT
 from benchmark_report import check_results_directory, load, validate_pair, validate_report
+from benchmark_release import identity, validate_release_image
 
 METRICS = ('cpu_ms_per_request', 'latency_p50_ms', 'latency_p95_ms', 'cgroup_peak_memory_bytes')
 MODES = ('pixstride_default', 'pixstride_native')
@@ -32,10 +34,14 @@ def samples_hash(report):
     return hashlib.sha256(json.dumps(samples, sort_keys=True).encode()).hexdigest()
 
 
-def qualify(reports, baselines, performance_modes=MODES):
+def qualify(reports, baselines, performance_modes=MODES, *, released=None):
     performance_modes = tuple(performance_modes)
     if performance_modes not in ((MODES[0],), MODES):
         raise ValueError("Invalid performance-mode qualification target")
+    if released is not None:
+        released = identity(released)
+        if performance_modes != MODES:
+            raise ValueError('Published release comparisons require both modes')
     minimum_runs = 3 if performance_modes == MODES else 2
     validate_pair(baselines)
     baseline = {b['host']['architecture']: b for b in baselines}
@@ -47,8 +53,13 @@ def qualify(reports, baselines, performance_modes=MODES):
         validate_report(report, require_client_isolation=performance_modes == MODES)
         other = cohorts['arm64' if arch == 'amd64' else 'amd64'][0]
         validate_pair([report, other])
-        if not report['images']['pixstride'].get('candidate'):
-            raise ValueError('Qualification requires immutable candidate source provenance')
+        if released is None:
+            if not report['images']['pixstride'].get('candidate'):
+                raise ValueError('Qualification requires immutable candidate source provenance')
+        else:
+            if not re.fullmatch(r'[0-9a-f]{40}', report['harness_revision']):
+                raise ValueError('Published comparisons require a committed harness revision')
+            validate_release_image(report['images']['pixstride'], released)
         base = baseline[arch]
         if (report['cases_sha256'] != base['cases_sha256']
                 or report['fixtures']['files'] != base['fixtures']['files']
@@ -58,8 +69,9 @@ def qualify(reports, baselines, performance_modes=MODES):
                                  for c in r['cases']}
         if definitions(report) != definitions(base):
             raise ValueError('Case options/definitions differ from the published baseline')
-    result = {'schema_version': 1, 'qualified': True,
-              'candidate': reports[0]['images']['pixstride']['candidate'],
+    source = ({'candidate': reports[0]['images']['pixstride']['candidate']} if released is None
+              else {'release': released, 'harness_revision': reports[0]['harness_revision']})
+    result = {'schema_version': 1, 'qualified': True, **source,
               'criteria': {'default_metrics': METRICS, 'minimum_runs_per_architecture': minimum_runs,
                            'close_ratio': .95, 'close_minimum_runs': 3, 'pixel_tolerance': .01},
               'architectures': {}}
@@ -131,7 +143,8 @@ def qualify(reports, baselines, performance_modes=MODES):
 
 def markdown(result):
     if result['criteria'].get('performance_modes') == list(MODES):
-        text = f'Candidate `{result["candidate"]["revision"]}`: '
+        text = (f'Published Pixstride {result["release"]["version"]}: ' if 'release' in result
+                else f'Candidate `{result["candidate"]["revision"]}`: ')
         text += '**25/25 confirmed in both modes on both architectures**.\n\n' if result['qualified'] else '**target not met**.\n\n'
         text += ('Default and forced-native CPU, HTTP p50/p95 and peak cgroup memory must be lower in every retained run. '
                  'At least three independent runs per architecture are required, including near/noisy timings. Both modes retain the published '

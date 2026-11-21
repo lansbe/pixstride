@@ -5,7 +5,7 @@ use crate::{
     Error,
 };
 use libvips::{
-    enums::{Access, BandFormat, Interpretation, Kernel},
+    enums::{Access, BandFormat, Interpretation},
     voption::{Setter, VOption},
     Vips, VipsImage,
 };
@@ -44,7 +44,21 @@ fn load_with_owner(
     if format == Some(OutputFormat::Svg) {
         super::svg::validate(data)?;
     }
-    if matches!(format, Some(OutputFormat::Bmp | OutputFormat::Ico)) || data.starts_with(b"P6") {
+    if format == Some(OutputFormat::Bmp) {
+        if let Some(image) = super::bmp_gray::try_load(data)? {
+            return Ok(image);
+        }
+        if data.len() > crate::MAX_FILE {
+            return Err("input exceeds file limit");
+        }
+        let (width, height, bands, pixels) = crate::image::BmpView::parse(data)?.decode_native()?;
+        return VipsImage::new_from_owned_u8(pixels, width as i32, height as i32, bands)
+            .and_then(|i| {
+                i.copy_with_opts(VOption::new().set("interpretation", Interpretation::Srgb as i32))
+            })
+            .map_err(|_| "native BMP import failed");
+    }
+    if format == Some(OutputFormat::Ico) || data.starts_with(b"P6") {
         let img = crate::pipeline::decode(data)?;
         return VipsImage::new_from_memory_copy(
             img.pixels.as_slice(),
@@ -157,35 +171,6 @@ fn prepare(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
     Ok(image)
 }
 
-fn effects(mut image: VipsImage, r: &Request) -> Result<VipsImage, Error> {
-    if r.effects.blur_sigma > 0.0 {
-        image = image
-            .gaussblur(r.effects.blur_sigma)
-            .map_err(|_| "native blur failed")?;
-    }
-    if r.effects.sharpen_sigma > 0.0 {
-        image = image
-            .sharpen_with_opts(VOption::new().set("sigma", r.effects.sharpen_sigma))
-            .map_err(|_| "native sharpen failed")?;
-    }
-    if r.effects.pixelate > 1 {
-        let block = r.effects.pixelate as f64;
-        let width = (f64::from(image.get_width()) / block).ceil().max(1.0) as i32;
-        let height = (f64::from(image.get_height()) / block).ceil().max(1.0) as i32;
-        let (w, h) = (image.get_width(), image.get_height());
-        image = image
-            .resize_with_opts(
-                f64::from(width) / f64::from(w),
-                VOption::new()
-                    .set("vscale", f64::from(height) / f64::from(h))
-                    .set("kernel", Kernel::Linear as i32),
-            )
-            .map_err(|_| "native pixelation failed")?;
-        image = geometry::resize(&image, w, h, true)?;
-    }
-    Ok(image)
-}
-
 pub(super) fn initialize() -> Result<(), Error> {
     static INITIALIZED: std::sync::OnceLock<Result<(), Error>> = std::sync::OnceLock::new();
     *INITIALIZED.get_or_init(|| {
@@ -210,7 +195,27 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
     if data.len() > r.extra.max_source_bytes.min(crate::MAX_FILE) {
         return Err("native source exceeds byte limit");
     }
+    let bmp_dimensions = if data.starts_with(b"BM")
+        && data.get(14..18) == Some(&124u32.to_le_bytes())
+        && data.get(28..30) == Some(&32u16.to_le_bytes())
+    {
+        Some(crate::image::BmpView::parse(&data)?.dimensions())
+    } else {
+        super::bmp_gray::source_dimensions(&data)?
+    };
+    if let Some([width, height]) = bmp_dimensions {
+        let pixels = width.checked_mul(height).ok_or("BMP dimensions overflow")?;
+        if pixels > r.extra.max_source_pixels || pixels > r.extra.max_frame_pixels {
+            return Err("BMP source pixel budget exceeded");
+        }
+    }
     if let Some(result) = super::png_identity::try_process(&mut data, r, mark)? {
+        return Ok(result);
+    }
+    if let Some(result) = super::indexed_bmp::try_process(&data, r, mark)? {
+        return Ok(result);
+    }
+    if let Some(result) = super::rgb_png_bmp::try_process(&data, r, mark)? {
         return Ok(result);
     }
     if sniff(&data) == Some(OutputFormat::Svg) {
@@ -313,6 +318,7 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
             OutputFormat::Gif | OutputFormat::Webp | OutputFormat::Tiff
         );
     let mut decoded_plan = None;
+    let mut decoded_request = None;
     let input = {
         // Scope the header owner here: a reduced loader must not leave a second
         // source graph alive through encoding.
@@ -325,6 +331,12 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
                 Some(&encoded),
                 Access::Random,
             )?
+        } else if let Some(loaded) =
+            super::scaled_decode::try_load(&encoded, &head, r, source_format)?
+        {
+            decoded_plan = Some(loaded.plan);
+            decoded_request = Some(loaded.request);
+            loaded.image
         } else if source_format == OutputFormat::Jpeg {
             if let Some((image, plan)) = super::jpeg_decode::try_load(&encoded, &head, r)? {
                 decoded_plan = Some(plan);
@@ -358,6 +370,7 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
             head
         }
     };
+    let input = super::svg_alpha::prepare(input, r, source_format)?;
     // Lazy source graphs retain their own Arc; independent rasters can now
     // release the outer encoded allocation before filtering and encoding.
     drop(encoded);
@@ -380,12 +393,17 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
         let frame = prepare(frame, r)?;
         let (frame, dpr) = geometry::apply(
             frame,
-            r,
+            decoded_request.as_ref().unwrap_or(r),
             source_format == OutputFormat::Svg,
             decoded_plan.take(),
         )?;
-        let frame = effects(frame, r)?;
+        let frame = super::filters::effects(frame, r)?;
         let frame = geometry::decorate(frame, r, dpr)?;
+        let frame = if format == OutputFormat::Jpeg {
+            geometry::background(frame, r.options.background.unwrap_or([255; 4]))?
+        } else {
+            frame
+        };
         let mut frame = super::composite::watermark(frame, mark, r, dpr)?;
         let limit = match format {
             OutputFormat::Ico => 256,
@@ -452,6 +470,14 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
         format,
     })
 }
+
+#[cfg(test)]
+#[path = "scaled_pipeline_tests.rs"]
+mod scaled_pipeline_tests;
+
+#[cfg(test)]
+#[path = "bmp_load_tests.rs"]
+mod bmp_load_tests;
 
 #[cfg(test)]
 mod cleanup_tests {

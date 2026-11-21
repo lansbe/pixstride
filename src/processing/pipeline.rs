@@ -1,9 +1,10 @@
 //! Compatibility processing facade. Existing benchmark entry points remain unchanged.
+use super::encoded::EncodedBytes;
 use crate::request::{OutputFormat, Request};
 use crate::{Buffer, Error, Image};
 
 pub struct Processed {
-    pub body: Buffer,
+    pub body: EncodedBytes,
     pub mime: &'static str,
     pub width: usize,
     pub height: usize,
@@ -307,7 +308,7 @@ pub fn process(
                     }
                 };
                 return Ok(Processed {
-                    body,
+                    body: body.into(),
                     mime: if png_identity {
                         "image/png"
                     } else {
@@ -380,7 +381,7 @@ pub fn process(
                         _ => unreachable!(),
                     };
                     return Ok(Processed {
-                        body,
+                        body: body.into(),
                         mime,
                         width,
                         height,
@@ -448,7 +449,7 @@ pub fn process(
         };
     }
     Ok(Processed {
-        body,
+        body: body.into(),
         mime,
         width,
         height,
