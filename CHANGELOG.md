@@ -4,6 +4,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-21
+
 ### Added
 
 - Add collection protocol 2.3 to compare explicit BMP V5 alpha from both engines. Keep all prior protocol results and the 2.2 sampling, deadline, resource limits, quality thresholds and victory criteria.
@@ -38,7 +40,7 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 
 - Remove the unused Pebble binary from the runtime filesystem. It came from the Ubuntu base image and embeds the Go version affected by CVE-2026-97054.
 
-- Preserve native BMP transparency through an explicit V5 alpha mask and decode the same layout on reimport. Choose background compositing precision from the source color space and premultiply transparent images for native blur and sharpening.
+- Preserve native BMP transparency through an explicit V5 alpha mask and decode the same layout on reimport. Choose background compositing precision from the source color space and premultiply transparent images for native blur and sharpening. On upgrade, invalidate cached transformations or change the signed cachebuster for outputs whose pixels, bytes or ETags can change.
 - Require the canonical V2 candidate corpus and one collection identity during collection and import. Retain late imports in history according to their original start time.
 
 - Keep opaque native RGB/grayscale samples unchanged when a background is supplied, and avoid charging convolution scratch to identity geometry such as large flips and quarter-turns. Preserve actual resize computation and pixel limits.
@@ -176,7 +178,8 @@ Notable changes are recorded here for users, following [Keep a Changelog](https:
 - Linux AMD64/ARM64 Docker images, MIT licensing and deployment documentation.
 - Historical CPU, loopback HTTP and RAM comparisons with their quality and environment limitations. This is not full imgproxy compatibility.
 
-[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/lansbe/pixstride/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/lansbe/pixstride/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/lansbe/pixstride/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/lansbe/pixstride/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/lansbe/pixstride/compare/v0.1.1...v0.2.0

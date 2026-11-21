@@ -12,7 +12,7 @@ docker run --rm --name pixstride -p 127.0.0.1:8080:8080 \
   --read-only --cap-drop=ALL --security-opt=no-new-privileges \
   --memory=512m --pids-limit=64 --cpus=2 \
   -e PIXSTRIDE_ALLOW_UNSAFE=1 -e PIXSTRIDE_ALLOWED_HOSTS=upload.wikimedia.org \
-  ghcr.io/lansbe/pixstride:0.4.0
+  ghcr.io/lansbe/pixstride:0.5.0
 ```
 <!-- generated:run:end -->
 
@@ -64,7 +64,7 @@ Version 0.1.1 introduced work limits that can reject expensive valid inputs. The
 
 The current reusable suite is **benchmark v2: 1,000 distinct workloads**, ordered into ten nominal difficulty tiers. It covers 20 processing families, twelve static input representations/content types and five output codecs, with larger images, alpha, entropy-heavy textures, extreme aspect ratios and long geometry/filter chains. It compares default and forced-native Pixstride against imgproxy on native Linux x86_64 and ARM64. See [BENCHMARKS_V2.md](BENCHMARKS_V2.md) for coverage, resources, fixed quality budgets, complete-cohort rules and rerun commands.
 
-Unreleased development corrects opaque-background and large identity-geometry rejections, mirrored pixelation, native BMP/JPEG alpha handling, inherited PNG palettes and WebP/SVG reduced decoding. Linux candidate builds pin libvips 8.18.7, quantizr 1.4.3, libheif 1.23.7 and AOM 3.15.3. The [native preflight](https://github.com/lansbe/pixstride/actions/runs/44029890033) passes all 1,000 cases in default and forced-native modes on both architectures, with zero engine or pixel-budget failures. Full three-repetition timings and all losses are retained in the candidate results below. The [candidate workflow](.github/workflows/benchmark-v2-candidate.yml) measures source builds separately; the published 0.4.0 baseline below retains its original failures.
+Version 0.5.0 corrects opaque-background and large identity-geometry rejections, mirrored pixelation, native BMP/JPEG alpha handling, inherited PNG palettes and WebP/SVG reduced decoding. Linux builds pin libvips 8.18.7, quantizr 1.4.3, libheif 1.23.7 and AOM 3.15.3. The [native candidate preflight](https://github.com/lansbe/pixstride/actions/runs/44029890033) passed all 1,000 cases in default and forced-native modes on both architectures. The candidate results below retain the complete three-repetition timings, including losses. The [candidate workflow](.github/workflows/benchmark-v2-candidate.yml) measures source builds separately from published images.
 
 Opaque BI_RGB24/32 BMP input now stays in owned RGB storage through native processing, avoiding synthetic alpha work and an unnecessary AVIF alpha plane. Real ICO/PNG transparency is preserved. Numerical rounding, encoded bytes and ETags can change; each source optimization requires a new complete measurement cohort.
 
@@ -237,6 +237,8 @@ Outputs can differ in pixels, compression and size even at the same quality sett
 ## Versions
 
 `master` is the stable line; `develop` integrates upcoming work. Docker `latest` follows stable releases; `alpha`, `beta` and `rc` are separate testing channels, available after their first successful tagged release. Pin a version or digest for deployment. See the [changelog](CHANGELOG.md) and [release workflow](CONTRIBUTING.md#releases).
+
+Version 0.5.0 writes native BMP transparency with a V5 alpha mask. Native codec and geometry changes can also change decoded pixels, output bytes and ETags. Invalidate cached transformations or change the signed cachebuster when upgrading from 0.4.0.
 
 Version 0.3.0 integrates the tested `develop` changes into `master`. Before upgrading from 0.2.x, set `PIXSTRIDE_SIGNATURE_SIZE` to the same 16–32-byte size on every signer and server and regenerate any shorter signed URLs. Source patterns now apply to normalized initial HTTP URLs and every redirect destination. Bearer-protected responses add `Authorization` to `Vary`; purge previously cached protected responses and configure caches to honor this header. Failed response writes close keep-alive connections. See [SECURITY.md](SECURITY.md) for deployment details.
 
