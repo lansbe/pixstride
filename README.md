@@ -87,8 +87,21 @@ New collections use **protocol v2.3**. Pixel comparisons read explicit BMP V5 al
 A valid case can end with mixed results. One service may lead on CPU while the other leads on latency or memory. A strict win requires the same service to lead all four metrics in every repetition.
 
 <!-- benchmark-v2:summary:start -->
-Current benchmark: **v2, 1,000 distinct workloads**, 20 processing families and 10 nominal difficulty tiers. Configured published target: Pixstride **0.5.0** / imgproxy **4.0.24**. Native full-catalog preflight is pending; V2 performance is **not measured**. The retained 25-case timings belong to v1. See [the V2 protocol](BENCHMARKS_V2.md).
+Current benchmark **v2.3: 1,000 distinct workloads** — **target not met**. Every workload and every service/quality failure is retained.
+
+Pixstride 0.5.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.5.0@sha256:03c2986b7cc4df6c7964b229e445f4d6c324a27598d02d1c55ca631c9bf3d258`. Runtime source `a4953322a33451b85eb9877554a7d7bc6d87f027`; harness `7f31cf9ce135dd65e640e7c585dae47c15dcb9ab`. Collection protocol **v2.3** allows **3,600 seconds per case**; sampling, service resources, pixel budgets and strict victory gates are unchanged. Pixel comparison decodes explicitly declared BMP V5 alpha in either engine. Retained accepted timed responses: **2,592,000** of 2,592,000 planned when all engines complete.
+
+| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Confirmed CPU/p50/p95/peak wins |
+|---|---|---:|---:|---:|---:|
+| amd64 | default | 1000/1000 | 1000/1000 | 1000/1000 | 788/1000 |
+| amd64 | forced-native | 1000/1000 | 1000/1000 | 1000/1000 | 789/1000 |
+| arm64 | default | 1000/1000 | 1000/1000 | 1000/1000 | 804/1000 |
+| arm64 | forced-native | 1000/1000 | 1000/1000 | 1000/1000 | 800/1000 |
+
+Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 measure index](benchmarks/results/v2/measure-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
 <!-- benchmark-v2:summary:end -->
+
+In default mode, the published image used **19.3% less CPU per request on x86_64** and **12.3% less on ARM64** in the median comparison. See the [published 0.5.0 results](BENCHMARKS_V2.md#published-pixstride-050) for strict wins, mixed outcomes and all four metrics. [Workflow and artifacts](https://github.com/lansbe/pixstride/actions/runs/44920819863).
 
 <details>
 <summary>Archived source-build comparisons</summary>
