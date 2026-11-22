@@ -2,6 +2,24 @@
 
 V2 is the current reusable performance suite for Pixstride versus imgproxy on native Linux x86_64 and ARM64. New collections use protocol **2.3** on the 1,000-case catalog. Historical 25-case results are available in [V1 results and methodology](BENCHMARKS.md).
 
+<!-- benchmark-v2:summary:start -->
+Current benchmark **v2.3: 1,000 distinct workloads** — **target not met**. Every workload and every service/quality failure is retained.
+
+Pixstride 0.5.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.5.0@sha256:03c2986b7cc4df6c7964b229e445f4d6c324a27598d02d1c55ca631c9bf3d258`. Runtime source `a4953322a33451b85eb9877554a7d7bc6d87f027`; harness `7f31cf9ce135dd65e640e7c585dae47c15dcb9ab`. Collection protocol **v2.3** allows **3,600 seconds per case**; sampling, service resources, pixel budgets and strict victory gates are unchanged. Pixel comparison decodes explicitly declared BMP V5 alpha in either engine. Retained accepted timed responses: **2,592,000** of 2,592,000 planned when all engines complete.
+
+| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Confirmed CPU/p50/p95/peak wins |
+|---|---|---:|---:|---:|---:|
+| amd64 | default | 1000/1000 | 1000/1000 | 1000/1000 | 788/1000 |
+| amd64 | forced-native | 1000/1000 | 1000/1000 | 1000/1000 | 789/1000 |
+| arm64 | default | 1000/1000 | 1000/1000 | 1000/1000 | 804/1000 |
+| arm64 | forced-native | 1000/1000 | 1000/1000 | 1000/1000 | 800/1000 |
+
+Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 measure index](benchmarks/results/v2/measure-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
+<!-- benchmark-v2:summary:end -->
+
+<details>
+<summary>Archived source-build comparisons</summary>
+
 <!-- benchmark-v2-candidate:summary:start -->
 Current benchmark **v2.3: 1,000 distinct workloads** — **target not met**. Every workload and every service/quality failure is retained.
 
@@ -46,29 +64,24 @@ arm64 pixstride_native, all non-winning workloads (206): `v2-0002-fill-panorama-
 Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 candidate-measure index](benchmarks/results/v2/candidate-measure-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
 <!-- benchmark-v2-candidate:summary:end -->
 
-<details>
-<summary>Published 0.4.0 preflight baseline</summary>
-
-<!-- benchmark-v2:summary:start -->
-Current benchmark **v2: 1,000 distinct workloads** — **performance not measured**. Every workload and every service/quality failure is retained.
-
-Pixstride 0.4.0 / imgproxy 4.0.24; published image `ghcr.io/lansbe/pixstride:0.4.0@sha256:eed8c44e8ad694d78eb450ec67b674d4bb3d6185039d969b673f7f3164e22690`. Runtime source `98868fa66288a2b27a24116f29f82ece11a9cef2`; harness `8222ceb6bc739171bf98b92121a7fe96a03f5dfa`. Retained accepted timed responses: **0** (decoded preflight only).
-
-| Linux | Mode | Valid reference cases | Completed decoded trials | Within pixel budgets | Performance |
-|---|---|---:|---:|---:|---:|
-| amd64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
-| amd64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
-| arm64 | default | 1000/1000 | 967/1000 | 826/1000 | not measured |
-| arm64 | forced-native | 1000/1000 | 967/1000 | 826/1000 | not measured |
-
-Numerical pixel budgets do not certify perceptual equivalence. No failure counts as a fast response. Nominal difficulty is fixed before measurements and does not guarantee runtime order. Raw reports, hashes and all outcomes: [V2 preflight index](benchmarks/results/v2/preflight-index.json). Protocol, tier coverage and rerun commands: [BENCHMARKS_V2.md](BENCHMARKS_V2.md).
-<!-- benchmark-v2:summary:end -->
-
 </details>
+
+## Published Pixstride 0.5.0
+
+The published image completed all 2,592,000 timed responses and passed every pixel budget. All three repetitions are included on both architectures. Mixed results include ties and cases where the services led on different metrics or repetitions. The percentages are median reductions versus imgproxy across all comparable observations.
+
+| Linux | Mode | Pixstride strict wins | imgproxy strict wins | Mixed or tied | CPU/request | HTTP p50 | HTTP p95 | Peak cgroup memory |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| x86_64 | Default | 788 | 1 | 211 | 19.3% | 15.0% | 17.2% | 36.0% |
+| x86_64 | Forced native | 789 | 1 | 210 | 19.3% | 15.0% | 17.1% | 36.0% |
+| ARM64 | Default | 804 | 3 | 193 | 12.3% | 9.4% | 11.3% | 41.2% |
+| ARM64 | Forced native | 800 | 2 | 198 | 12.4% | 9.6% | 11.3% | 41.1% |
+
+One ARM64 runner lost its connection before uploading a report. GitHub reran that shard with the same image pins, corpus and limits. The aggregate includes exactly one report per planned shard and repetition. [Workflow and artifacts](https://github.com/lansbe/pixstride/actions/runs/44920819863) · [240 raw report archives and derived results](benchmarks/results/v2/measure-index.json).
 
 ## Native validation of Pixstride 0.4.0
 
-The [current complete preflight campaign](https://github.com/lansbe/pixstride/actions/runs/44002136766) ran all 40 shards on each architecture from harness `8222ceb6bc739171bf98b92121a7fe96a03f5dfa`; all 82 workflow jobs completed successfully. All 1,000 imgproxy reference cases per architecture returned independently decoded outputs with the declared format and dimensions. All 119 Python tooling tests passed on Linux before collection.
+The [second complete 0.4.0 preflight campaign](https://github.com/lansbe/pixstride/actions/runs/44002136766) ran all 40 shards on each architecture from harness `8222ceb6bc739171bf98b92121a7fe96a03f5dfa`; all 82 workflow jobs completed successfully. All 1,000 imgproxy reference cases per architecture returned independently decoded outputs with the declared format and dimensions. All 119 Python tooling tests passed on Linux before collection.
 
 Both Pixstride modes, on each architecture, completed **967/1000 decoded trials**; **826/1000** also stayed within the predeclared pixel budgets. The remaining 33 cases returned HTTP 422 with `native worker closed output`; another 141 completed but exceeded pixel budgets. The same failure counts occur in default and forced-native mode on both architectures. Their detailed case/family/tier outcomes, error messages, sizes and pixel differences are retained in the [complete preflight index](benchmarks/results/v2/preflight-index.json) and its 80 raw archives. These are observations, not a diagnosis of the worker failures or proof of perceptual quality.
 
@@ -235,7 +248,7 @@ The runner requires `--versions candidate-pins.json --pixstride-image sha256:...
 .venv-benchmark/bin/python scripts/benchmark_v2_snapshot.py --check
 ```
 
-Use `--mode preflight` for the complete 80-shard validation cohort. Candidate preflight diagnostics retain reference failures as well as Pixstride failures; inspect all reference/quality counts before proceeding to timings. Candidate indices, history and generated summary markers are separate from published evidence (`candidate-preflight-index.json`, `candidate-measure-index.json`). Full results include every failure, non-winning case and metric ratio; median reductions use all retained comparable observations, including losses and numerical pixel regressions. No candidate result establishes a performance claim for the published 0.4.0 image.
+Use `--mode preflight` for the complete 80-shard validation cohort. Candidate preflight diagnostics retain reference failures as well as Pixstride failures; inspect all reference/quality counts before proceeding to timings. Candidate indices, history and generated summary markers are separate from published evidence (`candidate-preflight-index.json`, `candidate-measure-index.json`). Full results include every failure, non-winning case and metric ratio; median reductions use all retained comparable observations, including losses and numerical pixel regressions. The published-image workflow separately verifies and measures the exact release image.
 
 The candidate headline follows the latest complete campaign's first shard start time, derived from validated raw timestamps. A newer preflight can supersede older timings. Late imports of older campaigns go into history, and ambiguous same-mode timestamps are rejected.
 
