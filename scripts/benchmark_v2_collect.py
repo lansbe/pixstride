@@ -52,33 +52,34 @@ def fail(entry,error,phase,batch=None):
     entry['error']=dict(type=type(error).__name__,message=str(error)[:2000],phase=phase,batch=batch)
 
 
-def preflight_order(case):
-    offset=(case.get('rank',1)-1)%len(ENGINES)
-    return ENGINES[offset:]+ENGINES[:offset]
+def preflight_order(case, engines=ENGINES):
+    offset=(case.get('rank',1)-1)%len(engines)
+    return engines[offset:]+engines[:offset]
 
 
-def remember_incomplete(result,latencies,protocol):
+def remember_incomplete(result,latencies,protocol,engines=ENGINES):
     active=result.get('active',{})
     if active.get('phase')!='measure':return
     engine,batch=active['engine'],active['batch'];entry=result['engines'][engine]
     if len(entry['batches'])==batch:
-        position=balanced_orders(ENGINES,protocol['batches'])[batch].index(engine)
+        position=balanced_orders(engines,protocol['batches'])[batch].index(engine)
         entry['incomplete_batch']=dict(index=batch,position=position,latencies_ns=latencies.copy())
 
 
-def collect(case,docker,images,fixtures,cpus,owner,index,protocol,mode,progress,flush):
+def collect(case,docker,images,fixtures,cpus,owner,index,protocol,mode,progress,flush,
+            *,engines=ENGINES,reference_body=None):
     result=progress
     result.update({**case,'status':'running','engines':{
-        e:dict(status='not-attempted',attempted=False,batches=[]) for e in ENGINES}})
+        e:dict(status='not-attempted',attempted=False,batches=[]) for e in engines}})
     bodies={};servers={};path=signed_path(case);latencies=[];case_started=time.monotonic()
-    result['preflight_order']=list(preflight_order(case))
+    result['preflight_order']=list(preflight_order(case,engines))
     def active(engine,phase,batch=None):
         result['active']=dict(engine=engine,phase=phase,batch=batch);flush()
     try:
         # Cancel the work alarm before ownership-checked container cleanup starts.
         with contextlib.ExitStack() as stack,deadline(protocol['case_deadline_seconds']):
             # Rotate first-touch order; still try the reference after a Pixstride refusal.
-            for engine in preflight_order(case):
+            for engine in preflight_order(case,engines):
                 entry=result['engines'][engine];entry['attempted']=True;active(engine,'preflight')
                 try:
                     image=images['imgproxy' if engine=='imgproxy' else 'pixstride']['reference']
@@ -95,7 +96,7 @@ def collect(case,docker,images,fixtures,cpus,owner,index,protocol,mode,progress,
                 flush()
             if mode=='measure':
                 time.sleep(protocol['cpu_tail_seconds'])
-                for batch,order in enumerate(balanced_orders(ENGINES,protocol['batches'])):
+                for batch,order in enumerate(balanced_orders(engines,protocol['batches'])):
                     for position,engine in enumerate(order):
                         entry=result['engines'][engine]
                         if entry['status']!='ready':continue
@@ -131,28 +132,31 @@ def collect(case,docker,images,fixtures,cpus,owner,index,protocol,mode,progress,
                     if entry['status']!='error':fail(entry,error,'accounting')
                     else:entry['accounting_error']=str(error)[:1000]
                 flush()
-            if result['engines']['imgproxy']['status']=='success':
-                for engine in ENGINES[:-1]:
+            reference = bodies.get('imgproxy') if 'imgproxy' in engines else reference_body
+            if 'imgproxy' in engines and result['engines']['imgproxy']['status']!='success':
+                reference = None
+            if reference is not None:
+                for engine in (e for e in engines if e!='imgproxy'):
                     entry=result['engines'][engine]
                     if entry['status']=='success':
                         active(engine,'pixels')
                         try:
                             entry['pixels_vs_imgproxy']=pixel_agreement(
-                                bodies[engine],bodies['imgproxy'],
+                                bodies[engine],reference,
                                 explicit_bmp_alpha=protocol.get('bmp_alpha')=='explicit-v5-masks')
                         except EXPECTED_ERRORS as error:fail(entry,error,'pixels')
                         flush()
             result['active']=dict(engine=None,phase='cleanup',batch=None);flush()
         result['status']='complete'
     except DeadlineExpired as error:
-        remember_incomplete(result,latencies,protocol)
+        remember_incomplete(result,latencies,protocol,engines)
         for engine,entry in result['engines'].items():
             missing_pixels=(engine in ENGINES[:-1] and entry['status']=='success'
                             and 'pixels_vs_imgproxy' not in entry)
             if entry['status'] not in ('success','error') or missing_pixels:fail(entry,error,'deadline')
         result['status']='complete';result['deadline_exceeded']=True
     except BaseException:
-        remember_incomplete(result,latencies,protocol)
+        remember_incomplete(result,latencies,protocol,engines)
         result['status']='interrupted'
         raise
     finally:
