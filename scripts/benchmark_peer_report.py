@@ -55,6 +55,11 @@ def load_rows(paths):
                 if entry['status'] not in ('measured', 'unmapped', 'error', 'quality'):
                     raise ValueError('Unknown collection state')
                 if entry['status'] in ('quality', 'measured'):
+                    pixels = entry['pixels_vs_imgproxy']
+                    row['exact_pixels_vs_imgproxy'] = pixels['exact_visible_pixels']
+                    for metric in ('mae', 'rmse'):
+                        row['composite_' + metric] = max(pixels[bg][metric] for bg in ('black', 'white'))
+                        row['alpha_' + metric] = pixels['alpha'][metric]
                     failed = quality_failures(case, entry)
                     if failed != entry['quality_failures'] or bool(failed) != (entry['status'] == 'quality'):
                         raise ValueError('Inconsistent pixel comparison')
@@ -69,6 +74,9 @@ def load_rows(paths):
                     values = dict(entry['summary'], bytes=entry['output']['bytes'])
                     if any(not math.isfinite(values[m]) or values[m] <= 0 for m in METRICS.values()):
                         raise ValueError('Invalid peer metrics')
+                    for mode, label in zip(MODES, ('default', 'native')):
+                        row[label + '_identical_bytes_runs'] = sum(
+                            r[mode]['output_sha256'] == entry['output']['sha256'] for r in runs)
                     compare = identical_model or runs
                     for short, metric in METRICS.items():
                         row['peer_' + short] = values[metric]
@@ -93,7 +101,7 @@ def main():
     rows = sorted(load_rows(args.reports), key=lambda r: (r['peer'], r['arch'], r['rank']))
     columns = list(dict.fromkeys(k for row in rows for k in row))
     with args.csv.open('w') as stream:
-        writer = csv.DictWriter(stream, columns)
+        writer = csv.DictWriter(stream, columns, lineterminator='\n')
         writer.writeheader()
         writer.writerows(rows)
     print('Rows by status:', Counter(r['status'] for r in rows))

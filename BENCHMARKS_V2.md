@@ -2,6 +2,8 @@
 
 V2 is the current reusable performance suite for Pixstride versus imgproxy on native Linux x86_64 and ARM64. New collections use protocol **2.3** on the 1,000-case catalog. Historical 25-case results are available in [V1 results and methodology](BENCHMARKS.md).
 
+The [five-server comparison](benchmarks/results/peers/RESULTATS.md) reuses the published Pixstride 0.5.0 timings and the same corpus to compare Thumbor, Imaginary, weserv/images, Imageflow.Server and IPX. It includes per-case CPU, latency, peak memory, encoded size and pixel checks on both architectures.
+
 <!-- benchmark-v2:summary:start -->
 Current benchmark **v2.3: 1,000 distinct workloads** — **target not met**. Every workload and every service/quality failure is retained.
 

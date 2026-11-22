@@ -87,7 +87,9 @@ progress{accent-color:var(--slow);max-width:100px;width:8vw;vertical-align:middl
 <option value="p95">Écart relatif de p95</option><option value="memory">Écart de mémoire en octets</option>
 <option value="bytes">Écart de taille en octets</option><option value="rank">Rang dans le catalogue</option></select></label>
 <label>Ordre<select id="direction"><option value="desc">Décroissant</option><option value="asc">Croissant</option></select></label>
-<label class="check"><input id="onlySlow" type="checkbox">Retards CPU et p50 uniquement</label></div>
+<label>Afficher les cas<select id="scope"><option value="">Tous les cas validés</option>
+<option value="slow">Retard CPU et p50 sur cette architecture</option>
+<option value="both">Retard CPU et p50 sur les deux architectures</option></select></label></div>
 <p class="note">CPU et p50 affichent l’écart minimal sur les trois références. Pour la p95, le pic mémoire du cgroup et la taille de réponse, l’écart utilise la médiane historique sur CPU identique quand elle est disponible, sinon celle des trois références. Sous chaque écart figurent la médiane historique de Pixstride ainsi sélectionnée, puis la mesure du serveur comparé.</p>
 <div class="wrap" tabindex="0" role="region" aria-label="Mesures des cas"><table><thead><tr>
 <th>Cas</th><th>Serveur</th><th class="num">CPU minimal</th><th class="num">p50 minimale</th><th class="num">p95</th><th class="num">Écart mémoire</th><th class="num">Écart réponse</th>
@@ -189,7 +191,17 @@ function draw() {
     if(sort==='memory'||sort==='bytes')return r[mode+sort]-r['peer_'+sort];
     return r[mode+sort+(sort==='p95'?'_ratio':'_min_ratio')];
   }
-  const ranked=measured.filter(r=>!$('onlySlow').checked || slow(r));
+  const scope=$('scope').value;
+  const key=r=>r.peer+'|'+r.id;
+  const slowArchitectures=new Map();
+  if(scope==='both') {
+    for(const r of rows.filter(r=>r.status==='measured' && slow(r))) {
+      const k=key(r);
+      if(!slowArchitectures.has(k))slowArchitectures.set(k,new Set());
+      slowArchitectures.get(k).add(r.arch);
+    }
+  }
+  const ranked=measured.filter(r=>!scope || (scope==='slow' ? slow(r) : slowArchitectures.get(key(r))?.size===2));
   ranked.sort((a,b)=>direction*(sortValue(a)-sortValue(b)) || a.rank-b.rank || a.peer.localeCompare(b.peer) || a.arch.localeCompare(b.arch));
   renderTable('measured',ranked,7,r=>{
     const tr=element('tr');tr.append(...caseCells(r));
@@ -206,7 +218,7 @@ function draw() {
     const tr=element('tr');tr.append(...caseCells(r),cell(states[r.status]),cell(r.reason||'—',undefined,'reason'));return tr;
   });
 }
-for(const id of ['peer','arch','mode','query','cpu','status','sort','direction','onlySlow']){
+for(const id of ['peer','arch','mode','query','cpu','status','sort','direction','scope']){
   $(id).addEventListener(id==='query'?'input':'change',()=>{pages.measured=0;pages.excluded=0;draw();});
 }
 draw();

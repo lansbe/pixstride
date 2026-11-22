@@ -35,7 +35,8 @@ def baseline(arch):
             samples.setdefault(row['id'], []).append(dict(
                 repetition=report['repetition'], cpu_model=report['host']['cpu_model'],
                 reference=engines['imgproxy']['output']['sha256'],
-                **{mode: dict(engines[mode]['summary'], bytes=engines[mode]['output']['bytes'])
+                **{mode: dict(engines[mode]['summary'], bytes=engines[mode]['output']['bytes'],
+                                 output_sha256=engines[mode]['output']['sha256'])
                    for mode in ('pixstride_default', 'pixstride_native', 'imgproxy')}))
     if len(samples) != 1000 or any(sorted(x['repetition'] for x in rows) != [1, 2, 3]
                                   for rows in samples.values()):

@@ -2,6 +2,8 @@
 
 Cette campagne compare les sorties et les performances de Thumbor 7.8.0, Imaginary 1.2.4, weserv/images 5.1.2, Imageflow.Server 0.9.0 et IPX 4.1.0 à PixStride 0.5.0. Elle reprend les 1 000 recettes de [la suite V2](../../BENCHMARKS_V2.md) et ses 120 fichiers d’entrée. Les chronométrages de PixStride et d’imgproxy viennent des trois répétitions publiées sur chaque architecture. Le [catalogue](../cases-v2.json) fixe les dimensions, les formats et les seuils d’écart de pixels avant la mesure.
 
+[Résultats par opération et par serveur](../results/peers/RESULTATS.md) · [Tableau interactif](../results/peers/comparaison.html)
+
 ## Mesures
 
 Sur chaque architecture, l’adaptateur traduit chaque recette dans l’API publique du serveur. Les recettes sans traduction fidèle gardent un motif. Le client vérifie le statut HTTP, décode l’image et contrôle format, dimensions, couleur et transparence. Il compare le rendu sur fond noir, sur fond blanc et sur le canal alpha. Pour récupérer les pixels de référence, absents des archives, un processus imgproxy séparé a rendu chaque image une fois hors chronométrage. Chaque empreinte SHA-256 correspond à une sortie archivée de la même architecture. Les écarts de qualité et les erreurs restent dans le bilan.

@@ -75,6 +75,11 @@
 !/benchmarks/peers/
 !/benchmarks/peers/*/
 !/benchmarks/peers/README.md
+!/benchmarks/results/peers/
+!/benchmarks/results/peers/comparaison.csv
+!/benchmarks/results/peers/comparaison.html
+!/benchmarks/results/peers/echantillons.tar.gz
+!/benchmarks/results/peers/RESULTATS.md
 !/benchmarks/peers/*/Dockerfile
 !/benchmarks/peers/*/adapter.py
 !/benchmarks/peers/thumbor/requirements.txt
