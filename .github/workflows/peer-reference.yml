@@ -1,0 +1,37 @@
+name: Recover published V2 comparison images
+on:
+  push:
+    branches: [codex/benchmark-five-servers]
+    paths: ['.github/workflows/peer-reference.yml', 'scripts/benchmark_peer_baseline.py']
+permissions:
+  contents: read
+  actions: read
+jobs:
+  reference:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {arch: amd64, runner: ubuntu-24.04}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: benchmark-v2-shared-corpus
+          path: ${{ runner.temp }}/corpus
+          run-id: 44920819863
+          github-token: ${{ github.token }}
+      - run: |
+          python3 -m venv "$RUNNER_TEMP/env"
+          "$RUNNER_TEMP/env/bin/pip" -q install --only-binary=:all: Pillow==13.0.0
+          "$RUNNER_TEMP/env/bin/python" scripts/benchmark_peer_baseline.py --fixtures "$RUNNER_TEMP/corpus" --output "$RUNNER_TEMP/pixels"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: peer-reference-${{ matrix.arch }}
+          path: ${{ runner.temp }}/pixels/
+          retention-days: 7
+          if-no-files-found: error
