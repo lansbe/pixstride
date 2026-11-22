@@ -1,0 +1,66 @@
+name: Native peer V2 measurements
+on:
+  workflow_call:
+    inputs:
+      peer: {required: true, type: string}
+      arch: {required: true, type: string}
+      runner: {required: true, type: string}
+permissions:
+  contents: read
+  actions: read
+jobs:
+  build:
+    name: Build and check ${{ inputs.peer }} ${{ inputs.arch }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - name: Build native server
+        env: {PEER: '${{ inputs.peer }}'}
+        run: docker build -t "peer-$PEER" "benchmarks/peers/$PEER"
+      - uses: ./.github/actions/peer-inputs
+        with: {arch: '${{ inputs.arch }}', token: '${{ github.token }}'}
+      - name: Verify a comparable image before starting timed jobs
+        env: {PEER: '${{ inputs.peer }}'}
+        run: |
+          "$RUNNER_TEMP/env/bin/python" scripts/benchmark_peers.py --peer "$PEER" --image "peer-$PEER" \
+            --fixtures "$RUNNER_TEMP/corpus" --pixels "$RUNNER_TEMP/pixels" --output "$RUNNER_TEMP/smoke.jsonl" --smoke
+          docker save "peer-$PEER" | zstd -T2 -3 -o "$RUNNER_TEMP/image.tar.zst"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: peer-image-${{ inputs.peer }}-${{ inputs.arch }}
+          path: ${{ runner.temp }}/image.tar.zst
+          retention-days: 3
+          compression-level: 0
+  measure:
+    needs: build
+    runs-on: ${{ inputs.runner }}
+    name: ${{ inputs.peer }} ${{ inputs.arch }} lane ${{ matrix.lane }}
+    timeout-minutes: 300
+    strategy:
+      fail-fast: false
+      matrix: {lane: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]}
+    env:
+      BENCHMARK_RUNNER: ${{ inputs.runner }}
+      PEER: ${{ inputs.peer }}
+      LANE: ${{ matrix.lane }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with: {name: 'peer-image-${{ inputs.peer }}-${{ inputs.arch }}', path: '${{ runner.temp }}/image'}
+      - uses: ./.github/actions/peer-inputs
+        with: {arch: '${{ inputs.arch }}', token: '${{ github.token }}'}
+      - name: Collect every assigned case
+        run: |
+          zstd -dc "$RUNNER_TEMP/image/image.tar.zst" | docker load
+          "$RUNNER_TEMP/env/bin/python" scripts/benchmark_peers.py --peer "$PEER" --image "peer-$PEER" \
+            --fixtures "$RUNNER_TEMP/corpus" --pixels "$RUNNER_TEMP/pixels" --lane "$LANE" --output "$RUNNER_TEMP/report.jsonl"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always()
+        with:
+          name: peer-results-${{ inputs.peer }}-${{ inputs.arch }}-${{ matrix.lane }}
+          path: ${{ runner.temp }}/report.jsonl
+          retention-days: 90
+          if-no-files-found: error

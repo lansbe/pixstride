@@ -65,6 +65,26 @@
 !/.github/checks/abi/*.c
 !/.github/checks/abi/*.sh
 
+# Third-party benchmark harness. Allow only its build inputs and evidence.
+!/.github/workflows/peer-reference.yml
+!/.github/workflows/peer-native.yml
+!/.github/workflows/peer-measure.yml
+!/.github/actions/
+!/.github/actions/peer-inputs/
+!/.github/actions/peer-inputs/action.yml
+!/benchmarks/peers/
+!/benchmarks/peers/*/
+!/benchmarks/peers/*/Dockerfile
+!/benchmarks/peers/*/adapter.py
+!/benchmarks/peers/thumbor/requirements.txt
+!/benchmarks/peers/thumbor/thumbor.conf
+!/benchmarks/peers/ipx/package.json
+!/benchmarks/peers/ipx/package-lock.json
+!/benchmarks/peers/ipx/server.mjs
+!/benchmarks/peers/imageflow/ImageflowBench.csproj
+!/benchmarks/peers/imageflow/Program.cs
+!/benchmarks/peers/weserv/nginx.conf
+
 # Never version build output, credentials, media, or editor files.
 **/.DS_Store
 **/.env

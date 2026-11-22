@@ -1,0 +1,54 @@
+name: Five image servers against published Pixstride V2
+on:
+  push:
+    branches: [codex/benchmark-five-servers]
+    paths:
+      - '.github/workflows/peer-measure.yml'
+      - '.github/workflows/peer-native.yml'
+      - '.github/actions/peer-inputs/**'
+      - 'benchmarks/peers/**'
+      - 'scripts/benchmark_peers.py'
+permissions:
+  contents: read
+  actions: read
+jobs:
+  select:
+    runs-on: ubuntu-24.04
+    outputs:
+      peers: ${{ steps.select.outputs.peers }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false, fetch-depth: 2}
+      - id: select
+        name: Rerun only adapters affected by this push
+        env: {BEFORE: '${{ github.event.before }}'}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, subprocess
+          all_peers = ['thumbor', 'imaginary', 'weserv', 'imageflow', 'ipx']
+          diff = subprocess.run(['git', 'diff', '--name-only', os.environ['BEFORE'], 'HEAD'],
+                                capture_output=True, text=True)
+          paths = diff.stdout.splitlines()
+          peers = [p for p in all_peers if any(f'benchmarks/peers/{p}/' in s for s in paths)]
+          shared = any(s.startswith(('.github/actions/peer-inputs/', '.github/workflows/peer-'))
+                       or s == 'scripts/benchmark_peers.py' for s in paths)
+          if diff.returncode or shared or not peers:
+              peers = all_peers
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              print('peers=' + json.dumps(peers), file=output)
+          PYTHON
+  compare:
+    needs: select
+    name: ${{ matrix.peer }} ${{ matrix.platform.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        peer: ${{ fromJSON(needs.select.outputs.peers) }}
+        platform:
+          - {arch: amd64, runner: ubuntu-24.04}
+          - {arch: arm64, runner: ubuntu-24.04-arm}
+    uses: ./.github/workflows/peer-native.yml
+    with:
+      peer: ${{ matrix.peer }}
+      arch: ${{ matrix.platform.arch }}
+      runner: ${{ matrix.platform.runner }}
