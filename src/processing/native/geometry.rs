@@ -283,17 +283,33 @@ pub(super) fn apply(
             off(offsets[1], h).round_ties_even() as i32,
         )
         .clamp(0, i128::from(h - image.get_height())) as i32;
-        if !image.hasalpha() {
-            image = image.addalpha().map_err(|_| "native alpha failed")?;
-        }
+        // An opaque RGB canvas can take its final colour at extension time
+        // when no subsequent operation needs the transparent border.
+        let background = o
+            .background
+            .filter(|_| {
+                image.get_bands() == 3
+                    && image.get_interpretation().ok() == Some(Interpretation::Srgb)
+                    && image.get_format().ok() == Some(BandFormat::Uchar)
+                    && r.effects.blur_sigma == 0.0
+                    && r.effects.sharpen_sigma == 0.0
+                    && r.effects.pixelate <= 1
+                    && !(e.extend && e.extend_aspect)
+                    && w.max(h) as usize <= e.max_result_dimension
+            })
+            .map(|[red, green, blue, _]| [red, green, blue].map(f64::from));
+        let options = if let Some(rgb) = &background {
+            VOption::new()
+                .set("extend", Extend::Background as i32)
+                .set("background", rgb.as_slice())
+        } else {
+            if !image.hasalpha() {
+                image = image.addalpha().map_err(|_| "native alpha failed")?;
+            }
+            VOption::new().set("extend", Extend::Black as i32)
+        };
         image = image
-            .embed_with_opts(
-                x,
-                y,
-                w,
-                h,
-                VOption::new().set("extend", Extend::Black as i32),
-            )
+            .embed_with_opts(x, y, w, h, options)
             .map_err(|_| "native extend failed")?;
     }
     if image.get_width().max(image.get_height()) as usize > e.max_result_dimension {

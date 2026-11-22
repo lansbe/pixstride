@@ -104,6 +104,11 @@ fn attempt(
     }
     if format == OutputFormat::Jpeg {
         options = options.set("interlace", encoding.jpeg_progressive);
+        // Blurred images have a skewed coefficient distribution. Optimized
+        // Huffman tables encode the same quantized pixels in fewer bytes.
+        if r.effects.blur_sigma > 0.0 && r.effects.sharpen_sigma > 0.0 {
+            options = options.set("optimize_coding", true);
+        }
     }
     if format == OutputFormat::Jxl {
         options = options
@@ -193,13 +198,7 @@ fn attempt(
 }
 
 pub(super) fn optimized_png(image: &Image) -> Result<Vec<u8>, Error> {
-    let encoded = crate::png_encode::encode(image)?;
-    let mut bytes = Vec::new();
-    bytes
-        .try_reserve_exact(encoded.as_slice().len())
-        .map_err(|_| "PNG: allocation failed")?;
-    bytes.extend_from_slice(encoded.as_slice());
-    Ok(bytes)
+    crate::png_encode::encode_pixels(image.width, image.height, image.pixels.as_slice(), 4)
 }
 
 fn filter_strip_rows(width: i32, bands: i32) -> i32 {
@@ -278,9 +277,7 @@ pub(super) fn save(
             pixels.height,
             pixels.memory,
             pixels.bands,
-        )?
-        .as_slice()
-        .to_vec();
+        )?;
         if r.extra.max_bytes > 0 && bytes.len() > r.extra.max_bytes {
             return Err("size target unavailable for this format");
         }

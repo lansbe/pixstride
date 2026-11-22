@@ -13,10 +13,15 @@ impl Drop for Compressor {
 }
 
 pub(crate) fn compress(input: &[u8]) -> Result<Vec<u8>, Error> {
-    compress_bounded(input, MAX_ZLIB)
+    compress_framed(input, MAX_ZLIB, 0, 0)
 }
 
-fn compress_bounded(input: &[u8], limit: usize) -> Result<Vec<u8>, Error> {
+pub(crate) fn compress_framed(
+    input: &[u8],
+    limit: usize,
+    prefix: usize,
+    suffix: usize,
+) -> Result<Vec<u8>, Error> {
     if input.len() > MAX_FILE || limit < 8 {
         return Err("PNG: data or output budget exceeds limit");
     }
@@ -29,26 +34,35 @@ fn compress_bounded(input: &[u8], limit: usize) -> Result<Vec<u8>, Error> {
         unsafe { ffi::libdeflate_zlib_compress_bound(compressor.0.as_ptr(), input.len()) }
             .min(limit)
             .min(MAX_ZLIB);
+    let framed = capacity
+        .checked_add(prefix)
+        .and_then(|n| n.checked_add(suffix))
+        .filter(|&n| n <= MAX_FILE)
+        .ok_or("PNG: framed output exceeds limit")?;
     let mut output = Vec::new();
     output
-        .try_reserve_exact(capacity)
+        .try_reserve_exact(framed)
         .map_err(|_| "PNG: allocation failed")?;
-    output.resize(capacity, 0);
-    // SAFETY: input/output are disjoint live byte slices of the supplied sizes.
-    // libdeflate returns zero without exceeding the destination on insufficient space.
+    output.resize(prefix, 0u8);
+    // SAFETY: the reserved suffix of the allocation has at least capacity bytes.
+    // libdeflate writes at most capacity bytes and reports the initialized length.
+    // Unwritten spare capacity is neither exposed nor read.
     let written = unsafe {
         ffi::libdeflate_zlib_compress(
             compressor.0.as_ptr(),
             input.as_ptr().cast(),
             input.len(),
-            output.as_mut_ptr().cast(),
-            output.len(),
+            output.spare_capacity_mut().as_mut_ptr().cast(),
+            capacity,
         )
     };
-    if written == 0 || written > output.len() {
+    if written == 0 || written > capacity {
         return Err("PNG: compressed output exceeds limit");
     }
-    output.truncate(written);
+    // SAFETY: the prefix was initialized above and the compressor wrote written bytes.
+    unsafe { output.set_len(prefix + written) };
+    output.resize(prefix + written + suffix, 0);
+
     Ok(output)
 }
 
@@ -58,13 +72,13 @@ mod tests {
     #[test]
     fn compression_respects_output_ceiling_and_roundtrips_with_independent_decoder() {
         let input = vec![b'a'; 4096];
-        let encoded = compress_bounded(&input, 128).unwrap();
+        let encoded = compress_framed(&input, 128, 0, 0).unwrap();
         assert!(encoded.len() <= 128);
         let mut decoded = vec![0; input.len()];
         crate::png::inflate(&encoded, &mut decoded).unwrap();
         assert_eq!(decoded, input);
-        assert!(compress_bounded(&input, 4).is_err());
-        let empty = compress_bounded(&[], 128).unwrap();
+        assert!(compress_framed(&input, 4, 0, 0).is_err());
+        let empty = compress_framed(&[], 128, 0, 0).unwrap();
         crate::png::inflate(&empty, &mut []).unwrap();
     }
 }

@@ -7,6 +7,9 @@ use crate::{
 };
 use fast_image_resize::{images::Image, PixelType, ResizeOptions, Resizer};
 
+#[path = "png_resize_strips.rs"]
+pub(super) mod strips;
+
 fn dimensions(source: [i32; 2], plan: &Plan) -> Result<Option<[i32; 2]>, Error> {
     if source.iter().any(|n| !(1..=100_000).contains(n)) {
         return Err("invalid alpha resize dimensions");
@@ -34,7 +37,7 @@ fn dimensions(source: [i32; 2], plan: &Plan) -> Result<Option<[i32; 2]>, Error> 
     Ok(Some(target))
 }
 
-pub(super) fn plan(source: [i32; 2], bands: i32, r: &Request) -> Result<Option<Plan>, Error> {
+fn downscale(source: [i32; 2], bands: i32, r: &Request) -> Result<Option<Plan>, Error> {
     let o = &r.options;
     if bands != 4
         || r.format != Some(OutputFormat::Jpeg)
@@ -51,13 +54,17 @@ pub(super) fn plan(source: [i32; 2], bands: i32, r: &Request) -> Result<Option<P
         return Ok(None);
     }
     let plan = Plan::new(source[0], source[1], r, false)?;
-    if plan.scale.iter().any(|s| *s > 1.0)
-        || plan.scale == [1.0; 2]
-        || dimensions(source, &plan)?.is_none()
-    {
+    if plan.scale.iter().any(|s| *s > 1.0) || plan.scale == [1.0; 2] {
         return Ok(None);
     }
     Ok(Some(plan))
+}
+
+pub(super) fn plan(source: [i32; 2], bands: i32, r: &Request) -> Result<Option<Plan>, Error> {
+    let Some(plan) = downscale(source, bands, r)? else {
+        return Ok(None);
+    };
+    Ok(dimensions(source, &plan)?.map(|_| plan))
 }
 
 pub(super) fn resize(

@@ -114,3 +114,35 @@ fn high_precision_filter_input_keeps_the_existing_lazy_precision_path() {
         .iter()
         .all(|value| *value > 255.0));
 }
+
+#[test]
+fn solid_canvas_matches_flattened_transparent_extension() {
+    let (input, _) = source(false);
+    for options in [
+        "rs:fit:16:16/ex:1:soea",
+        "rs:fit:16:16/ex:1:nowe",
+        "rs:fit:16:16/ex:1:ce/bl:1",
+        "rs:fit:16:16/ex:1:ce/pix:2",
+    ] {
+        let mut r = request(options);
+        let color = [37, 91, 181, 255];
+        let (transparent, dpr) = geometry::apply(input.clone(), &r, false, None).unwrap();
+        assert!(transparent.hasalpha());
+        let reference = filters::effects(transparent, &r).unwrap();
+        r.options.background = Some(color);
+        let reference = geometry::decorate(reference, &r, dpr).unwrap();
+
+        let (solid, dpr) = geometry::apply(input.clone(), &r, false, None).unwrap();
+        assert_eq!(
+            solid.hasalpha(),
+            r.effects.blur_sigma > 0.0 || r.effects.pixelate > 1
+        );
+        let solid = filters::effects(solid, &r).unwrap();
+        let solid = geometry::decorate(solid, &r, dpr).unwrap();
+        assert_eq!(
+            solid.write_to_memory(),
+            reference.write_to_memory(),
+            "{options}"
+        );
+    }
+}

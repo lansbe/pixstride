@@ -84,3 +84,26 @@ fn blurring_an_alpha_edge_never_reveals_hidden_blue() {
     assert_eq!(pixel[2], 0.);
     assert!(pixel[0] >= 254.);
 }
+
+#[test]
+fn sharpening_srgb_separately_preserves_native_color_and_all_alpha_values() {
+    super::super::engine::initialize().unwrap();
+    let pixels: Vec<_> = (0..65536u32)
+        .flat_map(|i| {
+            [
+                (i * 13) as u8,
+                ((i >> 8) ^ i) as u8,
+                (i * 37) as u8,
+                (i >> 8) as u8,
+            ]
+        })
+        .collect();
+    let rgba = image(&pixels, 256, 256, 4);
+    let expected = rgba
+        .sharpen_with_opts(VOption::new().set("sigma", 1.5))
+        .unwrap();
+    let actual = sharpen(rgba, 1.5).unwrap();
+    let original = super::super::raster::export(&expected).unwrap();
+    let filtered = super::super::raster::export(&actual).unwrap();
+    assert!(original.iter().eq(filtered.iter()));
+}

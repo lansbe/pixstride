@@ -13,6 +13,7 @@ struct Decoded {
     bands: i32,
     pixels: Vec<u8>,
     indexed: bool,
+    plan: Option<super::scale::Plan>,
 }
 
 pub(super) struct Palette {
@@ -153,22 +154,31 @@ fn decode_raster(
     if reader.output_buffer_size() != Some(expected) {
         return Err("inconsistent PNG raster size");
     }
-    let mut pixels = Vec::new();
-    pixels
-        .try_reserve_exact(expected)
-        .map_err(|_| "PNG decode allocation failed")?;
-    pixels.resize(expected, 0);
-    let output = reader
-        .next_frame(&mut pixels)
-        .map_err(|_| "PNG frame decode failed")?;
-    if output.width as usize != width
-        || output.height as usize != height
-        || output.bit_depth != BitDepth::Eight
-        || output.color_type != output_color
-        || output.buffer_size() != expected
-    {
-        return Err("inconsistent PNG decoded frame");
-    }
+    let source = [width as i32, height as i32];
+    let strip_plan = super::png_resize::strips::plan(source, bands as i32, r)?;
+    let (dimensions, pixels, plan) = if let Some(mut plan) = strip_plan {
+        let (target, pixels) = super::png_resize::strips::resize(&mut reader, source, &plan)?;
+        plan.scale = [1.0; 2];
+        (target, pixels, Some(plan))
+    } else {
+        let mut pixels = Vec::new();
+        pixels
+            .try_reserve_exact(expected)
+            .map_err(|_| "PNG decode allocation failed")?;
+        pixels.resize(expected, 0);
+        let output = reader
+            .next_frame(&mut pixels)
+            .map_err(|_| "PNG frame decode failed")?;
+        if output.width as usize != width
+            || output.height as usize != height
+            || output.bit_depth != BitDepth::Eight
+            || output.color_type != output_color
+            || output.buffer_size() != expected
+        {
+            return Err("inconsistent PNG decoded frame");
+        }
+        (source, pixels, None)
+    };
     // Validate the final image/chunk checksums and late metadata before exposing pixels.
     reader
         .finish()
@@ -177,7 +187,8 @@ fn decode_raster(
         return Ok(None);
     }
     Ok(Some(Decoded {
-        dimensions: [width as i32, height as i32],
+        dimensions,
+        plan,
         bands: bands as i32,
         pixels,
         indexed,
@@ -193,13 +204,16 @@ pub(super) fn try_load(
         bands,
         mut pixels,
         indexed,
+        mut plan,
     }) = decode(data, r)?
     else {
         return Ok(None);
     };
-    let mut plan = super::png_resize::plan(dimensions, bands, r)?;
-    if let Some(plan) = &mut plan {
-        (dimensions, pixels) = super::png_resize::resize(pixels, dimensions, plan)?;
+    if plan.is_none() {
+        plan = super::png_resize::plan(dimensions, bands, r)?;
+        if let Some(plan) = &mut plan {
+            (dimensions, pixels) = super::png_resize::resize(pixels, dimensions, plan)?;
+        }
     }
     VipsImage::new_from_owned_u8(pixels, dimensions[0], dimensions[1], bands)
         .and_then(|image| {

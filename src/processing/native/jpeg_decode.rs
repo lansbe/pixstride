@@ -13,7 +13,7 @@ pub(super) fn source_access(
     r: &Request,
 ) -> Access {
     if format == Some(crate::request::OutputFormat::Tiff)
-        && sequential(r)
+        && single_pass(r)
         && Plan::new(head.get_width(), head.get_height(), r, false)
             .is_ok_and(|p| reads_all_rows(&p, head.get_height()))
         && (!r.auto_rotate || head.get_int("orientation").unwrap_or(1) == 1)
@@ -51,19 +51,25 @@ fn adjust(mut p: Plan, original: [i32; 2], decoded: [i32; 2]) -> Plan {
     p
 }
 
-fn sequential(r: &Request) -> bool {
+fn jpeg_sequential(r: &Request) -> bool {
+    single_pass(r)
+        && r.options.padding == Default::default()
+        && r.options.background.is_none()
+        && !r.extra.extend
+        && !r.extra.extend_aspect
+}
+
+// Padding, extension and flattening emit the TIFF source rows in order.
+// Repeated evaluation or geometry that could leave rows unread stays random.
+fn single_pass(r: &Request) -> bool {
     r.extra.max_bytes == 0
         && !r.extra.encoding.png_quantize
         && !r.extra.smart
         && r.options.crop.is_none()
         && r.options.rotation == Rotation::R0
         && !r.options.flip_vertical
-        && r.options.padding == Default::default()
-        && r.options.background.is_none()
         && r.options.watermark.is_none()
         && r.watermark.is_none()
-        && !r.extra.extend
-        && !r.extra.extend_aspect
         && !r.extra.fill_down
         && !r.extra.enforce_thumbnail
         && r.effects.trim.is_none()
@@ -121,7 +127,7 @@ pub(super) fn try_load(
     let Some((shrink, p)) = plan(head.get_width(), head.get_height(), r)? else {
         return Ok(None);
     };
-    let access = if sequential(r) && reads_all_rows(&p, head.get_height()) {
+    let access = if jpeg_sequential(r) && reads_all_rows(&p, head.get_height()) {
         Access::Sequential
     } else {
         Access::Random
@@ -186,12 +192,12 @@ mod tests {
 
     #[test]
     fn repeated_encoding_and_row_rewinds_keep_random_access() {
-        assert!(sequential(&request("rs:fit:320:320")));
-        assert!(!sequential(&request("rs:fit:320:320/mb:500")));
-        assert!(sequential(&request("rs:fit:320:320/sh:1")));
-        assert!(sequential(&request("rs:fit:320:320/bl:2")));
-        assert!(!sequential(&request("rs:fit:320:320/trim:10")));
-        assert!(!sequential(&request("rot:90")));
+        assert!(jpeg_sequential(&request("rs:fit:320:320")));
+        assert!(!jpeg_sequential(&request("rs:fit:320:320/mb:500")));
+        assert!(jpeg_sequential(&request("rs:fit:320:320/sh:1")));
+        assert!(jpeg_sequential(&request("rs:fit:320:320/bl:2")));
+        assert!(!jpeg_sequential(&request("rs:fit:320:320/trim:10")));
+        assert!(!jpeg_sequential(&request("rot:90")));
     }
 
     #[test]
@@ -203,8 +209,15 @@ mod tests {
             source_access(Some(Tiff), &head, &request("rs:fit:640:640")),
             Access::Sequential
         );
+        let canvas = request("rs:fit:640:640/ex:1:soea/bg:741c1a");
+        assert_eq!(
+            source_access(Some(Tiff), &head, &canvas),
+            Access::Sequential
+        );
+        assert!(!jpeg_sequential(&canvas));
         for options in [
             "rot:90",
+            "rs:fit:640:640/ex:1/mb:800",
             "c:80:60:ce",
             "rs:fit:640:640/mb:500",
             "trim:10",
@@ -293,10 +306,37 @@ mod tests {
     }
 
     #[test]
+    fn tiff_canvas_still_rejects_a_truncated_strip() {
+        super::super::engine::initialize().unwrap();
+        let (width, height) = (41, 71);
+        let mut pixels = crate::Buffer::new(width * height * 4).unwrap();
+        for (i, byte) in pixels.as_mut_slice().iter_mut().enumerate() {
+            *byte = ((i / 3) ^ (i * 17)) as u8;
+        }
+        let data = crate::extra_encode::encode_tiff(&crate::Image {
+            width,
+            height,
+            pixels,
+        })
+        .unwrap();
+        let r = request("rs:fit:19:19/ex:1:nowe/bg:143159");
+        let bytes = data.as_slice();
+        assert!(super::super::engine::process(bytes.to_vec(), &r, &[]).is_ok());
+        assert!(
+            super::super::engine::process(bytes[..bytes.len() * 3 / 4].to_vec(), &r, &[]).is_err()
+        );
+    }
+
+    #[test]
     fn tiff_vertical_crop_requires_complete_source_access() {
         super::super::engine::initialize().unwrap();
         let head = VipsImage::new_from_owned_u8(vec![0; 4 * 16 * 3], 4, 16, 3).unwrap();
-        for options in ["rs:fill:4:1", "rs:auto:2:4", "rs:fill-down:4:1"] {
+        for options in [
+            "rs:fill:4:1",
+            "rs:fill:4:1/ex:1/bg:123456",
+            "rs:auto:2:4",
+            "rs:fill-down:4:1",
+        ] {
             assert_eq!(
                 source_access(
                     Some(crate::request::OutputFormat::Tiff),

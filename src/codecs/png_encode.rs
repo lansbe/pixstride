@@ -316,7 +316,18 @@ fn opaque_rgb_row(row: &[u8], rgb: &mut [u8]) {
 }
 
 #[inline]
-fn append_best_row(raw: &mut Vec<u8>, current: &[u8], previous: &[u8], channels: usize) {
+pub(crate) fn append_best_row(raw: &mut Vec<u8>, current: &[u8], previous: &[u8], channels: usize) {
+    if current == previous {
+        // Up has zero residuals. Only a completely zero row ties with None
+        // or Sub, both of which precede Up in the normal filter selection.
+        raw.push(if current.iter().all(|&v| v == 0) {
+            0
+        } else {
+            2
+        });
+        raw.resize(raw.len() + current.len(), 0);
+        return;
+    }
     // Keep the original strict comparison and therefore the same tie order.
     let scores = score_filters(current, previous, channels);
     let mut best = 0;
@@ -331,7 +342,10 @@ fn append_best_row(raw: &mut Vec<u8>, current: &[u8], previous: &[u8], channels:
 
 /// Produce a valid, lossless PNG with bounded libdeflate compression.
 pub fn encode(image: &Image) -> Result<Buffer, Error> {
-    encode_pixels(image.width, image.height, image.pixels.as_slice(), 4)
+    let bytes = encode_pixels(image.width, image.height, image.pixels.as_slice(), 4)?;
+    let mut result = Buffer::new(bytes.len())?;
+    result.as_mut_slice().copy_from_slice(&bytes);
+    Ok(result)
 }
 
 pub(crate) fn encode_pixels(
@@ -339,7 +353,7 @@ pub(crate) fn encode_pixels(
     height: usize,
     source: impl AsRef<[u8]>,
     source_channels: usize,
-) -> Result<Buffer, Error> {
+) -> Result<Vec<u8>, Error> {
     let input = source.as_ref();
     if !matches!(source_channels, 1..=4) {
         return Err("PNG: unsupported input channels");
@@ -414,16 +428,20 @@ pub(crate) fn encode_pixels(
     // An owned raster is no longer needed after filtering; release it before
     // the compressor allocates its output/workspace. Borrowed callers retain it.
     drop(source);
-    let compressed = deflate_encode::compress(&raw)?;
+    finish(width, height, channels, raw)
+}
+
+pub(crate) fn finish(
+    width: usize,
+    height: usize,
+    channels: usize,
+    raw: Vec<u8>,
+) -> Result<Vec<u8>, Error> {
+    // Compress directly into IDAT. Large, highly compressible images need only
+    // touch the pages holding the actual zlib stream, even at the maximum size.
+    let mut result = deflate_encode::compress_framed(&raw, MAX_FILE - 57, 41, 16)?;
     drop(raw);
-    let total = compressed
-        .len()
-        .checked_add(57)
-        .ok_or("PNG: size too large")?;
-    if total > MAX_FILE || compressed.len() > u32::MAX as usize {
-        return Err("PNG: output too large");
-    }
-    let mut result = Buffer::new(total)?;
+    let total = result.len();
     let out = result.as_mut_slice();
     out[..8].copy_from_slice(SIGNATURE);
     let mut header = [0u8; 13];
@@ -437,7 +455,13 @@ pub(crate) fn encode_pixels(
         _ => 6,
     };
     let pos = write_chunk(out, 8, b"IHDR", &header);
-    let pos = write_chunk(out, pos, b"IDAT", &compressed);
+    let size = total - 57;
+    out[pos..pos + 4].copy_from_slice(&(size as u32).to_be_bytes());
+    out[pos + 4..pos + 8].copy_from_slice(b"IDAT");
+    let crc_at = pos + 8 + size;
+    let crc = crate::png::crc32(&out[pos + 4..crc_at]);
+    out[crc_at..crc_at + 4].copy_from_slice(&crc.to_be_bytes());
+    let pos = crc_at + 4;
     let pos = write_chunk(out, pos, b"IEND", &[]);
     if pos != total {
         return Err("PNG: inconsistent encoded size");

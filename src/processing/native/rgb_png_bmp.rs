@@ -16,7 +16,7 @@ pub(super) fn try_process(
     if data.len() < 33
         || &data[..16] != b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"
         || data[24..29] != [8, 2, 0, 0, 0]
-        || !super::indexed_bmp::eligible(request, mark)
+        || !super::indexed_bmp::eligible(request, mark, OutputFormat::Bmp)
         || matches!(request.options.rotation, Rotation::R90 | Rotation::R270)
     {
         return Ok(None);

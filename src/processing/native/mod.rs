@@ -22,6 +22,8 @@ mod fast_svg;
 mod filters;
 #[cfg(feature = "native-codecs")]
 mod geometry;
+#[cfg(feature = "native-codecs")]
+mod gif_decode;
 #[cfg(all(test, feature = "native-codecs"))]
 mod graph_boundary_tests;
 #[cfg(feature = "native-codecs")]
@@ -36,6 +38,8 @@ mod palette;
 mod pipe;
 #[cfg(feature = "native-codecs")]
 mod png_decode;
+#[cfg(feature = "native-codecs")]
+mod png_flip;
 #[cfg(feature = "native-codecs")]
 mod png_identity;
 #[cfg(feature = "native-codecs")]

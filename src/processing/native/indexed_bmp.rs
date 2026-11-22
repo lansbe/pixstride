@@ -8,9 +8,9 @@ use crate::{
 
 const OFFSET: usize = 1078;
 
-pub(super) fn eligible(r: &Request, mark: &[u8]) -> bool {
+pub(super) fn eligible(r: &Request, mark: &[u8], format: OutputFormat) -> bool {
     let (o, e) = (&r.options, &r.extra);
-    r.format == Some(OutputFormat::Bmp)
+    r.format == Some(format)
         && r.strip_metadata
         && r.strip_color_profile
         && !e.keep_copyright
@@ -101,7 +101,7 @@ pub(super) fn try_process(
     r: &Request,
     mark: &[u8],
 ) -> Result<Option<NativeResult>, Error> {
-    if !eligible(r, mark)
+    if !eligible(r, mark, OutputFormat::Bmp)
         || data.len() < 33
         || &data[..16] != b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"
         || data[24..29] != [8, 3, 0, 0, 0]

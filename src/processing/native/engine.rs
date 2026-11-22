@@ -212,6 +212,9 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
     if let Some(result) = super::png_identity::try_process(&mut data, r, mark)? {
         return Ok(result);
     }
+    if let Some(result) = super::png_flip::try_process(&data, r, mark)? {
+        return Ok(result);
+    }
     if let Some(result) = super::indexed_bmp::try_process(&data, r, mark)? {
         return Ok(result);
     }
@@ -356,6 +359,8 @@ pub(super) fn process(mut data: Vec<u8>, r: &Request, mark: &[u8]) -> Result<Nat
                 Some(&encoded),
                 Access::Sequential,
             )?
+        } else if source_format == OutputFormat::Gif && format == OutputFormat::Jpeg {
+            super::gif_decode::try_load(data, &head, r)?.unwrap_or(head)
         } else if source_format == OutputFormat::Png
             && head.get_typeof("icc-profile-data").unwrap_or(0) == 0
             && (!r.auto_rotate || head.get_int("orientation").unwrap_or(1) == 1)
