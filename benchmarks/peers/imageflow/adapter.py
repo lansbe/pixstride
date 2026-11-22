@@ -54,6 +54,9 @@ def path(case):
     if 'rs' in options:
         mode, width, height = options['rs'][:3]
         query.update(w=int(width), h=int(height), mode={'fit': 'max', 'fill': 'crop', 'force': 'stretch'}[mode])
+        # Match the catalog reference's three-lobe Lanczos resampling in sRGB.
+        query.update({'down.filter': 'lanczos', 'down.colorspace': 'srgb',
+                      'up.filter': 'lanczos', 'up.colorspace': 'srgb'})
     if 'c' in options:
         query['crop'] = crop_rectangle(case['source_dimensions'], options['c'])
     if 'g' in options:

@@ -8,5 +8,6 @@ app.UseImageflow(new ImageflowMiddlewareOptions()
     .SetMapWebRoot(false)
     .MapPath("/images/", "/images")
     .SetAllowCaching(false)
+    .SetAllowDiskCaching(false)
     .SetDefaultCacheControlString("no-store"));
 app.Run();
