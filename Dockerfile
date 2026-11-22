@@ -1,12 +1,12 @@
 FROM rust:1.100.0-slim-trixie@sha256:e9d95b74296f7126a83ae3d041aeaba1ff4c478f13abc5cc034fcf7c131c3d4a AS toolchain
-FROM ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96 AS codecs-build
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS codecs-build
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential ca-certificates cmake curl git libde265-dev libsharpyuv-dev libx265-dev ninja-build nasm pkg-config \
     && rm -rf /var/lib/apt/lists/*
 COPY scripts/build_native_codecs.sh /usr/local/bin/build-native-codecs
 RUN sh /usr/local/bin/build-native-codecs /opt/pixstride-codecs
 
-FROM ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96 AS vips-build
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS vips-build
 COPY --from=toolchain /usr/local/cargo /usr/local/cargo
 COPY --from=toolchain /usr/local/rustup /usr/local/rustup
 ENV CARGO_HOME=/usr/local/cargo RUSTUP_HOME=/usr/local/rustup PATH=/usr/local/cargo/bin:$PATH
@@ -23,7 +23,7 @@ COPY scripts/build_native_vips.sh /usr/local/bin/build-native-vips
 RUN sh /usr/local/bin/build-native-vips /opt/pixstride-codecs
 ENV VIPS_PLUGIN_PATH=/opt/pixstride-codecs/lib/vips-modules-8.18
 
-FROM ubuntu:26.04@sha256:065aa8626841f16057b78b027b464cd59c4fac36c204c72dcbf48d66f5fa8a96 AS codec-runtime
+FROM ubuntu:26.04@sha256:d66b366dac61b575bee2aef07e9c26e8070096fbe84a3d4d3eb0da069b5d76db AS codec-runtime
 # The base image includes Pebble, while Pixstride is the runtime entry point.
 RUN apt-get update && apt-get upgrade -y && apt-get install -y --no-install-recommends \
     libcurl4t64 ca-certificates libvips42t64 libde265-0 libx265-215 libsharpyuv0 fonts-dejavu-core \
