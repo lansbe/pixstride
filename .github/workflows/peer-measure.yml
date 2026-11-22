@@ -6,7 +6,7 @@ on:
       - '.github/workflows/peer-measure.yml'
       - '.github/workflows/peer-native.yml'
       - '.github/actions/peer-inputs/**'
-      - 'benchmarks/peers/**'
+      - 'benchmarks/peers/*/**'
       - 'scripts/benchmark_peers.py'
 permissions:
   contents: read

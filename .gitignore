@@ -74,6 +74,7 @@
 !/.github/actions/peer-inputs/action.yml
 !/benchmarks/peers/
 !/benchmarks/peers/*/
+!/benchmarks/peers/README.md
 !/benchmarks/peers/*/Dockerfile
 !/benchmarks/peers/*/adapter.py
 !/benchmarks/peers/thumbor/requirements.txt
