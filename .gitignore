@@ -67,6 +67,8 @@
 
 # Third-party benchmark harness. Allow only its build inputs and evidence.
 !/.github/workflows/peer-reference.yml
+!/.github/workflows/pixstride-only.yml
+!/benchmarks/pixstride-selection.json
 !/.github/workflows/peer-native.yml
 !/.github/workflows/peer-measure.yml
 !/.github/actions/
